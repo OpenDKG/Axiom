@@ -197,4 +197,60 @@ internal static class ShieldProcessFilter
                    root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                    StringComparison.OrdinalIgnoreCase);
     }
+
+    private static readonly HashSet<string> CriticalSystemProcessNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "svchost",
+        "svchost.exe",
+        "system",
+        "registry",
+        "idle",
+        "memory compression",
+        "ntoskrnl",
+        "ntoskrnl.exe",
+        "smss",
+        "smss.exe",
+        "csrss",
+        "csrss.exe",
+        "wininit",
+        "wininit.exe",
+        "services",
+        "services.exe",
+        "lsass",
+        "lsass.exe",
+        "winlogon",
+        "winlogon.exe",
+        "spoolsv",
+        "spoolsv.exe",
+        "systemd-resolved",
+        "systemd-networkd",
+        "networkmanager",
+        "dhclient",
+        "mdnsresponder",
+        "launchd",
+        "configd",
+    };
+
+    /// <summary>
+    /// True when the executable is a core OS/networking process or part of Axiom itself, where
+    /// adding an outbound block rule would break DNS/DHCP/system connectivity or lock out Axiom.
+    /// </summary>
+    public static bool IsCriticalSystemProcess(string? appName, string? appPath)
+    {
+        if (!string.IsNullOrWhiteSpace(appName) && CriticalSystemProcessNames.Contains(appName.Trim()))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(appPath))
+        {
+            var fileName = Path.GetFileName(appPath.Trim());
+            if (CriticalSystemProcessNames.Contains(fileName) || IsIgnored(appPath))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

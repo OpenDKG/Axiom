@@ -31,6 +31,11 @@ public sealed class ConnectionActionService(
             return "The executable path is not readable; a path-bound rule cannot be created.";
         }
 
+        if (ShieldProcessFilter.IsCriticalSystemProcess(appName, path))
+        {
+            return $"Blocked rule refused for {appName}: blocking a core system or Axiom process can interrupt DNS, DHCP, Windows Update or essential connectivity.";
+        }
+
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmed = await ui.ConfirmAsync(
             "Axiom firewall write",
@@ -93,12 +98,13 @@ public sealed class ConnectionActionService(
             return Task.FromResult("This row has no live PID to end.");
         }
 
+        var targets = ProcessTerminationTarget.Capture([processId]);
         return EndScopedAsync(
             title: "End process (PID)",
             confirmLabel: "End process",
             cancelStatus: "End process cancelled.",
             body: $"End process {appName} (PID {processId})?\n\nUnsaved work in that process will be lost.",
-            processIds: [processId],
+            targets: targets,
             targetDescription: $"{appName} (PID {processId})");
     }
 
@@ -110,13 +116,14 @@ public sealed class ConnectionActionService(
             return Task.FromResult("This application has no live processes to end.");
         }
 
+        var targets = ProcessTerminationTarget.Capture(liveIds);
         var pidList = string.Join(", ", liveIds);
         return EndScopedAsync(
             title: "End application",
             confirmLabel: "End application",
             cancelStatus: "End application cancelled.",
             body: $"End all running processes for {appName} (PID {pidList})?\n\nUnsaved work in those processes will be lost.",
-            processIds: liveIds,
+            targets: targets,
             targetDescription: appName);
     }
 
@@ -130,7 +137,7 @@ public sealed class ConnectionActionService(
         string confirmLabel,
         string cancelStatus,
         string body,
-        IReadOnlyList<int> processIds,
+        IReadOnlyList<ProcessTerminationTarget> targets,
         string targetDescription)
     {
         var confirmed = await ui.ConfirmAsync(
@@ -145,9 +152,9 @@ public sealed class ConnectionActionService(
             return cancelStatus;
         }
 
-        var ended = processes.EndProcesses(processIds);
+        var ended = processes.EndProcesses(targets);
         return ended == 0
-            ? $"No process could be ended for {targetDescription}. It may already be gone, or access was denied."
+            ? $"No process could be ended for {targetDescription}. It may already have exited, been replaced, or access was denied."
             : $"Ended {ended} process(es) for {targetDescription}.";
     }
 

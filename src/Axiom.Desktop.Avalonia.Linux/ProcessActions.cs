@@ -95,6 +95,35 @@ public sealed class ProcessActions : IProcessActions
         return ProcessActionRefusal.None;
     }
 
+    public int EndProcesses(IReadOnlyList<ProcessTerminationTarget> targets)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        var verifiedPids = new List<int>(targets.Count);
+        foreach (var target in targets)
+        {
+            if (target.ProcessId <= 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                using var process = Process.GetProcessById(target.ProcessId);
+                if (ProcessTerminationTarget.MatchesLiveProcess(process, target))
+                {
+                    verifiedPids.Add(target.ProcessId);
+                }
+            }
+#pragma warning disable CA1031
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+        }
+
+        return EndProcesses(verifiedPids);
+    }
+
     public int EndProcesses(IReadOnlyList<int> processIds)
     {
         ArgumentNullException.ThrowIfNull(processIds);

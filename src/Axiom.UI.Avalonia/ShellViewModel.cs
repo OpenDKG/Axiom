@@ -33,7 +33,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly UpdateCheckService _updateChecker;
     private readonly bool _ownsUpdateChecker;
     private readonly IUiTimer _updateTimer;
+    private readonly IUiTimer _trayProtectionTimer;
     private readonly CancellationTokenSource _cancellation = new();
+    private string? _announcedUpdateVersion;
     private DateTimeOffset _lastProbeUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastProtectionProbeUtc = DateTimeOffset.MinValue;
     private bool _isProbing;
@@ -89,6 +91,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _updateChecker = updateChecker ?? new UpdateCheckService(
             typeof(ShellViewModel).Assembly.GetName().Version ?? new Version(0, 0, 0));
         _updateTimer = timers.Create(UpdateCheckService.MinimumCheckInterval);
+        _trayProtectionTimer = timers.Create(TimeSpan.FromSeconds(30));
         var processes = processActions ?? new UnsupportedProcessActions();
         PrivacyShield = new PrivacyShieldPageViewModel(
             IsServiceMode ? serviceClient : null,
@@ -265,6 +268,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         AlertCenter.Changed += OnAlertCenterChanged;
         _updateChecker.Changed += OnUpdateCheckerChanged;
         _updateTimer.Tick += OnUpdateTimerTick;
+        _trayProtectionTimer.Tick += OnTrayProtectionTimerTick;
     }
 
     public IReadOnlyList<string> Themes { get; } =
@@ -434,7 +438,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissUpdate() => _updateChecker.Dismiss();
 
-    /// <summary>Runs a silent update check if opted in and the 6-hour cooldown has elapsed.</summary>
+    /// <summary>Runs a silent update check if opted in and the 30-minute cooldown has elapsed.</summary>
     public async Task<bool> CheckForUpdatesAsync()
     {
         if (_disposed)
@@ -453,8 +457,34 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task<bool> CheckForUpdatesOnStartupAsync()
+    {
+        if (_disposed)
+        {
+            return false;
+        }
+
+        var token = _cancellation.Token;
+        try
+        {
+            return await _updateChecker.CheckOnStartupAsync(token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_disposed || token.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
     private void OnUpdateTimerTick(object? sender, EventArgs e) =>
         _ = CheckForUpdatesAsync();
+
+    private void OnTrayProtectionTimerTick(object? sender, EventArgs e)
+    {
+        if (!_presentationVisible && !_disposed)
+        {
+            _ = ProbeProtectionAsync(force: true);
+        }
+    }
 
     private void OnUpdateCheckerChanged(object? sender, EventArgs e)
     {
@@ -479,6 +509,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasUpdateReleaseDate));
         OnPropertyChanged(nameof(HasUpdateSummary));
         OnPropertyChanged(nameof(HasUpdateReleaseNotes));
+
+        if (_updateChecker.IsUpdateAvailable &&
+            !string.IsNullOrWhiteSpace(_updateChecker.LatestVersion) &&
+            !string.Equals(_announcedUpdateVersion, _updateChecker.LatestVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            _announcedUpdateVersion = _updateChecker.LatestVersion;
+            AxiomAlertService.Show(
+                "Axiom update available",
+                $"Axiom v{_updateChecker.LatestVersion} is available on GitHub. Open Settings or the top banner to download and install.",
+                page: typeof(SettingsPageViewModel));
+        }
     }
 
     public UiMode CurrentUiMode => _uiMode.Current;
@@ -636,6 +677,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _presentationVisible = visible;
         if (visible)
         {
+            _trayProtectionTimer.StopTimer();
+            _monitor.Start();
             Agents.SetTrayMonitoring(false);
             _traffic.Start();
             (_activePage as IActivatablePage)?.Activate();
@@ -649,6 +692,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                     AgentHealthPageViewModel or SimpleHomePageViewModel or MiniHomePageViewModel);
             (_activePage as IActivatablePage)?.Deactivate();
             _traffic.Stop();
+            _monitor.Stop();
+            _trayProtectionTimer.Start();
         }
 
         Security.SetPresentationVisible(visible);
@@ -702,10 +747,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public void Start()
     {
-        _monitor.Start();
         if (_presentationVisible)
         {
+            _monitor.Start();
             _traffic.Start();
+        }
+        else
+        {
+            _trayProtectionTimer.Start();
         }
 
         Overview.Refresh();
@@ -729,7 +778,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         RefreshStatus();
         _updateTimer.Start();
         _ = ProbeServiceAsync(force: true);
-        _ = CheckForUpdatesAsync();
+        _ = CheckForUpdatesOnStartupAsync();
     }
 
     public void Dispose()
@@ -742,6 +791,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _disposed = true;
         _updateTimer.StopTimer();
         _updateTimer.Tick -= OnUpdateTimerTick;
+        _trayProtectionTimer.StopTimer();
+        _trayProtectionTimer.Tick -= OnTrayProtectionTimerTick;
         _updateChecker.Changed -= OnUpdateCheckerChanged;
         _monitor.Updated -= OnMonitorUpdated;
         if (_reachability is not null)

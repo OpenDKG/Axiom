@@ -54,7 +54,7 @@ Infrastructure/Service/Desktop.
 ## 3. Service
 
 - `MonitoringWorker`: IP Helper every 1 s → `ConnectionSnapshotCache` (volatile reference + revision).
-- `HistoryWriter`: writes the latest snapshot to SQLite every 2 s; retention at startup and hourly.
+- `HistoryWriter`: writes the latest snapshot to SQLite every 2 minutes; retention at startup and hourly.
 - `PipeServerWorker`: pipe with an explicit DACL, SID check and limits.
 - `ServiceInfo`: start time is set explicitly (`MarkStarted`) so uptime does not depend on lazy type
   initialization.

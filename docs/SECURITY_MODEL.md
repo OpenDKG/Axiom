@@ -44,13 +44,15 @@ Axiom's own database is not generally encrypted at rest. File ACLs, restricted s
 | Capability | Default / trigger | Typical outbound data | Notes |
 |---|---|---|---|
 | Core monitoring, local firewall | Local, no account needed | None required | Continues without DKG, Blackbox or internet |
-| DNS resolution with Privacy Shield | User enables/configures resolver and points adapter at it | Allowed DNS questions to selected upstream resolver | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
+| Release update check | Enabled by default (*Settings -> Updates*) | HTTPS GET to `api.github.com/repos/OpenDKG/Axiom/releases/latest` on startup & every 30 min | Toggleable in Settings; no device/install ID sent |
+| Verified Graph snapshot | Default Threat Intelligence initialization | Read-only HTTPS GET for signed snapshot (`github.com/a-51-50/axiom-verified-graph`) | ECDSA P-256 verified; disable via `AXIOM_GRAPH_SNAPSHOT_DISABLE=1` |
+| DNS resolution with Privacy Shield | User enables/configures resolver and points adapter at it | Allowed DNS questions to selected upstream DoH resolver (e.g., Cloudflare `1.1.1.1` / Quad9 `9.9.9.9`) | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
 | Blocklist update | User updates selected sources | HTTPS source requests | Existing local rules retained on failed source update |
-| AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default | Sanitized evidence about selected process/connections | Remote provider sees the evidence; local OpenCode route may use its own provider |
+| AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default | Sanitized evidence about selected process/connections | Remote provider sees the evidence; defaults to local Ollama (`localhost:11434`) |
 | VirusTotal hash lookup | Opt-in API key and user checks hash | File SHA-256, not the file bytes | Provider can correlate lookups |
 | Community feed | Configured HTTPS URL / Refresh feed | Network fetch and optional bearer token | Starter feed is bundled and offline |
 | DKG/Blackbox installation and sync | User elects to install/start/enable integration | Network package downloads, DKG peer traffic and sync metadata | Localhost API reads are local, but the underlying node is networked |
-| Community IOC report | Sharing consent and explicit **Share** / **Send now** | Signed, normalized threat indicator and reporter identity | No automatic timer publication; queueing alone is not transmission |
+| Community IOC report | Explicit **opt-in** consent (`off` by default) and manual or approved sharing | Signed, normalized threat indicator and reporter identity | Automatic sharing starts unchecked in Setup and First-Run setup |
 | VM publication | Not implemented directly in Axiom | None by Axiom | Any TRAC/gas-funded publishing belongs to an external, explicitly approved integration |
 
 The normalized IOC sharing path excludes loopback, private/local/special-use destinations and drops URL userinfo, query and fragment. It is **not** authorized to publish raw prompts, network browsing histories, private IPs, command lines, files, credentials or session IDs. See [threat intelligence](THREAT_INTELLIGENCE.md).

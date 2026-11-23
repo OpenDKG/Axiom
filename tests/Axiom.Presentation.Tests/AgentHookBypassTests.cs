@@ -132,6 +132,9 @@ public sealed class AgentHookBypassTests
     [Theory]
     [InlineData("git status")]
     [InlineData("curl https://api.example/health")]
+    [InlineData("git commit -m \"remove unused helper and delete temporary notes in axiom docs\"")]
+    [InlineData("echo reviewing axiom readme and uninstall steps")]
+    [InlineData("grep -rn hooks.json docs/")]
     public void Safe_command_passes_through_local_command_guard_to_upstream_hook(string safeCommand)
     {
         var python = FindWorkingPython();

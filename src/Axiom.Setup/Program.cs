@@ -49,6 +49,20 @@ internal static class Program
     private static void Main(string[] args)
     {
         var options = SetupOptions.Parse(args);
+        if (!string.IsNullOrWhiteSpace(options.ParseError))
+        {
+            if (options.Silent)
+            {
+                Console.Error.WriteLine("Axiom Setup argument error: " + options.ParseError);
+            }
+            else
+            {
+                _ = MessageBox(nint.Zero, options.ParseError, "Axiom Setup — Invalid Arguments", 0x00000010);
+            }
+
+            Environment.ExitCode = 2;
+            return;
+        }
 
         // A second setup instance used to run concurrently with the first, each making its own
         // multi-GB upgrade backup and fighting over the service. One instance only. In silent mode a
@@ -80,18 +94,29 @@ internal static class Program
                     .UninstallAsync(options, progress: null, CancellationToken.None)
                     .GetAwaiter()
                     .GetResult();
-                Console.WriteLine(uninstall.Message);
-                Environment.ExitCode = uninstall.Success ? 0 : 1;
+                if (!uninstall.Success || uninstall.PartialSuccess)
+                {
+                    Console.Error.WriteLine(uninstall.Message);
+                    if (!string.IsNullOrWhiteSpace(uninstall.Warning))
+                    {
+                        Console.Error.WriteLine(uninstall.Warning);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine(uninstall.Message);
+                }
+
+                Environment.ExitCode = uninstall.Success ? (uninstall.PartialSuccess ? 4 : 0) : 1;
                 return;
             }
 
             if (!options.AcceptRisk)
             {
                 Console.Error.WriteLine(
-                    "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk "
-                    + "and enable Blackbox automatic community threat sharing when Blackbox is installed (pass --no-automatic-threat-sharing to keep it off). "
+                    "Axiom is a development build. Pass --accept-risk with --silent to confirm that you use it at your own risk. "
                     + "Modes: --complete (default), --light (core without AI agents), --optional (pick with --with-*/--no-*). "
-                    + "Manual threat reporting is a separate opt-in (--allow-manual-threat-sharing).");
+                    + "Blackbox threat sharing is opt-in (--enable-automatic-threat-sharing, --allow-manual-threat-sharing).");
                 Environment.ExitCode = 2;
                 return;
             }
@@ -115,7 +140,7 @@ internal static class Program
                 }
             }
 
-            Environment.ExitCode = result.Success ? 0 : 1;
+            Environment.ExitCode = !result.Success ? 1 : result.PartialSuccess ? 4 : 0;
             return;
         }
 

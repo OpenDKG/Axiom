@@ -6,6 +6,8 @@ on:
       - codex/public-release-links
       - 'codex/release-*-linux-preview'
       - 'codex/release-*-macos-preview'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -25,15 +27,28 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - name: Test the desktop and installer
+      - name: Run full Windows and core test suite
         run: |
-          dotnet test tests/Axiom.UI.Avalonia.Tests -c Release
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet test tests/Axiom.Presentation.Tests -c Release
+          $testProjects = @(
+            'tests/Axiom.Contracts.Tests',
+            'tests/Axiom.Core.Tests',
+            'tests/Axiom.Persistence.Tests',
+            'tests/Axiom.Service.Tests',
+            'tests/Axiom.Service.Hosting.Tests',
+            'tests/Axiom.Infrastructure.Windows.Tests',
+            'tests/Axiom.Presentation.Tests',
+            'tests/Axiom.UI.Avalonia.Tests',
+            'tests/Axiom.UI.Tests',
+            'tests/Axiom.McpServer.Tests'
+          )
+          foreach ($project in $testProjects) {
+            dotnet test $project -c Release -p:RestoreLockedMode=true
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Package Windows x64
         run: |
           ./scripts/build-release.ps1 -OutputDir "$PWD/release"
@@ -42,7 +57,7 @@ jobs:
           $setup = Get-Item -LiteralPath release/Axiom-Setup.exe
           if ($setup.VersionInfo.ProductVersion -ne $version) { throw 'Windows setup version does not match source' }
           git rev-parse HEAD | Set-Content release/SOURCE-COMMIT.txt -Encoding ascii
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: axiom-windows-x64
           path: release/
@@ -54,8 +69,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
       - name: Install native build tools
@@ -94,7 +109,7 @@ jobs:
           cp "$package" release/
           cd release
           sha256sum "$(basename "$package")" > SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: axiom-linux-amd64
           path: release/
@@ -106,8 +121,8 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
       - name: Test the macOS filter and desktop
@@ -139,7 +154,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$app" "release/$package"
           cd release
           shasum -a 256 "$package" > SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: axiom-macos-intel
           path: release/

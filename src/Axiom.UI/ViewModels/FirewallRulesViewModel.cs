@@ -185,9 +185,9 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
     public string NoticeBadgeText => WritesEnabled ? "TEST VM" : "READ-ONLY";
 
     public string NewRuleWriteHint => WritesEnabled
-        ? "Writes are enabled for this test session. Each change requires confirmation and is audited."
+        ? "Writes are enabled for this session. Each change requires confirmation and is audited."
         : WriteGateKnown
-            ? "Writes are disabled by design. Start the service with AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes on an isolated test VM, then recheck."
+            ? "Writes are disabled by design. Start the service with AXIOM_ENABLE_FIREWALL_WRITES=1 and AXIOM_FIREWALL_WRITE_CONFIRM=yes, then recheck."
             : "The service write gate could not be read, so this session stays read-only. Recheck the service.";
 
     [ObservableProperty]
@@ -309,7 +309,7 @@ public sealed partial class FirewallRulesViewModel : PageViewModel, IDisposable
 
         var confirmation = MessageBox.Show(
             $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
-            "Only this rule is changed. Other Windows Firewall rules are not touched. Continue only on an isolated test VM.",
+            "Only this rule is changed. Other Windows Firewall rules are not touched.",
             "Axiom firewall write",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);

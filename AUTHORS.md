@@ -32,12 +32,16 @@ trademarks, repository administration, revenue rights or legal ownership, and th
 created the original implementation. Platform-specific responsibilities are recorded only when they
 are formally agreed.
 
-## Additional contributors
+## Special thanks & additional contributors
+
+**hottogo** - <https://github.com/hottogo>
+
+Community contributor and issue reporting.
 
 Community contributors and other individuals are credited according to their actual work and Git
-history. No additional contributor is listed at this time; the founding team is not repeated here
-merely to describe its primary roles. Listing a contributor does not imply shared ownership of the
-whole project, an original-creator role or a copyright claim.
+history. The founding team is not repeated here merely to describe its primary roles. Listing a
+contributor does not imply shared ownership of the whole project, an original-creator role or a
+copyright claim.
 
 ## Copyright holders
 

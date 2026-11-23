@@ -101,8 +101,8 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
             ? $"Axiom Shield is on, but {PlatformText.FilterName} has not confirmed enforcement yet ({Firewall.Enforcement.NotVerifiedReason}). Open Firewall to check."
             : Firewall.ShieldEnabled
             ? (PrivacyShield.Enabled
-                ? "Axiom Shield checks new outbound apps and Privacy Shield is actively filtering ads and trackers."
-                : "Axiom Shield asks before unfamiliar apps connect to the internet. You can also turn on the Ad & Tracker Blocker below.")
+                ? "Axiom Shield monitors outbound apps (blocked apps stay blocked on future attempts) and Privacy Shield is actively filtering ads and trackers."
+                : "Axiom Shield monitors outbound apps and enforces your Allow or Block rules. You can also turn on the Ad & Tracker Blocker below.")
             : "Axiom is monitoring internet usage in read-only mode. Turn on Firewall Shield to control which apps may connect.";
 
     public string ShieldButtonText => !Firewall.ProtectionKnown
@@ -145,9 +145,11 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
             ? Agents.Enforcement.CanClaimVerifiedBlocking ? "ACTIVE" : "NOT VERIFIED"
             : Agents.Security.BlackboxConnected || Agents.Enforcement.CanClaimVerifiedBlocking
             ? "ACTIVE"
-            : Agents.Security.ProtectedAgents.Count > 0
-                ? "DETECTED"
-                : "READY";
+            : !Firewall.ProtectionKnown && Agents.Security.ProtectedAgents.Count == 0
+                ? "OFFLINE"
+                : Agents.Security.ProtectedAgents.Count > 0
+                    ? "DETECTED"
+                    : "READY";
 
     public string AgentGuardStatusText =>
         AgentGuardUnproven && !Agents.Enforcement.CanClaimVerifiedBlocking
@@ -156,9 +158,11 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
                 : $"Unsupported on {PlatformText.OsName} for now: Blackbox host hooks are not verified here, so AI agents are not protected"
             : Agents.Security.BlackboxConnected
             ? $"{Agents.Security.ProtectedAgents.Count} AI tool(s) watched · {Agents.BlockedFindingCount} blocked threat(s)"
-            : Agents.Security.ProtectedAgents.Count > 0
-                ? $"{Agents.Security.ProtectedAgents.Count} local AI tool(s) found · {Agents.BlockedFindingCount} blocked"
-                : "Watches AI coding tools and blocks risky commands or secret reads";
+            : !Firewall.ProtectionKnown && Agents.Security.ProtectedAgents.Count == 0
+                ? "Local service unavailable — connect Axiom service to verify agent protection"
+                : Agents.Security.ProtectedAgents.Count > 0
+                    ? $"{Agents.Security.ProtectedAgents.Count} local AI tool(s) found · {Agents.BlockedFindingCount} blocked"
+                    : "Watches AI coding tools and blocks risky commands or secret reads";
 
     public string AgentActivityCountText => $"{Agents.Activity.Count} events";
 

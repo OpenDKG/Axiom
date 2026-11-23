@@ -427,11 +427,34 @@ internal static class SetupDefaults
         {
             sessionId = currentProcess.SessionId;
         }
+
+        var serviceRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Axiom")
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
         foreach (var process in Process.GetProcessesByName("Axiom.Service"))
         {
             try
             {
                 if (process.SessionId != sessionId)
+                {
+                    continue;
+                }
+
+                string? exePath = null;
+                try
+                {
+                    exePath = process.MainModule?.FileName;
+                }
+                catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or NotSupportedException)
+                {
+                    // System/protected service process cannot be opened by medium-integrity Setup; leave it alone.
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(exePath) &&
+                    Path.GetFullPath(exePath).StartsWith(serviceRoot, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

@@ -87,4 +87,30 @@ public sealed class ShieldProcessFilterTests
         Assert.False(ShieldProcessFilter.IsMacOwnPath("/Library/SystemExtensions/X/com.other.filter.systemextension/Contents/MacOS/x", null));
         Assert.False(ShieldProcessFilter.IsMacOwnPath("/usr/local/bin/curl", null));
     }
+
+    [Fact]
+    public void Critical_system_processes_cannot_be_blocked()
+    {
+        Assert.True(ShieldProcessFilter.IsCriticalSystemProcess("svchost.exe", @"C:\Windows\System32\svchost.exe"));
+        Assert.True(ShieldProcessFilter.IsCriticalSystemProcess("lsass", @"C:\Windows\System32\lsass.exe"));
+        Assert.True(ShieldProcessFilter.IsCriticalSystemProcess("System", null));
+        Assert.True(ShieldProcessFilter.IsCriticalSystemProcess("launchd", "/sbin/launchd"));
+        Assert.False(ShieldProcessFilter.IsCriticalSystemProcess("curl.exe", @"C:\Tools\curl.exe"));
+    }
+
+    [Fact]
+    public void Process_termination_target_rejects_mismatched_identity_or_invalid_pid()
+    {
+        var current = System.Diagnostics.Process.GetCurrentProcess();
+        var captured = Assert.Single(Axiom.Presentation.ProcessTerminationTarget.Capture([current.Id], current.MainModule?.FileName));
+        Assert.True(Axiom.Presentation.ProcessTerminationTarget.MatchesLiveProcess(current, captured));
+
+        var wrongStart = captured with { StartTimeUtc = captured.StartTimeUtc!.Value.AddMinutes(-5) };
+        Assert.False(Axiom.Presentation.ProcessTerminationTarget.MatchesLiveProcess(current, wrongStart));
+
+        var wrongPath = captured with { ExpectedPath = @"C:\nonexistent\other.exe" };
+        Assert.False(Axiom.Presentation.ProcessTerminationTarget.MatchesLiveProcess(current, wrongPath));
+
+        Assert.Empty(Axiom.Presentation.ProcessTerminationTarget.Capture([0]));
+    }
 }

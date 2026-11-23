@@ -22,6 +22,9 @@ public sealed class LifecycleAndSetupRegressionTests
     [
         "--silent", "--accept-risk", "--optional", "--no-privacy-shield", "--with-blackbox", "--with-agent-hooks",
     ];
+    private static readonly string[] UninstallPurgeArgs = ["--uninstall", "--remove-data", "--allow-downgrade"];
+    private static readonly string[] ConflictingModeArgs = ["--complete", "--light"];
+    private static readonly string[] ConflictingOverrideArgs = ["--light", "--with-dkg"];
     [Fact]
     public void Wpf_agents_merge_activity_caps_retained_entries_at_activity_max()
     {
@@ -88,7 +91,10 @@ public sealed class LifecycleAndSetupRegressionTests
         Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(equalsParsed)!);
 
         var consentedComplete = parse.Invoke(null, [ConsentedCompleteArgs])!;
-        Assert.True((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(consentedComplete)!);
+        Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(consentedComplete)!);
+
+        var optedInComplete = parse.Invoke(null, [ConsentedCompleteArgs.Concat(["--enable-automatic-threat-sharing"]).ToArray()])!;
+        Assert.True((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optedInComplete)!);
 
         var optedOutComplete = parse.Invoke(null, [OptedOutCompleteArgs])!;
         Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optedOutComplete)!);
@@ -124,13 +130,31 @@ public sealed class LifecycleAndSetupRegressionTests
         Assert.True((bool)optionsType.GetProperty("EffectiveInstallBlackbox")!.GetValue(optionalCustom)!);
         Assert.False((bool)optionsType.GetProperty("EffectiveInstallDkg")!.GetValue(optionalCustom)!);
         Assert.True((bool)optionsType.GetProperty("EffectiveInstallAgentHooks")!.GetValue(optionalCustom)!);
-        Assert.True((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optionalCustom)!);
+        Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optionalCustom)!);
+
+        // #31 / #32 setup flags: uninstall data removal, allow downgrade, and conflict detection.
+        var uninstallPurge = parse.Invoke(null, [UninstallPurgeArgs])!;
+        Assert.True((bool)optionsType.GetProperty("Uninstall")!.GetValue(uninstallPurge)!);
+        Assert.True((bool)optionsType.GetProperty("RemoveData")!.GetValue(uninstallPurge)!);
+        Assert.True((bool)optionsType.GetProperty("AllowDowngrade")!.GetValue(uninstallPurge)!);
+        Assert.Null(optionsType.GetProperty("ParseError")!.GetValue(uninstallPurge));
+
+        var conflictingModes = parse.Invoke(null, [ConflictingModeArgs])!;
+        Assert.False(string.IsNullOrWhiteSpace((string?)optionsType.GetProperty("ParseError")!.GetValue(conflictingModes)));
+
+        var conflictingOverride = parse.Invoke(null, [ConflictingOverrideArgs])!;
+        Assert.False(string.IsNullOrWhiteSpace((string?)optionsType.GetProperty("ParseError")!.GetValue(conflictingOverride)));
+
+        var installerType = setupAssembly.GetType("Axiom.Setup.SetupInstaller", throwOnError: true)!;
+        var compareVersions = installerType.GetMethod("CompareVersions", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.True((int)compareVersions.Invoke(null, ["1.4.9", "1.4.7"])! > 0);
+        Assert.Equal(0, (int)compareVersions.Invoke(null, ["1.4.9+abc", "1.4.9.0"])!);
+        Assert.True((int)compareVersions.Invoke(null, ["1.4.7", "1.4.9"])! < 0);
 
         // Empty or invalid --install-dir values must fall back cleanly instead of throwing ArgumentException.
         var emptyParsed = parse.Invoke(null, [EmptyInstallDirArgs])!;
         Assert.False(string.IsNullOrWhiteSpace((string)optionsType.GetProperty("InstallDir")!.GetValue(emptyParsed)!));
 
-        var installerType = setupAssembly.GetType("Axiom.Setup.SetupInstaller", throwOnError: true)!;
         var queryField = installerType.GetField("WindowsServiceQueryArguments", BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.Equal("query Axiom", (string)queryField.GetValue(null)!);
 

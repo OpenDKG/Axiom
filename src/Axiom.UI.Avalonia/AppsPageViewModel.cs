@@ -138,6 +138,7 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             return;
         }
 
+        var targets = ProcessTerminationTarget.Capture(liveIds, app.Path);
         var confirmed = await _ui.ConfirmAsync(
             "End application",
             $"End all running processes for {app.Name} (PID {string.Join(", ", liveIds)})?\n\nUnsaved work in those processes will be lost.",
@@ -151,8 +152,10 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             return;
         }
 
-        var ended = _processes.EndProcesses(liveIds);
-        WriteStatusText = $"Ended {ended} process(es) for application {app.Name}.";
+        var ended = _processes.EndProcesses(targets);
+        WriteStatusText = ended == 0
+            ? $"No process could be ended for {app.Name} (it may have exited, been replaced, or access was denied)."
+            : $"Ended {ended} process(es) for application {app.Name}.";
     }
 
     [RelayCommand]
@@ -253,8 +256,8 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             WriteStatusText = !OperatingSystem.IsWindows()
                 ? UnixWriteStatus(CanWrite, CanWrite ? await QueryEnforcementAsync().ConfigureAwait(true) : FilterEnforcementSummary.None, PlatformText.Firewall)
                 : CanWrite
-                    ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
-                    : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
+                    ? "Firewall writes are enabled for this service session."
+                    : "Firewall writes are disabled. Enable firewall writes in the local service to change rules.";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -283,12 +286,17 @@ public sealed partial class AppsPageViewModel : PageViewModel, IActivatablePage,
             return;
         }
 
+        if (ShieldProcessFilter.IsCriticalSystemProcess(app.Name, app.Path))
+        {
+            WriteStatusText = $"Block rule refused for {app.Name}: blocking a core system or Axiom process can interrupt DNS, DHCP, Windows Update or essential connectivity.";
+            return;
+        }
+
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create a {PlatformText.Firewall} block rule for {app.Name} ({directionText})?\n\n" +
-            "The rule is owned by Axiom and can be removed from the Firewall page." +
-            (OperatingSystem.IsMacOS() ? string.Empty : " Only continue on an isolated test VM."),
+            "The rule is owned by Axiom and can be removed from the Firewall page.",
             "Create rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);

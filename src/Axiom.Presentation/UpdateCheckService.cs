@@ -10,8 +10,8 @@ using Axiom.Contracts;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// Checks GitHub Releases at most once every 6 hours when opted in and exposes whether a newer
-/// stable release is available. Installer downloads require an explicit user action.
+/// Checks GitHub Releases on startup and at most once every 30 minutes when opted in, and exposes
+/// whether a newer stable release is available. Installer downloads require an explicit user action.
 /// </summary>
 public sealed class UpdateCheckService : IDisposable
 {
@@ -19,7 +19,7 @@ public sealed class UpdateCheckService : IDisposable
     private const string RepositoryWebPrefix = DefaultReleasesPageUrl + "/tag/";
     private const string WindowsInstallerName = "Axiom-Setup.exe";
     private const long MaxInstallerBytes = 512L * 1024 * 1024;
-    public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromHours(6);
+    public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromMinutes(30);
 
     private readonly Version _currentVersion;
     private readonly UpdateSettingsStore _settingsStore;
@@ -197,15 +197,22 @@ public sealed class UpdateCheckService : IDisposable
     /// has elapsed since the previous check attempt. Failures stay completely silent.
     /// </summary>
     public Task<bool> CheckIfDueAsync(CancellationToken cancellationToken = default) =>
-        CheckCoreAsync(force: false, cancellationToken);
+        CheckCoreAsync(force: false, bypassCooldown: false, cancellationToken);
 
     /// <summary>
-    /// Checks GitHub Releases immediately when requested by the user, bypassing the 6-hour cooldown.
+    /// Checks GitHub Releases immediately at startup when automatic update checking is enabled,
+    /// bypassing the interval cooldown while still honoring the user's dismissed version.
+    /// </summary>
+    public Task<bool> CheckOnStartupAsync(CancellationToken cancellationToken = default) =>
+        CheckCoreAsync(force: false, bypassCooldown: true, cancellationToken);
+
+    /// <summary>
+    /// Checks GitHub Releases immediately when requested by the user, bypassing the interval cooldown.
     /// </summary>
     public Task<bool> CheckNowAsync(CancellationToken cancellationToken = default) =>
-        CheckCoreAsync(force: true, cancellationToken);
+        CheckCoreAsync(force: true, bypassCooldown: true, cancellationToken);
 
-    private async Task<bool> CheckCoreAsync(bool force, CancellationToken cancellationToken)
+    private async Task<bool> CheckCoreAsync(bool force, bool bypassCooldown, CancellationToken cancellationToken)
     {
         if (_disposed)
         {
@@ -234,6 +241,7 @@ public sealed class UpdateCheckService : IDisposable
 
             var now = _timeProvider.GetUtcNow();
             if (!force &&
+                !bypassCooldown &&
                 settings.LastCheckedUtc != DateTimeOffset.MinValue &&
                 now - settings.LastCheckedUtc < MinimumCheckInterval)
             {

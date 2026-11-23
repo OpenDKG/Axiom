@@ -85,7 +85,16 @@
             </StackPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding UpdateCheckStatusText}" FontSize="10.5"
                                                Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Text="Checks OpenDKG/Axiom for newer stable releases on startup and every 6 hours."
+            <controls:AxiomSelectableTextBlock Text="Checks OpenDKG/Axiom for newer stable releases on startup and every 30 minutes."
+                       FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,4,0,2" />
+            <controls:AxiomSelectableTextBlock Text="Local data &amp; privacy" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Clear local logs &amp; cache" Command="{Binding ClearLocalDataCommand}" Padding="12,6" />
+            </StackPanel>
+            <controls:AxiomSelectableTextBlock Text="{Binding ClearLocalDataStatusText}" FontSize="10.5"
+                                               Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            <controls:AxiomSelectableTextBlock Text="Removes per-user logs, evidence trails, cached snapshots, and crash dumps without changing firewall rules."
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
@@ -142,6 +151,24 @@
             <controls:AxiomSelectableTextBlock Text="Co-Founders &amp; Core Maintainers" FontSize="10.5" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,8,0,2" />
             <ItemsControl ItemsSource="{Binding AboutCoreTeam}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="116,*" ColumnSpacing="10" Margin="0,0,0,4">
+                    <Button Grid.Column="0" Content="{Binding GitHubHandle}"
+                            Command="{Binding $parent[UserControl].DataContext.OpenProfileCommand}"
+                            CommandParameter="{Binding ProfileUrl}"
+                            Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
+                            HorizontalAlignment="Left" Foreground="{DynamicResource Axiom.Accent}" FontSize="11.5" />
+                    <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding Role}" FontSize="10.5"
+                                                       Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <controls:AxiomSelectableTextBlock Text="Special Thanks" FontSize="10.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Axiom.TextPrimary}" Margin="0,8,0,2" />
+            <ItemsControl ItemsSource="{Binding AboutSpecialThanks}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Grid ColumnDefinitions="116,*" ColumnSpacing="10" Margin="0,0,0,4">

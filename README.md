@@ -73,6 +73,10 @@ cross-platform development and maintenance. The team is expanding Axiom across W
 macOS; platform-specific responsibilities and actual implementations are documented separately as
 development progresses.
 
+**Special Thanks**
+
+- [@hottogo](https://github.com/hottogo) — Community contributor & issue reporting
+
 **Public source, contributions and downloads:** [OpenDKG/Axiom](https://github.com/OpenDKG/Axiom)
 
 **Affiliation:** [OpenDKG](https://github.com/OpenDKG)
@@ -96,9 +100,11 @@ network peers when deliberately enabled.
 Axiom brings together four surfaces:
 
 - **Network visibility and history** for TCP/UDP IPv4/IPv6 sockets and applications.
-- **Axiom Shield** — one switch that installs the elevated local service and turns the ask policy
-  on: every new outbound application waits for Block or Allow, and blocks are Axiom-owned Windows
-  Firewall rules with read-back verification and recovery.
+- **Axiom Shield** — one switch that manages Axiom-owned firewall rules with read-back
+  verification and recovery. Axiom monitors new outbound applications and raises a Shield alert for
+  Block or Allow; once you click Block, subsequent connections from that executable are refused by the
+  OS firewall (synchronous pre-connect interception of a brand-new socket before user approval is not
+  claimed).
 - **Local privacy controls** including Privacy Shield DNS filtering and a read-only AI analyst.
 - **Agent protection** through Blackbox-compatible lifecycle hooks, an agent network lockdown
   (localhost only) and a local audit view.
@@ -381,9 +387,9 @@ Windows Service
 
 ### Installation (core per-user setup; optional modules require additional consent)
 
-The recommended release asset is **`Axiom-Setup.exe`** (published alongside **`Axiom-<version>-win-x64.zip`** and **`SHA256SUMS.txt`**). Double-click it, choose the profile (**Complete** or **Partial**) in the theme-aware installer UI, and click **Install Axiom** (or **Update Axiom**). The setup is a single self-contained executable with the desktop and local service payload embedded; it installs under `%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut, launches Axiom automatically when done, and closes the installer. On in-place updates, Setup automatically closes running `Axiom.Desktop` instances cleanly, applies the update, and restarts Axiom. Core installation needs no .NET runtime, Windows service registration, firewall change, or elevation.
+The recommended release asset is **`Axiom-Setup.exe`** (published alongside **`Axiom-<version>-win-x64.zip`** and **`SHA256SUMS.txt`**). Double-click it, choose the profile (**Complete** or **Light / Partial**) in the installer UI, and click **Install Axiom** (or **Update Axiom**). The setup executable embeds the desktop and local service payload; it installs per-user desktop binaries under `%LOCALAPPDATA%\Programs\Axiom`, creates a Start Menu shortcut, registers Add/Remove Programs uninstall support, and blocks accidental downgrades unless `--allow-downgrade` is specified. Core monitoring needs no external runtime; enabling machine-wide Windows Firewall enforcement or Privacy Shield adapter DNS triggers Windows administrator elevation for the local service.
 
-The desktop starts the bundled local service automatically, while the privileged Windows service provisions the machine-scope default enforcement policy (`%ProgramData%\Axiom\enforcement-policy.json`) if no operator policy exists yet. VirusTotal remains optional; its API key is configured later on the Security page.
+The desktop connects to the bundled local service, which provisions the machine-scope default enforcement policy (`%ProgramData%\Axiom\enforcement-policy.json`) if no operator policy exists yet. VirusTotal remains optional; its API key is configured later on the Security page.
 
 **Linux package:** a `.deb` built by `scripts/linux/package.sh` installs
 the desktop app under `/usr/lib/axiom-firewall` (launched through `/usr/bin/axiom-firewall`),
@@ -392,13 +398,11 @@ the `axiomd` systemd service (nftables + optional eBPF enforcement) in its posti
 or password prompt at first launch. `.rpm` is built with nfpm but untested. Details:
 [docs/LINUX_PACKAGING.md](docs/LINUX_PACKAGING.md).
 
-**Complete installation** also runs the official Blackbox and DKG installers, starts their local
-services and installs agent hooks after Blackbox is ready. Those third-party installers may download
-large packages, require network access and show their own prompts/terms. **Partial installation**
-installs only core Axiom and leaves Blackbox, DKG, OpenCode, OpenChamber, Codex, ZCode and DeepSeek
-Harness files unchanged. Axiom also provisions Axiom-managed hooks for detected harnesses once per
-build at startup, preserving user-authored hooks. Codex still requires its own one-time `/hooks`
-trust review.
+**Complete installation** also installs the optional Blackbox and DKG integrations, configures Privacy Shield / Community Feed defaults, and sets up AI agent hooks (automatic community threat sharing remains **opt-in / off by default** unless explicitly enabled). Those third-party installers may download
+large packages, require network access and show their own prompts/terms. **Light / Partial installation**
+installs core Axiom monitoring and leaves Blackbox, DKG, OpenCode, OpenChamber, Codex, ZCode and DeepSeek
+Harness files untouched unless you enable them later. Codex still requires its own one-time `/hooks`
+trust review when agent protection is enabled.
 
 For installation and recovery details, see [Installing Axiom](docs/INSTALL.md). A core-only Microsoft Store package, where offered, excludes Blackbox/DKG installation and third-party agent hooks.
 

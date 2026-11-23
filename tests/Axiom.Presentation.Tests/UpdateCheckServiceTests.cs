@@ -152,13 +152,13 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.False(service.IsUpdateAvailable);
         Assert.Equal(1, handler.RequestCount);
 
-        // Cooldown prevents repeating network calls within 6 hours.
-        clock.Advance(TimeSpan.FromHours(2));
+        // Cooldown prevents repeating network calls within 30 minutes.
+        clock.Advance(TimeSpan.FromMinutes(15));
         Assert.False(await service.CheckIfDueAsync());
         Assert.Equal(1, handler.RequestCount);
 
-        // Next check after 6 hours handles HTTP 404 silently.
-        clock.Advance(TimeSpan.FromHours(5));
+        // Next check after 30 minutes handles HTTP 404 silently.
+        clock.Advance(TimeSpan.FromMinutes(20));
         Assert.False(await service.CheckIfDueAsync());
         Assert.False(service.IsUpdateAvailable);
         Assert.Equal(2, handler.RequestCount);
@@ -287,7 +287,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
         service.Dismiss();
         Assert.False(service.IsUpdateAvailable);
 
-        // Within 6 hours, CheckNowAsync bypasses cooldown and dismissed state.
+        // Within 30 minutes, CheckNowAsync bypasses cooldown and dismissed state.
         clock.Advance(TimeSpan.FromMinutes(10));
         Assert.True(await service.CheckNowAsync());
         Assert.True(service.LastCheckSucceeded);
@@ -295,6 +295,41 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.Contains("• Fix OpenChamber hook registration", service.ReleaseNotesText, StringComparison.Ordinal);
         Assert.Contains("• Add exact dates in findings", service.ReleaseNotesText, StringComparison.Ordinal);
         Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task CheckOnStartupAsync_bypasses_cooldown_while_honoring_opt_out_and_dismissed()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var clock = new AdjustableTimeProvider(new DateTimeOffset(2026, 11, 21, 10, 0, 0, TimeSpan.Zero));
+        var handler = new QueueHandler();
+        handler.EnqueueJson(new { tag_name = "v1.4.8", draft = false, prerelease = false });
+        handler.EnqueueJson(new { tag_name = "v1.4.9", draft = false, prerelease = false });
+        handler.EnqueueJson(new { tag_name = "v1.4.9", draft = false, prerelease = false });
+
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 7), store, http, timeProvider: clock);
+
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.Equal("1.4.8", service.LatestVersion);
+
+        // Even 1 minute later (within cooldown), startup check immediately detects v1.4.9.
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await service.CheckOnStartupAsync());
+        Assert.Equal("1.4.9", service.LatestVersion);
+        Assert.Equal(2, handler.RequestCount);
+
+        // Dismissed version remains dismissed across startup checks.
+        service.Dismiss();
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(await service.CheckOnStartupAsync());
+        Assert.False(service.IsUpdateAvailable);
+        Assert.Equal(3, handler.RequestCount);
+
+        // When automatic update checks are disabled, CheckOnStartupAsync makes zero network requests.
+        service.SetCheckForUpdatesEnabled(false);
+        Assert.False(await service.CheckOnStartupAsync());
+        Assert.Equal(3, handler.RequestCount);
     }
 
     private sealed class RecordedProgress : IProgress<int>

@@ -102,7 +102,7 @@ internal static class ServiceInstaller
         return start == 1056 ? 0 : start;
     }
 
-    public static int Uninstall()
+    public static int Uninstall(bool removeData = false)
     {
         if (!IsAdministrator())
         {
@@ -112,7 +112,50 @@ internal static class ServiceInstaller
 
         StopExisting(TimeSpan.FromSeconds(30));
         ClearRecoveryActions();
+
+        var cleanupFailed = false;
+        try
+        {
+            using var firewall = new Infrastructure.Windows.Firewall.WindowsFirewallPolicyAdapter();
+            var ownedRules = firewall.ListOwnedRulesAsync(CancellationToken.None).GetAwaiter().GetResult();
+            foreach (var rule in ownedRules)
+            {
+                try
+                {
+                    var removed = firewall
+                        .RemoveCapturedOwnedRuleAsync(rule.ManagedRuleId, rule.Spec.Direction, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (!removed.Success)
+                    {
+                        cleanupFailed = true;
+                        ServiceInstallLog.Write($"uninstall: could not remove firewall rule {rule.OsRuleName}: {removed.ErrorMessage}");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    cleanupFailed = true;
+                    ServiceInstallLog.Write($"uninstall: failed removing firewall rule {rule.OsRuleName}: {exception.Message}");
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            cleanupFailed = true;
+            ServiceInstallLog.Write($"uninstall: firewall rule cleanup failed: {exception.Message}");
+        }
+
+        try
+        {
+            _ = PrivacyDnsFailSafe.RestoreIfNeeded();
+        }
+        catch (Exception exception)
+        {
+            ServiceInstallLog.Write($"uninstall: DNS restore check failed: {exception.Message}");
+        }
+
         var result = RunSc($"delete {ServiceInfo.ServiceName}");
+        var serviceRemoved = result is 0 or 1060;
 
         try
         {
@@ -121,12 +164,44 @@ internal static class ServiceInstaller
             {
                 Directory.Delete(MachineStateSecurity.ServiceDirectory, recursive: true);
             }
+
+            var parentDir = Path.GetDirectoryName(MachineStateSecurity.ServiceDirectory);
+            if (!string.IsNullOrWhiteSpace(parentDir) &&
+                Directory.Exists(parentDir) &&
+                !MachineStateSecurity.IsReparsePointInPath(parentDir) &&
+                !Directory.EnumerateFileSystemEntries(parentDir).Any())
+            {
+                Directory.Delete(parentDir);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            ServiceInstallLog.Write($"uninstall: could not delete service directory: {exception.Message}");
         }
 
-        return result;
+        if (removeData)
+        {
+            try
+            {
+                if (Directory.Exists(MachineStateSecurity.ProgramDataDirectory) &&
+                    !MachineStateSecurity.IsReparsePointInPath(MachineStateSecurity.ProgramDataDirectory))
+                {
+                    Directory.Delete(MachineStateSecurity.ProgramDataDirectory, recursive: true);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                cleanupFailed = true;
+                ServiceInstallLog.Write($"uninstall: could not delete ProgramData directory: {exception.Message}");
+            }
+        }
+
+        if (!serviceRemoved)
+        {
+            return result;
+        }
+
+        return cleanupFailed ? 9 : 0;
     }
 
     public static bool IsAdministrator()

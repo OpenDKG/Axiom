@@ -129,10 +129,34 @@ internal static class SetupInstaller
 
                 Directory.CreateDirectory(options.InstallDir);
                 var existing = DetectExistingInstallation(options.InstallDir);
+                var payloadVersion = NormalizeVersionString(FileVersionInfo.GetVersionInfo(payload.DesktopPath!).ProductVersion);
+                var serviceExeInstalled = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    "Axiom",
+                    "Service",
+                    "Axiom.Service.exe");
+                var installedServiceVersion = File.Exists(serviceExeInstalled)
+                    ? NormalizeVersionString(FileVersionInfo.GetVersionInfo(serviceExeInstalled).ProductVersion)
+                    : null;
+                var highestInstalled = MaxVersion(NormalizeVersionString(existing.Version), installedServiceVersion);
+
+                if (highestInstalled is not null && payloadVersion is not null)
+                {
+                    var cmp = CompareVersions(payloadVersion, highestInstalled);
+                    if (cmp < 0 && !options.AllowDowngrade)
+                    {
+                        return new SetupInstallResult(
+                            false,
+                            $"Cannot downgrade installed Axiom v{highestInstalled} to older v{payloadVersion}. " +
+                            "Uninstall the newer version first or pass --allow-downgrade.",
+                            log);
+                    }
+                }
+
                 if (existing.Exists)
                 {
                     Report($"Existing Axiom installation detected at {options.InstallDir}" +
-                           $"{(existing.Version is null ? "" : $" (v{existing.Version})")}; upgrading in place.");
+                           $"{(highestInstalled is null ? "" : $" (v{highestInstalled})")}; updating in place.");
                 }
 
                 StopInstallDirServiceProcesses(options.InstallDir, Report);
@@ -564,6 +588,7 @@ internal static class SetupInstaller
 
                 var partialSuccess = partialIssues.Count > 0;
                 SaveLastSetupWarning(warning);
+                RegisterUninstallEntry(options.InstallDir, version, options.RemoveData, Report);
                 if (options.StartAfterInstall)
                 {
                     try
@@ -609,7 +634,9 @@ internal static class SetupInstaller
         {
             return new SetupInstallResult(false, "Installation was cancelled.", log);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or JsonException or
+                     InvalidDataException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return new SetupInstallResult(false, "Installation failed: " + exception.Message, log);
         }
@@ -695,9 +722,9 @@ internal static class SetupInstaller
 
         try
         {
-            if (AnyProcessRunning("Axiom.Desktop", "Netpetra.Desktop"))
+            if (!StopRunningDesktopProcesses(Report))
             {
-                return new SetupInstallResult(false, "Axiom is running. Close it before uninstalling.", log);
+                return new SetupInstallResult(false, "Axiom is running and could not be closed automatically.", log);
             }
 
             if (StorageSafety.IsReparsePointInPath(options.InstallDir))
@@ -711,9 +738,14 @@ internal static class SetupInstaller
             Report($"Uninstalling Axiom from {options.InstallDir}...");
             StopInstallDirServiceProcesses(options.InstallDir, Report);
 
-            string? warning = null;
+            var issues = new List<string>();
             var serviceExe = Path.Combine(options.InstallDir, "Axiom.Service.exe");
             var protectedServiceExe = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "Axiom",
+                "Service",
+                "Axiom.Service.exe");
+            var legacyProtectedServiceExe = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 "Axiom",
                 "Axiom.Service.exe");
@@ -721,39 +753,69 @@ internal static class SetupInstaller
                 ? serviceExe
                 : File.Exists(protectedServiceExe)
                     ? protectedServiceExe
-                    : null;
+                    : File.Exists(legacyProtectedServiceExe)
+                        ? legacyProtectedServiceExe
+                        : null;
 
-            if (uninstallHelper is not null && await IsWindowsServiceRegisteredAsync(cancellationToken).ConfigureAwait(false))
+            var serviceRegistered = await IsWindowsServiceRegisteredAsync(cancellationToken).ConfigureAwait(false);
+            if (uninstallHelper is not null)
             {
-                Report("Removing Axiom Windows service registration (elevation prompt)...");
+                Report("Removing Axiom Windows service, Axiom:: firewall rules, and restoring DNS (elevation prompt)...");
+                var helperArgs = options.RemoveData
+                    ? "--uninstall-service --remove-data"
+                    : "--uninstall-service";
                 try
                 {
                     using var proc = Process.Start(new ProcessStartInfo
                     {
                         FileName = uninstallHelper,
-                        Arguments = "--uninstall-service",
+                        Arguments = helperArgs,
                         UseShellExecute = true,
                         Verb = "runas",
                         CreateNoWindow = true,
-                        WindowStyle = ProcessWindowStyle.Hidden,
+                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
                     });
                     if (proc is not null)
                     {
                         await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
                         Report(proc.ExitCode == 0
-                            ? "Axiom Windows service removed."
+                            ? "Axiom Windows service and Axiom:: firewall rules removed."
                             : $"Axiom service uninstaller exited with code {proc.ExitCode}.");
                         if (proc.ExitCode != 0)
                         {
-                            warning = $"Windows service uninstaller exited with code {proc.ExitCode}.";
+                            issues.Add($"Elevated service/firewall cleanup exited with code {proc.ExitCode}.");
                         }
+                    }
+                    else
+                    {
+                        issues.Add("Elevated service/firewall cleanup did not start.");
                     }
                 }
                 catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
                 {
-                    warning = "Administrator approval was cancelled; the Windows service registration may still exist.";
-                    Report(warning);
+                    issues.Add("Administrator approval was cancelled; the Windows service or Axiom:: firewall rules may still exist.");
+                    Report(issues[^1]);
                 }
+                catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    issues.Add($"Could not run elevated service/firewall cleanup: {exception.Message}");
+                    Report(issues[^1]);
+                }
+            }
+            else if (serviceRegistered)
+            {
+                issues.Add("Axiom Windows service is still registered because the service helper binary was not found.");
+                Report(issues[^1]);
+            }
+
+            try
+            {
+                RemoveAgentHooks(Report);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                issues.Add("Could not remove some Axiom agent hooks: " + exception.Message);
+                Report(issues[^1]);
             }
 
             try
@@ -766,8 +828,11 @@ internal static class SetupInstaller
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
-                Report("Could not remove startup registry entry: " + exception.Message);
+                issues.Add("Could not remove startup registry entry: " + exception.Message);
+                Report(issues[^1]);
             }
+
+            UnregisterUninstallEntry(Report);
 
             try
             {
@@ -786,18 +851,34 @@ internal static class SetupInstaller
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                Report("Could not remove Start Menu shortcut: " + exception.Message);
+                issues.Add("Could not remove Start Menu shortcut: " + exception.Message);
+                Report(issues[^1]);
             }
 
             if (Directory.Exists(options.InstallDir))
             {
-                foreach (var fileName in new[] { "Axiom.Desktop.exe", "Axiom.Service.exe", "install.json" })
+                foreach (var fileName in new[] { "Axiom.Desktop.exe", "Axiom.Service.exe", "install.json", "Axiom-Setup.exe" })
                 {
                     var path = Path.Combine(options.InstallDir, fileName);
-                    if (File.Exists(path))
+                    if (!File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(Environment.ProcessPath ?? string.Empty), StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Running directly from the installed copy; cannot delete self synchronously.
+                        continue;
+                    }
+
+                    try
                     {
                         DeleteFileWithRetry(path);
                         Report($"Removed {fileName}.");
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                    {
+                        issues.Add($"Could not remove {fileName}: {exception.Message}");
                     }
                 }
 
@@ -818,23 +899,56 @@ internal static class SetupInstaller
             var userAxiomDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Axiom");
-            foreach (var marker in new[] { SetupDefaults.ProfileFileName, "startup.json" })
+            if (options.RemoveData)
             {
-                var path = Path.Combine(userAxiomDir, marker);
-                if (File.Exists(path))
+                try
                 {
-                    File.Delete(path);
+                    if (Directory.Exists(userAxiomDir) && !StorageSafety.IsReparsePointInPath(userAxiomDir))
+                    {
+                        Directory.Delete(userAxiomDir, recursive: true);
+                        Report("Removed per-user Axiom settings and history folder.");
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    issues.Add("Could not remove per-user Axiom data: " + exception.Message);
+                    Report(issues[^1]);
                 }
             }
+            else
+            {
+                foreach (var marker in new[] { SetupDefaults.ProfileFileName, "startup.json" })
+                {
+                    var path = Path.Combine(userAxiomDir, marker);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+                }
 
-            Report("Axiom uninstall finished.");
-            return new SetupInstallResult(true, "Axiom was uninstalled cleanly.", log, warning, CoreInstalled: false, PartialSuccess: false);
+                Report("Kept user configuration and history data (re-run uninstall with --remove-data to purge).");
+            }
+
+            var warning = issues.Count > 0 ? string.Join(" ", issues) : null;
+            var partialSuccess = warning is not null;
+            Report(partialSuccess
+                ? "Axiom uninstall finished with warnings."
+                : "Axiom uninstall finished.");
+            return new SetupInstallResult(
+                Success: !partialSuccess,
+                Message: partialSuccess
+                    ? "Axiom uninstall completed with warnings — review the log (firewall rules or service cleanup may need attention)."
+                    : "Axiom was uninstalled cleanly.",
+                Log: log,
+                Warning: warning,
+                CoreInstalled: false,
+                PartialSuccess: partialSuccess);
         }
         catch (OperationCanceledException)
         {
             return new SetupInstallResult(false, "Uninstall was cancelled.", log);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return new SetupInstallResult(false, "Uninstall failed: " + exception.Message, log);
         }
@@ -893,10 +1007,7 @@ internal static class SetupInstaller
 
         if (desktop is null || service is null)
         {
-            report("Embedded payload not found; looking for release files next to setup.");
-            desktop ??= ExistingOrNull(Path.Combine(AppContext.BaseDirectory, "Axiom.Desktop.exe"));
-            service ??= ExistingOrNull(Path.Combine(AppContext.BaseDirectory, "Axiom.Service.exe"));
-            community ??= ExistingOrNull(Path.Combine(AppContext.BaseDirectory, "community", "feed.json"));
+            report("Embedded setup payload is missing or incomplete. Re-download the official Axiom-Setup.exe.");
         }
 
         return new PayloadPaths(desktop, service, community);
@@ -1303,5 +1414,131 @@ internal static class SetupInstaller
         public bool HasDesktop => DesktopPath is not null;
 
         public bool HasService => ServicePath is not null;
+    }
+
+    private const string UninstallRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Axiom";
+
+    internal static string? NormalizeVersionString(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        var plus = trimmed.IndexOf('+');
+        if (plus > 0)
+        {
+            trimmed = trimmed[..plus];
+        }
+
+        var dash = trimmed.IndexOf('-');
+        if (dash > 0)
+        {
+            trimmed = trimmed[..dash];
+        }
+
+        return Version.TryParse(trimmed, out var parsed) ? parsed.ToString() : null;
+    }
+
+    internal static int CompareVersions(string left, string right)
+    {
+        if (!Version.TryParse(NormalizeVersionString(left), out var lv) ||
+            !Version.TryParse(NormalizeVersionString(right), out var rv))
+        {
+            return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var l = new Version(Math.Max(0, lv.Major), Math.Max(0, lv.Minor), Math.Max(0, lv.Build), Math.Max(0, lv.Revision));
+        var r = new Version(Math.Max(0, rv.Major), Math.Max(0, rv.Minor), Math.Max(0, rv.Build), Math.Max(0, rv.Revision));
+        return l.CompareTo(r);
+    }
+
+    private static string? MaxVersion(string? left, string? right)
+    {
+        if (left is null) return right;
+        if (right is null) return left;
+        return CompareVersions(left, right) >= 0 ? left : right;
+    }
+
+    private static void RegisterUninstallEntry(
+        string installDir,
+        string version,
+        bool _,
+        Action<string> report)
+    {
+        try
+        {
+            var setupCopy = Path.Combine(installDir, "Axiom-Setup.exe");
+            var currentExe = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(currentExe) &&
+                File.Exists(currentExe) &&
+                !string.Equals(Path.GetFullPath(currentExe), Path.GetFullPath(setupCopy), StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    File.Copy(currentExe, setupCopy, overwrite: true);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
+            var uninstallerExe = File.Exists(setupCopy) ? setupCopy : currentExe;
+            if (string.IsNullOrWhiteSpace(uninstallerExe))
+            {
+                return;
+            }
+
+            using var key = Registry.CurrentUser.CreateSubKey(UninstallRegistryKey, writable: true);
+            if (key is null)
+            {
+                return;
+            }
+
+            key.SetValue("DisplayName", "Axiom", RegistryValueKind.String);
+            key.SetValue("DisplayVersion", NormalizeVersionString(version) ?? version, RegistryValueKind.String);
+            key.SetValue("Publisher", "OpenDKG", RegistryValueKind.String);
+            key.SetValue("InstallLocation", installDir, RegistryValueKind.String);
+            key.SetValue("DisplayIcon", Path.Combine(installDir, "Axiom.Desktop.exe"), RegistryValueKind.String);
+            key.SetValue("UninstallString", $"\"{uninstallerExe}\" --uninstall", RegistryValueKind.String);
+            key.SetValue("QuietUninstallString", $"\"{uninstallerExe}\" --uninstall --silent", RegistryValueKind.String);
+            key.SetValue("NoModify", 1, RegistryValueKind.DWord);
+            key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+            report("Registered Axiom in Windows Apps & Features.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            report("Could not register Windows Apps & Features entry: " + exception.Message);
+        }
+    }
+
+    private static void UnregisterUninstallEntry(Action<string> report)
+    {
+        try
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(UninstallRegistryKey, throwOnMissingSubKey: false);
+            report("Removed Windows Apps & Features entry.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            report("Could not remove Windows Apps & Features entry: " + exception.Message);
+        }
+    }
+
+    private static void RemoveAgentHooks(Action<string> report)
+    {
+        new CodexProtection().Remove();
+        new ClaudeProtection().Remove();
+        new AntigravityProtection().Remove();
+        new CursorProtection().Remove();
+        new CopilotProtection().Remove();
+        new GeminiProtection().Remove();
+        new WindsurfProtection().Remove();
+        new ClineProtection().Remove();
+        new ZCodeProtection().Remove();
+        new DeepSeekProtection().Remove();
+        _ = new OptionalModuleUninstaller().RemoveManagedOpenCodePlugin();
+        report("Removed Axiom-managed AI agent guard hooks (existing user hooks preserved).");
     }
 }

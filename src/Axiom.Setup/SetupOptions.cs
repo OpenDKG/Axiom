@@ -26,7 +26,10 @@ public sealed record SetupOptions(
     bool EnableAutostartAndFeed = true,
     bool InstallBlackbox = true,
     bool InstallDkg = true,
-    bool InstallAgentHooks = true)
+    bool InstallAgentHooks = true,
+    bool RemoveData = false,
+    bool AllowDowngrade = false,
+    string? ParseError = null)
 {
     public SetupInstallMode EffectiveMode =>
         Mode == SetupInstallMode.Complete && !CompleteInstallation
@@ -66,6 +69,8 @@ public sealed record SetupOptions(
         var createShortcut = true;
         var startAfterInstall = true;
         var mode = SetupInstallMode.Complete;
+        var hasExplicitMode = false;
+        var hasComponentOverride = false;
         var enableFirewallShield = true;
         var enablePrivacyShield = true;
         var enableAutostartAndFeed = true;
@@ -75,8 +80,12 @@ public sealed record SetupOptions(
         var silent = false;
         var acceptRisk = false;
         var uninstall = false;
+        var removeData = false;
+        var allowDowngrade = false;
         var allowManualThreatSharing = false;
+        var enableAutomaticThreatSharing = false;
         var disableAutomaticThreatSharing = false;
+        string? parseError = null;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -100,6 +109,17 @@ public sealed record SetupOptions(
                     break;
                 case "--complete":
                 case "--full":
+                    if (hasExplicitMode && mode != SetupInstallMode.Complete)
+                    {
+                        parseError ??= $"Conflicting install mode flags: cannot combine '{arg}' with '{mode}' mode.";
+                        break;
+                    }
+                    if (hasComponentOverride)
+                    {
+                        parseError ??= $"Conflicting flags: '{arg}' cannot be passed after component-level --with/--no flags.";
+                        break;
+                    }
+                    hasExplicitMode = true;
                     mode = SetupInstallMode.Complete;
                     enableFirewallShield = true;
                     enablePrivacyShield = true;
@@ -111,6 +131,17 @@ public sealed record SetupOptions(
                 case "--light":
                 case "--no-hooks":
                 case "--partial":
+                    if (hasExplicitMode && mode != SetupInstallMode.Light)
+                    {
+                        parseError ??= $"Conflicting install mode flags: cannot combine '{arg}' with '{mode}' mode.";
+                        break;
+                    }
+                    if (hasComponentOverride)
+                    {
+                        parseError ??= $"Conflicting flags: '{arg}' cannot be passed after component-level --with/--no flags.";
+                        break;
+                    }
+                    hasExplicitMode = true;
                     mode = SetupInstallMode.Light;
                     enableFirewallShield = true;
                     enablePrivacyShield = true;
@@ -121,61 +152,57 @@ public sealed record SetupOptions(
                     break;
                 case "--optional":
                 case "--custom":
+                    if (hasExplicitMode && mode != SetupInstallMode.Optional)
+                    {
+                        parseError ??= $"Conflicting install mode flags: cannot combine '{arg}' with '{mode}' mode.";
+                        break;
+                    }
+                    hasExplicitMode = true;
                     mode = SetupInstallMode.Optional;
-                    enableFirewallShield = true;
-                    enablePrivacyShield = true;
-                    enableAutostartAndFeed = true;
-                    installBlackbox = false;
-                    installDkg = false;
-                    installAgentHooks = false;
+                    if (!hasComponentOverride)
+                    {
+                        enableFirewallShield = true;
+                        enablePrivacyShield = true;
+                        enableAutostartAndFeed = true;
+                        installBlackbox = false;
+                        installDkg = false;
+                        installAgentHooks = false;
+                    }
                     break;
                 case "--no-firewall":
-                    mode = SetupInstallMode.Optional;
-                    enableFirewallShield = false;
-                    break;
                 case "--with-firewall":
-                    mode = SetupInstallMode.Optional;
-                    enableFirewallShield = true;
-                    break;
                 case "--no-privacy-shield":
-                    mode = SetupInstallMode.Optional;
-                    enablePrivacyShield = false;
-                    break;
                 case "--with-privacy-shield":
-                    mode = SetupInstallMode.Optional;
-                    enablePrivacyShield = true;
-                    break;
                 case "--no-autostart":
-                    mode = SetupInstallMode.Optional;
-                    enableAutostartAndFeed = false;
-                    break;
                 case "--with-autostart":
-                    mode = SetupInstallMode.Optional;
-                    enableAutostartAndFeed = true;
-                    break;
                 case "--no-blackbox":
-                    mode = SetupInstallMode.Optional;
-                    installBlackbox = false;
-                    break;
                 case "--with-blackbox":
-                    mode = SetupInstallMode.Optional;
-                    installBlackbox = true;
-                    break;
                 case "--no-dkg":
-                    mode = SetupInstallMode.Optional;
-                    installDkg = false;
-                    break;
                 case "--with-dkg":
-                    mode = SetupInstallMode.Optional;
-                    installDkg = true;
-                    break;
                 case "--no-agent-hooks":
-                    mode = SetupInstallMode.Optional;
-                    installAgentHooks = false;
-                    break;
                 case "--with-agent-hooks":
+                    if (hasExplicitMode && mode != SetupInstallMode.Optional)
+                    {
+                        parseError ??= $"Conflicting flags: '{arg}' cannot be combined with explicit '--{mode.ToString().ToLowerInvariant()}' mode; use '--optional'.";
+                        break;
+                    }
+                    hasComponentOverride = true;
                     mode = SetupInstallMode.Optional;
-                    installAgentHooks = true;
+                    switch (arg.ToLowerInvariant())
+                    {
+                        case "--no-firewall": enableFirewallShield = false; break;
+                        case "--with-firewall": enableFirewallShield = true; break;
+                        case "--no-privacy-shield": enablePrivacyShield = false; break;
+                        case "--with-privacy-shield": enablePrivacyShield = true; break;
+                        case "--no-autostart": enableAutostartAndFeed = false; break;
+                        case "--with-autostart": enableAutostartAndFeed = true; break;
+                        case "--no-blackbox": installBlackbox = false; break;
+                        case "--with-blackbox": installBlackbox = true; break;
+                        case "--no-dkg": installDkg = false; break;
+                        case "--with-dkg": installDkg = true; break;
+                        case "--no-agent-hooks": installAgentHooks = false; break;
+                        case "--with-agent-hooks": installAgentHooks = true; break;
+                    }
                     break;
                 case "--silent":
                     silent = true;
@@ -186,11 +213,24 @@ public sealed record SetupOptions(
                 case "--allow-manual-threat-sharing":
                     allowManualThreatSharing = true;
                     break;
+                case "--enable-automatic-threat-sharing":
+                    enableAutomaticThreatSharing = true;
+                    break;
                 case "--no-automatic-threat-sharing":
                     disableAutomaticThreatSharing = true;
                     break;
                 case "--uninstall":
                     uninstall = true;
+                    break;
+                case "--remove-data":
+                case "--purge-data":
+                    removeData = true;
+                    break;
+                case "--keep-data":
+                    removeData = false;
+                    break;
+                case "--allow-downgrade":
+                    allowDowngrade = true;
                     break;
             }
         }
@@ -208,14 +248,17 @@ public sealed record SetupOptions(
             acceptRisk,
             uninstall,
             effectiveInstallBlackbox && allowManualThreatSharing,
-            effectiveInstallBlackbox && acceptRisk && !disableAutomaticThreatSharing,
+            effectiveInstallBlackbox && enableAutomaticThreatSharing && !disableAutomaticThreatSharing,
             mode,
             enableFirewallShield,
             enablePrivacyShield,
             enableAutostartAndFeed,
             installBlackbox,
             installDkg,
-            installAgentHooks);
+            installAgentHooks,
+            removeData,
+            allowDowngrade,
+            parseError);
     }
 
     private static void TrySetInstallDir(string raw, ref string installDir)

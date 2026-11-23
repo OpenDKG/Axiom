@@ -40,7 +40,7 @@ public sealed class HeadlessNavigationTests
     }
 
     [Fact]
-    public void Tray_mode_stops_the_ui_traffic_timer_and_keeps_the_connection_monitor_running()
+    public void Tray_mode_stops_ui_traffic_and_one_second_monitor_polling_using_tray_protection_timer()
     {
         TestAppBuilder.RunOnUiThread(() =>
         {
@@ -49,16 +49,20 @@ public sealed class HeadlessNavigationTests
             shell.Start();
             var monitorTimer = timers.Created[0];
             var trafficTimer = timers.Created[1];
+            var trayProtectionTimer = timers.Created[3];
             Assert.True(monitorTimer.IsEnabled);
             Assert.True(trafficTimer.IsEnabled);
+            Assert.False(trayProtectionTimer.IsEnabled);
 
             shell.SetPresentationVisible(false);
-            Assert.True(monitorTimer.IsEnabled);
+            Assert.False(monitorTimer.IsEnabled);
             Assert.False(trafficTimer.IsEnabled);
+            Assert.True(trayProtectionTimer.IsEnabled);
 
             shell.SetPresentationVisible(true);
             Assert.True(monitorTimer.IsEnabled);
             Assert.True(trafficTimer.IsEnabled);
+            Assert.False(trayProtectionTimer.IsEnabled);
         });
     }
 

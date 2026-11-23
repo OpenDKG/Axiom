@@ -1,7 +1,9 @@
 ﻿// SPDX-License-Identifier: GPL-3.0-or-later
+using System.IO;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Axiom.Contracts;
 using Axiom.Contracts.Ipc;
 using Axiom.Contracts.NetworkRecovery;
 using Axiom.Presentation;
@@ -129,6 +131,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
 
     /// <summary>Core maintainers and platform leads shown in About.</summary>
     public IReadOnlyList<ProjectRole> AboutCoreTeam => AxiomDocuments.CoreTeam;
+
+    /// <summary>Community contributors recognized with Special Thanks.</summary>
+    public IReadOnlyList<ProjectRole> AboutSpecialThanks => AxiomDocuments.SpecialThanks;
 
     public string AboutCoreTeamStatement => AxiomDocuments.CoreTeamStatement;
 
@@ -258,6 +263,9 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     private string _updateCheckStatusText = string.Empty;
 
     [ObservableProperty]
+    private string _clearLocalDataStatusText = string.Empty;
+
+    [ObservableProperty]
     private string _startupStatusText = "Autostart: off";
 
     [ObservableProperty]
@@ -338,6 +346,82 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
         {
             IsCheckingForUpdates = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task ClearLocalDataAsync()
+    {
+        var confirmed = await _ui.ConfirmAsync(
+            "Clear local logs & cache",
+            "Delete per-user Axiom logs, evidence trails, cached snapshots, and crash dumps?\n\n" +
+            "Your firewall rules and settings stay intact.",
+            "Clear data",
+            destructive: true,
+            CancellationToken.None).ConfigureAwait(true);
+
+        if (!confirmed)
+        {
+            ClearLocalDataStatusText = "Cancelled.";
+            return;
+        }
+
+        var userDir = AxiomPaths.UserDataDirectory;
+        if (!Directory.Exists(userDir))
+        {
+            ClearLocalDataStatusText = "No per-user logs or cache files found.";
+            return;
+        }
+
+        var removed = 0;
+        var skipped = 0;
+
+        foreach (var subDir in new[] { "logs", "evidence", "cache", "snapshots" })
+        {
+            var path = Path.Combine(userDir, subDir);
+            if (!Directory.Exists(path))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                removed++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                skipped++;
+            }
+        }
+
+        foreach (var pattern in new[] { "agent-evidence.jsonl*", "history.db*" })
+        {
+            try
+            {
+                foreach (var file in Directory.GetFiles(userDir, pattern))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        removed++;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        skipped++;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                skipped++;
+            }
+        }
+
+        ClearLocalDataStatusText = skipped > 0
+            ? $"Cleared {removed} item(s); {skipped} item(s) could not be deleted while in use."
+            : removed > 0
+                ? $"Cleared {removed} local log/cache item(s)."
+                : "No local logs or cache files needed removal.";
     }
 
     [RelayCommand]

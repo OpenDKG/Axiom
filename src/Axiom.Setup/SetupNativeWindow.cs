@@ -58,11 +58,14 @@ internal sealed class SetupNativeWindow : IDisposable
 
     private const uint MbOk = 0x00000000;
     private const uint MbYesNo = 0x00000004;
+    private const uint MbYesNoCancel = 0x00000003;
     private const uint MbIconError = 0x00000010;
     private const uint MbIconQuestion = 0x00000020;
     private const uint MbIconWarning = 0x00000030;
     private const uint MbIconInformation = 0x00000040;
+    private const int IdCancel = 2;
     private const int IdYes = 6;
+    private const int IdNo = 7;
 
     private const int DwmwaUseImmersiveDarkMode = 20;
     private const int DwmwaWindowCornerPreference = 33;
@@ -97,6 +100,7 @@ internal sealed class SetupNativeWindow : IDisposable
         ShortcutCheck,
         LaunchCheck,
         AgreeRow,
+        AutoShareRow,
         BackFromScopeBtn,
         OpenAxiomBtn,
         RepairBtn,
@@ -794,14 +798,28 @@ internal sealed class SetupNativeWindow : IDisposable
         SetupGdiPlus.DrawText(
             g,
             "Firewall, DNS and agent hook changes can affect network connectivity or block files/tools. Rely on backups and test in a VM where possible.",
-            _gpSmall, rx, y + S(27), rw, S(28), _palette.TextSecondary, _fmtNear);
+            _gpSmall, rx, y + S(24), rw, S(24), _palette.TextSecondary, _fmtNear);
 
-        DrawCheckRow(
-            g, HitId.AgreeRow, rx, y + riskH - S(29), rw, S(24),
-            _acceptRisk,
-            _optBlackbox
-                ? "I accept these risks, Blackbox Reporter Terms, and enable automatic threat sharing."
-                : "I understand these risks and accept using Axiom at my own risk.");
+        if (_optBlackbox)
+        {
+            DrawCheckRow(
+                g, HitId.AgreeRow, rx, y + riskH - S(46), rw, S(20),
+                _acceptRisk,
+                "I understand these risks, accept using Axiom at my own risk, and accept Blackbox Reporter Terms.",
+                _gpSmall);
+            DrawCheckRow(
+                g, HitId.AutoShareRow, rx, y + riskH - S(23), rw, S(20),
+                _enableAutomaticThreatSharing,
+                "Optional: also enable automatic community threat sharing via Blackbox (unchecked by default).",
+                _gpSmall);
+        }
+        else
+        {
+            DrawCheckRow(
+                g, HitId.AgreeRow, rx, y + riskH - S(28), rw, S(22),
+                _acceptRisk,
+                "I understand these risks and accept using Axiom at my own risk.");
+        }
     }
 
     private void DrawModeCard(
@@ -1356,6 +1374,15 @@ internal sealed class SetupNativeWindow : IDisposable
                 ToggleInstallationConsent();
                 break;
 
+            case HitId.AutoShareRow:
+                if (_optBlackbox)
+                {
+                    _enableAutomaticThreatSharing = !_enableAutomaticThreatSharing;
+                    _allowManualThreatSharing = _enableAutomaticThreatSharing;
+                    InvalidateWindow();
+                }
+                break;
+
             case HitId.OpenAxiomBtn:
                 LaunchInstalledAxiom();
                 break;
@@ -1381,17 +1408,22 @@ internal sealed class SetupNativeWindow : IDisposable
             case HitId.UninstallBtn:
                 int unAns = NativeMethods.MessageBox(
                     _hwnd,
-                    $"Uninstall Axiom from {_initialOptions.InstallDir}?\n\nThis removes the installed application binaries, Start Menu shortcut, autostart entry and Windows service registration.",
+                    $"Uninstall Axiom from {_initialOptions.InstallDir}?\n\n" +
+                    "This closes Axiom, removes the Windows service, Axiom:: firewall rules, agent hooks, Start Menu shortcut and autostart entry.\n\n" +
+                    "Also delete saved Axiom history, policy and per-user settings?\n" +
+                    "  • Yes = Uninstall AND delete all Axiom data folders\n" +
+                    "  • No = Uninstall application but keep saved history/settings\n" +
+                    "  • Cancel = Do not uninstall",
                     "Axiom Setup — Uninstall",
-                    MbYesNo | MbIconWarning);
-                if (unAns == IdYes)
+                    MbYesNoCancel | MbIconWarning);
+                if (unAns == IdYes || unAns == IdNo)
                 {
-                    if (!EnsureAxiomClosedForSetup("uninstall"))
+                    if (!EnsureAxiomClosedForSetup("uninstall", autoClose: true))
                     {
                         return;
                     }
 
-                    StartUninstall();
+                    StartUninstall(removeData: unAns == IdYes);
                 }
                 break;
 
@@ -1538,8 +1570,6 @@ internal sealed class SetupNativeWindow : IDisposable
     private void ToggleInstallationConsent()
     {
         _acceptRisk = !_acceptRisk;
-        _allowManualThreatSharing = _acceptRisk && _optBlackbox;
-        _enableAutomaticThreatSharing = _acceptRisk && _optBlackbox;
         InvalidateWindow();
     }
 
@@ -1611,7 +1641,7 @@ internal sealed class SetupNativeWindow : IDisposable
         });
     }
 
-    private void StartUninstall()
+    private void StartUninstall(bool removeData = false)
     {
         if (_installing)
         {
@@ -1631,12 +1661,14 @@ internal sealed class SetupNativeWindow : IDisposable
             _ = NativeMethods.PostMessage(_hwnd, WmAppLog, 0, 0);
         });
 
+        var uninstallOptions = _initialOptions with { RemoveData = removeData || _initialOptions.RemoveData };
+
         _ = Task.Run(async () =>
         {
             try
             {
                 _installResult = await SetupInstaller
-                    .UninstallAsync(_initialOptions, progress, CancellationToken.None)
+                    .UninstallAsync(uninstallOptions, progress, CancellationToken.None)
                     .ConfigureAwait(false);
             }
 #pragma warning disable CA1031 // Background uninstall exceptions must unlock the progress view instead of hanging it.

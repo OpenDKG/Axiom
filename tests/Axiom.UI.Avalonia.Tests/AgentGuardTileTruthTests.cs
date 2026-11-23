@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Ipc;
+using Axiom.Contracts.Monitoring;
 using Axiom.Contracts.Protection;
 using Axiom.Presentation;
 using Axiom.UI.Avalonia;
@@ -28,6 +29,9 @@ public sealed class AgentGuardTileTruthTests
         try
         {
             var home = shell.SimpleHome;
+            Assert.Equal("OFFLINE", home.AgentGuardBadgeText);
+
+            shell.Firewall.ProtectionKnown = true;
             Assert.Equal("READY", home.AgentGuardBadgeText);
 
             shell.Agents.Security.BlackboxConnected = true;
@@ -44,6 +48,89 @@ public sealed class AgentGuardTileTruthTests
         finally
         {
             shell.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Minimizing_to_tray_pauses_one_second_monitor_polling_and_restores_on_show()
+    {
+        var source = new CountingSnapshotSource();
+        var timers = new TrackingTimerFactory();
+        var shell = new ShellViewModel(source, timers);
+        try
+        {
+            shell.Start();
+            // ConnectionMonitor + TrafficEngine timers run while window is visible; fire monitor tick once.
+            timers.TickAll(TimeSpan.FromSeconds(1));
+            var countWhileVisible = source.Calls;
+            Assert.True(countWhileVisible >= 1);
+
+            shell.SetPresentationVisible(false);
+            timers.TickAll(TimeSpan.FromSeconds(1));
+            Assert.Equal(countWhileVisible, source.Calls);
+
+            shell.SetPresentationVisible(true);
+            timers.TickAll(TimeSpan.FromSeconds(1));
+            Assert.True(source.Calls > countWhileVisible);
+        }
+        finally
+        {
+            shell.Dispose();
+        }
+    }
+
+    private sealed class CountingSnapshotSource : IConnectionSnapshotSource
+    {
+        public int Calls { get; private set; }
+
+        public string Name => "counting";
+
+        public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
+
+        public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new ConnectionSnapshot
+            {
+                CapturedUtc = DateTimeOffset.UtcNow,
+                Connections = [],
+                ProcessCount = 0,
+                SourceName = Name,
+            });
+        }
+    }
+
+    private sealed class TrackingTimerFactory : IUiTimerFactory
+    {
+        private readonly List<TrackedTimer> _timers = [];
+
+        public IUiTimer Create(TimeSpan interval)
+        {
+            var timer = new TrackedTimer(interval);
+            _timers.Add(timer);
+            return timer;
+        }
+
+        public void TickAll(TimeSpan interval)
+        {
+            foreach (var timer in _timers)
+            {
+                if (timer.IsEnabled && timer.Interval == interval)
+                {
+                    timer.Fire();
+                }
+            }
+        }
+
+        private sealed class TrackedTimer(TimeSpan interval) : IUiTimer
+        {
+            public TimeSpan Interval { get; set; } = interval;
+            public bool IsEnabled { get; private set; }
+            public event EventHandler? Tick;
+            public void Start() => IsEnabled = true;
+            public void StopTimer() => IsEnabled = false;
+            public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+            public void Dispose() { }
         }
     }
 

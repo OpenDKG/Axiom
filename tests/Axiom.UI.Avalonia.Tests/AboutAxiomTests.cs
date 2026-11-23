@@ -31,6 +31,8 @@ public sealed class AboutAxiomTests
             Assert.Equal("a-51-50", page.AboutCreatedBy);
             Assert.Contains("dreddster", page.AboutContributors, StringComparison.Ordinal);
             Assert.Contains("brxtrac", page.AboutContributors, StringComparison.Ordinal);
+            var hottogo = Assert.Single(page.AboutSpecialThanks, role => role.GitHubHandle == "hottogo");
+            Assert.Equal("https://github.com/hottogo", hottogo.ProfileUrl);
             Assert.Equal("OpenDKG Initiative", page.AboutAffiliationLabel);
             Assert.Equal("https://opendkg.org", AxiomDocuments.AffiliationUrl);
             Assert.Equal("Axiom is an independent open-source project affiliated with the OpenDKG initiative.", page.AboutAffiliation);

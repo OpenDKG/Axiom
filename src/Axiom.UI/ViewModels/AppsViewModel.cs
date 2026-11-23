@@ -188,8 +188,8 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
 
             CanWrite = capabilities.FirewallWrites;
             WriteStatusText = CanWrite
-                ? "Firewall writes are enabled for this service session. Use only on an isolated test VM."
-                : "Firewall writes are disabled. Set the explicit write gate on an isolated VM.";
+                ? "Firewall writes are enabled for this service session."
+                : "Firewall writes are disabled. Enable firewall writes in the local service to change rules.";
         }
         catch (ServiceUnavailableException exception)
         {
@@ -221,8 +221,7 @@ public sealed partial class AppsViewModel : PageViewModel, IDisposable
         var directionText = direction == FirewallDirection.Outbound ? "outbound" : "inbound";
         var confirmation = MessageBox.Show(
             $"Create a Windows Firewall block rule for {app.Name} ({directionText})?\n\n" +
-            "The rule is owned by Axiom and can be removed from the Firewall page. " +
-            "Only continue on an isolated test VM.",
+            "The rule is owned by Axiom and can be removed from the Firewall page.",
             "Axiom firewall write",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);

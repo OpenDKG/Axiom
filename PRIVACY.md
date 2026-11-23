@@ -16,23 +16,31 @@ Axiom is a local-first network monitor, firewall policy manager, and AI coding a
 
 Core local monitoring operates without sending telemetry. Outbound network connections occur only for the following features:
 
-1. **Blackbox and OriginTrail DKG Threat Sharing (Consented / Toggleable)**
-   - During Complete installation, First-Run setup, or via toggles in Agent Protection and Blackbox Configure, you choose whether Blackbox automatic community threat sharing or manual indicator reporting is enabled.
+1. **Blackbox and OriginTrail DKG Threat Sharing (Strict Opt-In / Off by Default)**
+   - Automatic community threat sharing is **unchecked (off) by default** in both Setup and First-Run setup. You must explicitly opt in (or enable it later on the Agents page / `--enable-automatic-threat-sharing`) before Axiom publishes indicators.
    - Shared sightings contain sanitized indicators and structured threat metadata; local custom rules and local credentials are excluded.
    - Public CC0 OriginTrail DKG replicas may keep published sightings even after retraction.
    - Turning automatic sharing off keeps local Blackbox guard blocking active without publishing sightings.
 
 2. **Release Update Checks (Toggleable)**
-   - When enabled (*Settings -> Updates -> Check for updates*), Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 6 hours, or when you click *Check for updates now*.
+   - When enabled (*Settings -> Updates -> Check for updates*), Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 30 minutes, or when you click *Check for updates now*.
    - No installation ID or hardware identifier is sent; GitHub receives standard HTTP transport metadata and the `Axiom/<version>` User-Agent header.
 
-3. **Privacy Shield DNS (Opt-in / Complete Install)**
-   - When enabled, allowed DNS queries are forwarded to the upstream resolver you choose (such as Cloudflare DNS-over-HTTPS `1.1.1.1` or a custom resolver), and enabled public blocklists are downloaded when refreshed.
+3. **Verified Graph Curated Snapshot (Read-Only Fetch / Disableable)**
+   - When Threat Intelligence peer relay initialization runs, Axiom can fetch a signed curator-verified snapshot from `https://github.com/a-51-50/axiom-verified-graph/releases/download/verified-graph-latest/verified-graph-snapshot.json` (ECDSA P-256 signature verified).
+   - No local telemetry or query payload is uploaded; disable anytime via `AXIOM_GRAPH_SNAPSHOT_DISABLE=1` or `AXIOM_GRAPH_SNAPSHOT_URL=off`.
 
-4. **Opt-in External Integrations (Off by Default)**
+4. **Privacy Shield DNS (Toggleable / Enabled in Complete Install)**
+   - When enabled, allowed DNS queries are forwarded to your selected upstream DNS-over-HTTPS resolver (such as Cloudflare `1.1.1.1` or Quad9 `9.9.9.9`), and enabled public blocklists are downloaded when refreshed.
+
+5. **Opt-in External Integrations (Off by Default)**
    - **VirusTotal (`VT Check`):** Submits only the SHA-256 hash of a file you explicitly select using your own API key; files are never uploaded.
-   - **Community Feed:** Downloads indicator hashes only from the HTTPS feed URL you enable.
-   - **AI Analyst:** Uses local Ollama by default; an external provider receives only the prompt and redacted summary you choose to submit.
+   - **Community Feed:** Bundles an offline starter feed; remote fetches download indicator hashes only from the HTTPS feed URL you enable or refresh.
+   - **AI Analyst:** Uses local Ollama (`http://localhost:11434`) by default; an external provider receives only the prompt and redacted summary you choose to submit.
+
+6. **Local Retention and User Deletion**
+   - Network flow history (`axiom.db`) retains up to 30 days locally; per-user logs, evidence trails, cached snapshots, and crash dumps live under `%LOCALAPPDATA%\Axiom` (`$XDG_DATA_HOME/axiom` on Linux, `~/Library/Application Support/Axiom` on macOS).
+   - You can delete per-user logs, evidence files, and caches anytime via *Settings -> Local data & privacy -> Clear local logs & cache*, or remove all program data during uninstall (checkbox / `--remove-data`).
 
 ## 3. Third-Party Services
 

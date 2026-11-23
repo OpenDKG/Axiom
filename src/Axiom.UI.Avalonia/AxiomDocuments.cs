@@ -20,6 +20,8 @@ public static class AxiomDocuments
 
     public const string CoreMaintainerRole = "Co-Founder & Core Maintainer";
 
+    public const string SpecialThanksRole = "Community Contributor & Issue Reporter";
+
     public const string CoreTeamStatement = "Developed by the Axiom Founding Team.";
 
     public const string CopyrightNotice = "Copyright (C) 2026 The Axiom contributors";
@@ -57,6 +59,12 @@ public static class AxiomDocuments
     [
         new("dreddster", CoreMaintainerRole, "https://github.com/dreddster"),
         new("brxtrac", CoreMaintainerRole, "https://github.com/brxtrac"),
+    ];
+
+    /// <summary>Community contributors recognized with Special Thanks.</summary>
+    public static IReadOnlyList<ProjectRole> SpecialThanks { get; } =
+    [
+        new("hottogo", SpecialThanksRole, "https://github.com/hottogo"),
     ];
 
     private static readonly Lazy<string> LicenseDocument = new(() => Read("Axiom.Documents.LICENSE.txt"));

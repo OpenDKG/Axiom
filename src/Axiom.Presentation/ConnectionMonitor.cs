@@ -118,12 +118,36 @@ public sealed class ConnectionMonitor : IDisposable
 
             if (!_disposed)
             {
-                Updated?.Invoke(this, EventArgs.Empty);
+                InvokeUpdatedSafely();
             }
         }
         finally
         {
             _isPolling = false;
+        }
+    }
+
+    private void InvokeUpdatedSafely()
+    {
+        var handler = Updated;
+        if (handler is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler subscriber in handler.GetInvocationList())
+        {
+            try
+            {
+                subscriber(this, EventArgs.Empty);
+            }
+#pragma warning disable CA1031 // A single subscriber failure must not kill the polling dispatcher loop.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                LastError = exception.Message;
+                LastException = exception;
+            }
         }
     }
 

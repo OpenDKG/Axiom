@@ -618,8 +618,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         var confirmed = await _ui.ConfirmAsync(
             "Axiom firewall write",
             $"Create or update the Axiom-owned {action.ToString().ToLowerInvariant()} rule for:\n{path}\n\n" +
-            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched." +
-            (OperatingSystem.IsMacOS() ? string.Empty : " Continue only on an isolated test VM."),
+            $"Only this rule is changed. Other {PlatformText.Firewall} rules are not touched.",
             "Apply rule",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -764,7 +763,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             var confirmed = await _ui.ConfirmAsync(
                 "Disable Axiom Shield",
                 $"Turn protection off and remove every Axiom-owned {PlatformText.Firewall} rule?\n\n" +
-                "Other firewall rules are not touched. Rules are re-created from your decisions when you enable it again.",
+                "Other firewall rules are not touched. Saved Allow and Block decisions stay in Axiom, and re-enabling Shield applies them again.",
                 "Disable protection",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);

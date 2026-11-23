@@ -44,7 +44,10 @@ internal static class ServicePlatform
         if (args.Length > 0 &&
             string.Equals(args[0], "--uninstall-service", StringComparison.OrdinalIgnoreCase))
         {
-            exitCode = ServiceInstaller.Uninstall();
+            var removeData = args.Skip(1).Any(arg =>
+                string.Equals(arg, "--remove-data", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(arg, "--purge-data", StringComparison.OrdinalIgnoreCase));
+            exitCode = ServiceInstaller.Uninstall(removeData);
             return true;
         }
 

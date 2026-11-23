@@ -271,13 +271,13 @@
                     IsEnabled="{Binding CanWrite}"
                     Command="{Binding BlockOutboundCommand}"
                     Margin="0,0,8,8"
-                    ToolTip="Creates an owned Windows Firewall block rule. Requires the explicit write gate on an isolated test VM." />
+                    ToolTip="Creates an owned Windows Firewall block rule when firewall writes are enabled." />
             <Button Style="{StaticResource GhostButton}"
                     Content="Block inbound"
                     IsEnabled="{Binding CanWrite}"
                     Command="{Binding BlockInboundCommand}"
                     Margin="0,0,0,8"
-                    ToolTip="Creates an owned Windows Firewall block rule. Requires the explicit write gate on an isolated test VM." />
+                    ToolTip="Creates an owned Windows Firewall block rule when firewall writes are enabled." />
           </WrapPanel>
 
           <TextBlock Text="{Binding WriteStatusText}"

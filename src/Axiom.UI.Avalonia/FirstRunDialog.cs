@@ -26,7 +26,7 @@ public sealed class FirstRunDialog : Window
     private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush };
     private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush };
     private readonly CheckBox _community = new() { Content = "Axiom starter community feed (bundled, offline)", IsChecked = true, Foreground = ForegroundBrush };
-    private readonly CheckBox _automaticSharing = new() { Content = "Enable Blackbox automatic community threat sharing (Reporter Terms apply; toggle anytime on Agents)", IsChecked = true, Foreground = ForegroundBrush };
+    private readonly CheckBox _automaticSharing = new() { Content = "Enable Blackbox automatic community threat sharing (opt-in; Reporter Terms apply; toggle anytime on Agents)", IsChecked = false, Foreground = ForegroundBrush };
     private readonly CheckBox _accept = new()
     {
         Content = new TextBlock

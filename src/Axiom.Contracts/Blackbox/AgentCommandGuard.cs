@@ -9,13 +9,196 @@ namespace Axiom.Contracts.Blackbox;
 public static class AgentCommandGuard
 {
     public const string PythonHelpers = """
+        def _split_shell_segments(command: str) -> list:
+            # Split compound shell commands on unquoted operators (;, &&, ||, |, newline)
+            # and unwrap one level of `cmd /c "..."` or `bash/sh/powershell/pwsh -c "..."`.
+            raw = command or ""
+            if not raw.strip():
+                return []
+            segments = []
+            buf = []
+            quote = ""
+            i = 0
+            n = len(raw)
+            while i < n:
+                ch = raw[i]
+                if quote:
+                    buf.append(ch)
+                    if ch == quote:
+                        quote = ""
+                    i += 1
+                    continue
+                if ch in ("'", '"'):
+                    quote = ch
+                    buf.append(ch)
+                    i += 1
+                    continue
+                if ch == "\n" or ch == "\r" or ch == ";":
+                    part = "".join(buf).strip()
+                    if part:
+                        segments.append(part)
+                    buf = []
+                    i += 1
+                    continue
+                if raw.startswith("&&", i) or raw.startswith("||", i):
+                    part = "".join(buf).strip()
+                    if part:
+                        segments.append(part)
+                    buf = []
+                    i += 2
+                    continue
+                if ch == "|":
+                    part = "".join(buf).strip()
+                    if part:
+                        segments.append(part)
+                    buf = []
+                    i += 1
+                    continue
+                buf.append(ch)
+                i += 1
+            tail = "".join(buf).strip()
+            if tail:
+                segments.append(tail)
+
+            expanded = []
+            for seg in segments:
+                expanded.append(seg)
+                tokens = _tokenize_segment(seg)
+                if len(tokens) >= 3:
+                    head = os.path.basename(tokens[0][0].lower()).removesuffix(".exe")
+                    if head in ("cmd", "bash", "sh", "zsh", "powershell", "pwsh", "python", "python3"):
+                        for idx in range(1, len(tokens) - 1):
+                            flag = tokens[idx][0].lower()
+                            if flag in ("/c", "-c", "-command") and not tokens[idx][1]:
+                                inner = tokens[idx + 1][0]
+                                if inner:
+                                    expanded.extend(_split_shell_segments(inner))
+                                break
+            return expanded
+
+
+        def _tokenize_segment(segment: str) -> list:
+            # Returns list of (token_text, was_quoted) preserving backslashes for Windows paths.
+            tokens = []
+            buf = []
+            quote = ""
+            had_quote = False
+            in_tok = False
+            for ch in (segment or ""):
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                    else:
+                        buf.append(ch)
+                    continue
+                if ch in ("'", '"'):
+                    quote = ch
+                    had_quote = True
+                    in_tok = True
+                    continue
+                if ch.isspace():
+                    if in_tok:
+                        tokens.append(("".join(buf), had_quote))
+                        buf = []
+                        had_quote = False
+                        in_tok = False
+                    continue
+                buf.append(ch)
+                in_tok = True
+            if in_tok:
+                tokens.append(("".join(buf), had_quote))
+            return tokens
+
+
+        def _segment_verbs(segment: str) -> tuple:
+            # Extract whole-word command names and two-word subcommands from unquoted structure.
+            # Prevents substring false positives like "confirm " -> "rm " or "model " -> "del ".
+            tokens = _tokenize_segment(segment)
+            verbs = set()
+            unquoted_words = []
+            first_word = ""
+            skip_wrappers = {"sudo", "env", "command", "nohup", "&"}
+            idx = 0
+            while idx < len(tokens):
+                tok, quoted = tokens[idx]
+                low = tok.lower()
+                if not quoted and (low in skip_wrappers or ("=" in low and not low.startswith("-") and idx == 0)):
+                    idx += 1
+                    continue
+                break
+            if idx < len(tokens):
+                head = os.path.basename(tokens[idx][0].lower())
+                first_word = head
+                verbs.add(head)
+                verbs.add(head.removesuffix(".exe"))
+                if idx + 1 < len(tokens) and not tokens[idx + 1][1]:
+                    sub = tokens[idx + 1][0].lower()
+                    verbs.add(f"{head.removesuffix('.exe')} {sub}")
+                # Check for cmd /c <verb> style unquoted remainder
+                if head.removesuffix(".exe") == "cmd":
+                    for j in range(idx + 1, len(tokens) - 1):
+                        if tokens[j][0].lower() in ("/c", "/k") and not tokens[j][1]:
+                            nxt = os.path.basename(tokens[j + 1][0].lower())
+                            verbs.add(nxt)
+                            verbs.add(nxt.removesuffix(".exe"))
+                            break
+            for tok, quoted in tokens:
+                if not quoted:
+                    low = tok.lower()
+                    unquoted_words.append(low)
+                    for part in low.replace("(", " ").replace(")", " ").replace(".", " ").split():
+                        unquoted_words.append(part)
+            return first_word, verbs, set(unquoted_words)
+
+
+        def _has_command_verb(command: str, verbs) -> bool:
+            import re as _re
+            targets = {v.strip().lower() for v in verbs if v.strip()}
+            for seg in _split_shell_segments(command):
+                first_word, cmd_verbs, unquoted_words = _segment_verbs(seg)
+                low_seg = " ".join((seg or "").lower().split())
+                for target in targets:
+                    if target == ">":
+                        if _re.search(r"(?:^|[\s\d])>{1,2}\s*[^\s;&|]+", low_seg):
+                            return True
+                        continue
+                    if " " in target:
+                        if target in cmd_verbs:
+                            return True
+                        # Match unquoted multi-word invocation outside quoted strings
+                        unquoted_only = " ".join(w for w, q in _tokenize_segment(seg) if not q).lower()
+                        if _re.search(r"(?<![a-z0-9_-])" + _re.escape(target) + r"(?![a-z0-9_-])", unquoted_only):
+                            return True
+                    elif target.startswith(".") or target.endswith("("):
+                        if target in low_seg:
+                            return True
+                    else:
+                        if target in cmd_verbs:
+                            return True
+                        # Also catch inline function/cmdlet verbs in unquoted position or PowerShell subexpressions
+                        unquoted_only = " ".join(w for w, q in _tokenize_segment(seg) if not q).lower()
+                        if target in unquoted_words or _re.search(r"(?<![a-z0-9_-])" + _re.escape(target) + r"(?![a-z0-9_-])", unquoted_only):
+                            return True
+            return False
+
+
+        def _has_redirection_to(command: str, markers) -> bool:
+            import re as _re
+            for seg in _split_shell_segments(command):
+                norm_seg = seg.lower().replace("/", "\\")
+                for m in _re.finditer(r"(?:^|[\s\d])>{1,2}\s*([^\s;&|]+)", norm_seg):
+                    target = m.group(1).strip("\"'")
+                    if any(marker in target for marker in markers):
+                        return True
+            return False
+
+
         def _tampers_with_guard(command: str) -> bool:
-            # An agent must not be able to delete, overwrite, or strip permissions on the local
-            # guard, its hooks, or the bridge across any supported host harness.
-            text = " ".join((command or "").lower().split())
+            # Match guard files and agent harness hook configs specifically (never arbitrary
+            # project files that merely happen to be named hooks.json).
+            norm = _normalize_command(command).replace("/", "\\")
             markers = (
                 "plugins\\blackbox",
-                "plugins/blackbox",
                 "axiom-guard-bridge",
                 "axiom-antigravity-hook",
                 "axiom-claude-hook",
@@ -27,92 +210,81 @@ public static class AgentCommandGuard
                 "axiom-copilot-hook",
                 "axiom-deepseek-hook",
                 "axiom-zcode-hook",
-                ".hermes\\blackbox",
-                ".hermes/blackbox",
+                ".claude\\hooks.json",
+                ".claude\\settings",
+                ".codex\\hooks.json",
+                ".cursor\\hooks.json",
+                ".gemini\\settings",
+                ".windsurf\\hooks.json",
+                ".github\\hooks\\",
+                ".clinerules\\",
                 "hermes\\blackbox",
-                "hermes/blackbox",
                 "axiom\\modules\\blackbox",
-                "axiom/modules/blackbox",
                 "hermes\\config.yaml",
-                "hermes/config.yaml",
-                ".hermes\\config.yaml",
-                ".hermes/config.yaml",
                 ".zcode\\cli\\config.json",
-                ".zcode/cli/config.json",
-                "hooks.json",
+                "blackbox\\agent-blackbox\\hooks.json",
             )
-            verbs = (
-                "del ",
-                "erase ",
-                "rm ",
-                "rmdir",
-                "move ",
-                "ren ",
-                "remove-item",
-                "move-item",
-                "rename-item",
-                "copy-item",
-                "set-content",
-                "add-content",
-                "out-file",
-                "clear-content",
-                "unlink ",
-                ">",
-                "copy ",
-                "icacls ",
-                "chmod ",
-                "shutil.rmtree",
-                "os.remove",
-                "os.unlink",
-            )
-            if not any(marker in text for marker in markers):
+            if not any(marker in norm for marker in markers):
                 return False
-            return any(verb in text for verb in verbs)
+            if _has_redirection_to(command, [m.replace("\\", "/") for m in markers] + list(markers)):
+                return True
+            verbs = (
+                "del", "erase", "rm", "rmdir", "mv", "move", "ren", "rename",
+                "remove-item", "move-item", "rename-item", "copy-item",
+                "set-content", "add-content", "out-file", "clear-content",
+                "unlink", "copy", "cp", "icacls", "chmod", "chown",
+                "shutil.rmtree", "os.remove", "os.unlink",
+            )
+            return _has_command_verb(command, verbs)
 
 
         def _disables_guard(command: str) -> bool:
-            # Stopping, killing, disabling or re-ACLing the guard is tampering even when the command
-            # names no hook file: `sc stop Axiom`, `taskkill /im Axiom.Service.exe`,
-            # `Stop-Service Axiom`, `schtasks /change ... /disable`, `icacls ...\\Axiom` and deleting
-            # the evidence log all passed the sweep. So did audit-trail and shadow-copy wipes.
-            text = " ".join((command or "").lower().split())
-            if not text:
+            # Service/process/task management targeting Axiom/Blackbox, or delete/ACL verbs
+            # targeting actual Axiom install/data/evidence locations (never repo checkouts or temp builds).
+            norm = _normalize_command(command).replace("/", "\\")
+            if not norm:
                 return False
-            targets = (
-                "axiom",
-                "axiom.service",
-                "axiom.desktop",
-                "axiom\\modules",
-                "axiom/modules",
-                "\\local\\axiom",
-                "/local/axiom",
-                "agent-evidence",
-                "agent blackbox",
-                "hermes\\blackbox",
-                "hermes/blackbox",
-            )
-            verbs = (
-                "sc stop",
-                "sc delete",
-                "stop-service",
-                "restart-service",
-                "set-service",
-                "net stop",
-                "taskkill",
-                "schtasks /change",
-                "schtasks /delete",
-                "disable-scheduledtask",
-                "unregister-scheduledtask",
-                "icacls",
-                "del ",
-                "erase ",
-                "rm ",
-                "rmdir",
-                "remove-item",
-            )
-            if any(verb in text for verb in verbs) and any(target in text for target in targets):
+            if "auditpol /clear" in norm or "shadowcopy delete" in norm or "wmic shadowcopy" in norm:
                 return True
-            return "auditpol /clear" in text or "shadowcopy delete" in text or "wmic shadowcopy" in text
+            service_verbs = (
+                "sc stop", "sc delete", "stop-service", "restart-service", "set-service",
+                "net stop", "taskkill", "schtasks /change", "schtasks /delete",
+                "disable-scheduledtask", "unregister-scheduledtask",
+                "systemctl stop", "systemctl disable", "launchctl unload", "launchctl bootout",
+            )
+            service_targets = (
+                "axiom.service", "axiom.desktop", "axiomd", "com.axiom.service",
+                "agent blackbox", "axiom-blackbox", "blackbox",
+            )
+            if _has_command_verb(command, service_verbs):
+                unquoted = " ".join(w for seg in _split_shell_segments(norm) for w, q in _tokenize_segment(seg) if not q)
+                words = set(unquoted.replace('"', " ").replace("'", " ").split())
+                if "axiom" in words or any(t in unquoted for t in service_targets):
+                    return True
+            path_markers = (
+                "appdata\\local\\axiom",
+                "local\\axiom\\",
+                ".local\\share\\axiom",
+                "application support\\axiom",
+                "programdata\\axiom",
+                "program files\\axiom",
+                "programs\\axiom",
+                "axiom\\modules\\blackbox",
+                "hermes\\blackbox",
+                "plugins\\blackbox",
+                "agent-evidence.jsonl",
+                "guard-failure-policy.txt",
+                "protection-status.json",
+                "usr\\lib\\axiom-firewall",
+                "usr\\libexec\\axiom",
+                "var\\lib\\axiom",
+                "etc\\axiom",
+            )
+            file_verbs = (
+                "del", "erase", "rm", "rmdir", "remove-item", "unlink",
+                "icacls", "chmod", "chown", "takeown",
+            )
+            return any(m in norm for m in path_markers) and _has_command_verb(command, file_verbs)
 
 
         def _normalize_command(command: str) -> str:
@@ -142,30 +314,23 @@ public static class AgentCommandGuard
 
 
         def _deletes_protected(command: str, protected) -> bool:
-            # True when a shell command deletes one of the operator's protected files.
-            # Blackbox's custom file-access detector covers reads and copies; a shell
-            # del/rm/Remove-Item of a protected path would otherwise pass.
-            text = " ".join((command or "").lower().split())
-            verbs = ("del ", "erase ", "rm ", "rmdir", "remove-item", "unlink ",
-                     "move ", "move-item", "ren ", "rename ", "rename-item", "mv ")
-            if not any(verb in text for verb in verbs):
+            verbs = ("del", "erase", "rm", "rmdir", "remove-item", "unlink",
+                     "move", "move-item", "ren", "rename", "rename-item", "mv",
+                     "shutil.rmtree", "os.remove", "os.unlink")
+            if not _has_command_verb(command, verbs):
                 return False
-            return _hits_protected(text, protected)
+            return _hits_protected(command, protected)
 
 
         def _reads_protected(command: str, protected) -> bool:
-            # A read verb plus a protected path is a protected read even when the path is spelled
-            # as an admin share (\\host\C$\Users\me\.ssh\id_rsa) or handled by a tool the vendor's
-            # file-access rule does not model (findstr /s, grep, tar, robocopy). The sweep found
-            # `findstr /s "PRIVATE KEY" C:\Users\me\.ssh\*` and the UNC form allowed.
-            text = _normalize_command(command)
-            verbs = ("cat ", "type ", "more ", "head ", "tail ", "get-content", "readalltext",
-                     "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles",
-                     "findstr", "select-string", "grep", " rg ", "tar ", "compress-archive",
+            verbs = ("cat", "type", "more", "head", "tail", "get-content", "readalltext",
+                     "open(", ".read(", "copy", "cp", "get-item", "strings", "forfiles",
+                     "findstr", "select-string", "grep", "rg", "tar", "compress-archive",
                      "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
-                     "gpg", "age ", "makecab", "expand ", "esentutl", "ssh -i", "split ", "csplit ")
-            if not any(verb in text for verb in verbs):
+                     "gpg", "age", "makecab", "expand", "esentutl", "ssh -i", "split", "csplit")
+            if not _has_command_verb(command, verbs):
                 return False
+            text = _normalize_command(command)
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
             tokens = _protected_tokens(protected)
             return any(word in tokens for word in words) or _glob_hits(text, tokens)
@@ -184,17 +349,14 @@ public static class AgentCommandGuard
             text = _normalize_command(raw)
             if not _hits_protected(text, protected):
                 return False
-            verbs = ("cat ", "type ", "more ", "head ", "tail ", "get-content", "readalltext",
-                     "open(", ".read(", "copy ", "cp ", "get-item", "strings ", "forfiles")
-            return any(verb in text for verb in verbs)
+            verbs = ("cat", "type", "more", "head", "tail", "get-content", "readalltext",
+                     "open(", ".read(", "copy", "cp", "get-item", "strings", "forfiles")
+            return _has_command_verb(command, verbs)
 
 
         def _tampers_with_protected(command: str, protected) -> bool:
-            # Ownership or ACL changes on a protected file let the agent read or copy it after
-            # the fact (takeown/icacls/attrib passed while a plain read blocked).
-            text = _normalize_command(command)
             verbs = ("takeown", "icacls", "cacls", "attrib", "set-acl", "get-acl", "setaccessrule")
-            return any(verb in text for verb in verbs) and _hits_protected(text, protected)
+            return _has_command_verb(command, verbs) and _hits_protected(command, protected)
 
 
         def _sensitive_store(text: str) -> str:
@@ -522,8 +684,10 @@ public static class AgentCommandGuard
                 from plugins.blackbox.kernel.config import load_blackbox_config
                 for item in (load_blackbox_config().protected_paths or ()):
                     add_path(item)
-            except Exception:
+            except ImportError:
                 pass
+            except Exception as exc:
+                os.environ["AXIOM_BLACKBOX_CONFIG_ERROR"] = str(exc)
 
             local = os.environ.get("LOCALAPPDATA") or str(Path.home())
             candidates = [Path(local) / "Axiom" / "enforcement-policy.json"]
@@ -635,8 +799,22 @@ public static class AgentCommandGuard
             return ""
 
 
+        def _is_non_executable_doc_or_test_edit(args) -> bool:
+            if not isinstance(args, dict) or _command_text(args):
+                return False
+            target = (_arg_path(args) or "").strip().lower().replace("/", "\\")
+            if not target:
+                return False
+            blocked_names = ("claude.md", "agents.md", "gemini.md", ".cursorrules", "skill.md", "hooks.json")
+            if any(target.endswith(b) for b in blocked_names):
+                return False
+            return target.endswith((".md", ".rst", ".txt", ".cs", ".py", ".ts", ".js", ".axaml")) and (
+                "\\tests\\" in target or "\\docs\\" in target or target.endswith("test.cs") or target.endswith("tests.cs") or target.endswith("commandguard.cs")
+            )
+
+
         def _check_command_safety(args, protected=None):
-            injection = _axiom_injection(args)
+            injection = "" if _is_non_executable_doc_or_test_edit(args) else _axiom_injection(args)
             if injection:
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
             command_text = _command_text(args)
