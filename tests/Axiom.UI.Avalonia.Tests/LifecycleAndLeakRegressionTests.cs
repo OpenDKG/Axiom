@@ -41,7 +41,7 @@ public sealed class LifecycleAndLeakRegressionTests
 
             // MiniHome is active initially in Mini mode.
             Assert.Same(shell.MiniHome, shell.SelectedPage);
-            var agentTimer = FindAgentTimer(timers);
+            var agentTimer = FindAgentTimer(shell.Agents);
             Assert.NotNull(agentTimer);
             Assert.False(GetTrayMonitoring(shell.Agents));
 
@@ -422,10 +422,10 @@ public sealed class LifecycleAndLeakRegressionTests
             .GetField("_trayMonitoring", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(agents)!;
 
-    private static FakeTimer? FindAgentTimer(FakeTimerFactory timers) =>
-        timers.Created.FirstOrDefault(timer =>
-            timer.Interval == TimeSpan.FromSeconds(8) ||
-            timer.Interval == TimeSpan.FromSeconds(30));
+    private static FakeTimer? FindAgentTimer(AgentsPageViewModel agents) =>
+        typeof(AgentsPageViewModel)
+            .GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(agents) as FakeTimer;
 
     private static void TriggerProtectionProbe(ShellViewModel shell, FakeTimerFactory timers)
     {
