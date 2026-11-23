@@ -59,6 +59,49 @@ public sealed class PrivacyShieldPolicy
         new("heap.io", PrivacyCategory.Analytics),
     ];
 
+    /// <summary>
+    /// Security-critical endpoints that third-party catalog lists must never block. Blocking these
+    /// silently weakens protection (browser phishing/malware warnings, SmartScreen, Defender cloud
+    /// protection, Windows Update, certificate revocation) or breaks core OS behaviour. Each entry
+    /// also protects its subdomains. User-entered block rules still apply, so an operator can block
+    /// one deliberately; only catalog matches are bypassed.
+    /// </summary>
+    private static readonly string[] ProtectedSecurityDomains =
+    [
+        // Google Safe Browsing (Chrome, Edge-on-Chromium fallbacks, Firefox)
+        "safebrowsing.googleapis.com",
+        "safebrowsing.google.com",
+        "sb-ssl.google.com",
+        // Microsoft Defender SmartScreen and cloud-delivered protection
+        "smartscreen.microsoft.com",
+        "smartscreen-prod.microsoft.com",
+        "checkappexec.microsoft.com",
+        "urs.microsoft.com",
+        "wdcp.microsoft.com",
+        "wdcpalt.microsoft.com",
+        // Windows Update and root/disallowed certificate trust list updates
+        "update.microsoft.com",
+        "windowsupdate.com",
+        "delivery.mp.microsoft.com",
+        // Windows Push Notification Services
+        "client.wns.windows.com",
+        // Certificate revocation (OCSP/CRL) for common public CAs
+        "ocsp.digicert.com",
+        "crl3.digicert.com",
+        "crl4.digicert.com",
+        "ocsp.pki.goog",
+        "crl.pki.goog",
+        "o.lencr.org",
+        "ocsp.sectigo.com",
+        "crl.sectigo.com",
+    ];
+
+    private static readonly HashSet<string> ProtectedSecuritySet =
+        new(ProtectedSecurityDomains, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Security-critical domains that catalog blocklists cannot override.</summary>
+    public static IReadOnlyList<string> ProtectedSecurityDomainsAll => ProtectedSecurityDomains;
+
     private readonly record struct PackedRule(PrivacyCategory Category, ushort SourceIndex);
 
     private readonly Dictionary<string, PackedRule> _overlayBlocked;
@@ -229,6 +272,9 @@ public sealed class PrivacyShieldPolicy
 
         var overlayLookup = _overlayBlocked.GetAlternateLookup<ReadOnlySpan<char>>();
         var catalogLookup = _catalogBlocked.GetAlternateLookup<ReadOnlySpan<char>>();
+        var isProtected = MatchesSuffix(
+            ProtectedSecuritySet.GetAlternateLookup<ReadOnlySpan<char>>(),
+            span);
         var current = span;
         while (true)
         {
@@ -242,7 +288,7 @@ public sealed class PrivacyShieldPolicy
                     _sourcePalette[overlayEntry.SourceIndex]);
             }
 
-            if (catalogLookup.TryGetValue(current, out var catalogEntry))
+            if (!isProtected && catalogLookup.TryGetValue(current, out var catalogEntry))
             {
                 return new DnsPolicyDecision(
                     true,
@@ -259,6 +305,15 @@ public sealed class PrivacyShieldPolicy
             }
 
             current = current[(separator + 1)..];
+        }
+
+        if (isProtected)
+        {
+            return new DnsPolicyDecision(
+                false,
+                PrivacyCategory.None,
+                normalized,
+                "Security-critical domain; blocklists cannot block it.");
         }
 
         return new DnsPolicyDecision(false, PrivacyCategory.None, null, "No local block rule matched.");
