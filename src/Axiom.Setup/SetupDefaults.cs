@@ -17,9 +17,10 @@ namespace Axiom.Setup;
 internal sealed record CompleteDefaultsResult(bool Applied, string? Warning);
 
 /// <summary>
-/// Applies the complete-installation protection profile: registers the elevated service, turns on
-/// Axiom Shield and the Privacy Shield resolver, enables notifications/tray/background-window
-/// hiding and per-user autostart. Partial installation never calls this type.
+/// Applies the selected installation protection profile: registers the elevated service when
+/// firewall or Privacy Shield DNS is selected, turns on Axiom Shield and the Privacy Shield
+/// resolver, enables notifications/tray/background-window hiding and per-user autostart, and records
+/// the active component profile in <c>install-profile.json</c>.
 /// </summary>
 internal static class SetupDefaults
 {
@@ -39,35 +40,78 @@ internal static class SetupDefaults
         WriteIndented = true,
     };
 
-    public static bool EnsureServiceRegistered(string installDir, Action<string> report)
+    public static bool EnsureServiceRegistered(
+        string installDir,
+        Action<string> report,
+        string modeLabel = "Complete protection")
     {
-        report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
+        report($"{modeLabel}: registering the Axiom Windows service (one elevation prompt).");
         return InstallService(installDir, report);
     }
 
-    public static async Task<CompleteDefaultsResult> ApplyCompleteAsync(
+    public static Task<CompleteDefaultsResult> ApplyCompleteAsync(
         string installDir,
         Action<string> report,
         CancellationToken cancellationToken,
         bool serviceAlreadyRegistered = false,
         bool allowManualThreatSharing = false,
-        bool enableAutomaticThreatSharing = false)
+        bool enableAutomaticThreatSharing = false) =>
+        ApplyOptionsAsync(
+            new SetupOptions(
+                installDir,
+                CreateShortcut: true,
+                StartAfterInstall: true,
+                CompleteInstallation: true,
+                AllowManualThreatSharing: allowManualThreatSharing,
+                EnableAutomaticThreatSharing: enableAutomaticThreatSharing),
+            report,
+            cancellationToken,
+            serviceAlreadyRegistered);
+
+    public static async Task<CompleteDefaultsResult> ApplyOptionsAsync(
+        SetupOptions options,
+        Action<string> report,
+        CancellationToken cancellationToken,
+        bool serviceAlreadyRegistered = false,
+        bool blackboxInstalled = false,
+        bool dkgInstalled = false,
+        bool hooksInstalled = false)
     {
+        var mode = options.EffectiveMode;
+        var profileName = mode switch
+        {
+            SetupInstallMode.Complete => "complete",
+            SetupInstallMode.Light => "light",
+            _ => "optional",
+        };
+        var modeLabel = mode switch
+        {
+            SetupInstallMode.Complete => "Complete protection",
+            SetupInstallMode.Light => "Light protection",
+            _ => "Optional custom setup",
+        };
+
         var marker = new Dictionary<string, object?>
         {
-            ["profile"] = "complete",
+            ["profile"] = profileName,
             ["startedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             ["serviceInstalled"] = false,
             ["shieldEnabled"] = false,
             ["privacyEnabled"] = false,
+            ["autostartEnabled"] = false,
+            ["blackboxInstalled"] = blackboxInstalled,
+            ["dkgInstalled"] = dkgInstalled,
+            ["agentHooksInstalled"] = hooksInstalled,
         };
 
-        if (allowManualThreatSharing && !ThreatSharingConsent.TrySetPermission(true))
+        if (options.EffectiveInstallBlackbox &&
+            options.AllowManualThreatSharing &&
+            !ThreatSharingConsent.TrySetPermission(true))
         {
             report("The manual threat-reporting preference could not be saved. Review it in Agent Protection.");
         }
 
-        if (enableAutomaticThreatSharing)
+        if (options.EffectiveInstallBlackbox && options.EnableAutomaticThreatSharing)
         {
             BlackboxAutomaticSharingProvisioner.TryMarkPending();
             using var blackboxClient = new BlackboxDashboardClient();
@@ -79,62 +123,8 @@ internal static class SetupDefaults
                 : "Blackbox automatic community threat sharing: consented during setup; will activate when Blackbox starts.");
         }
 
-        try
-        {
-            var serviceInstalled = serviceAlreadyRegistered;
-            if (!serviceInstalled)
-            {
-                report("Complete protection: registering the Axiom Windows service (one elevation prompt).");
-                serviceInstalled = InstallService(installDir, report);
-            }
-
-            if (!serviceInstalled)
-            {
-                marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-                WriteProfile(marker);
-                return new CompleteDefaultsResult(
-                    false,
-                    "Axiom was installed, but complete protection defaults were not applied.\n\n" +
-                    "The Windows service was not registered (elevation was cancelled or failed). " +
-                    "You can enable Axiom Shield later from the Firewall page; it will ask once.");
-            }
-
-            marker["serviceInstalled"] = true;
-            StopInteractiveServiceProcesses(report);
-
-            var client = new IpcPipeClient(
-                connectTimeout: TimeSpan.FromSeconds(2),
-                requestTimeout: TimeSpan.FromMinutes(5));
-
-            if (!await WaitForServiceAsync(client, report, cancellationToken).ConfigureAwait(false))
-            {
-                marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-                WriteProfile(marker);
-                return new CompleteDefaultsResult(
-                    false,
-                    "Axiom was installed and the service registered, but the local service did not " +
-                    "answer in time. Open Axiom and check the Firewall page.");
-            }
-
-            try
-            {
-                var shield = await client
-                    .SendAsync<ProtectionStatus>(
-                        IpcCommandTypes.ProtectionEnable,
-                        new ProtectionEnableRequest(),
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                marker["shieldEnabled"] = shield.Enabled;
-                report(shield.Enabled
-                    ? "Axiom Shield: enabled (default policy: ask)."
-                    : "Axiom Shield: the service kept it disabled; check the Firewall page.");
-            }
-            catch (Exception exception) when (exception is IpcClientException or IOException)
-            {
-                report("Axiom Shield could not be enabled: " + exception.Message);
-            }
-
-            var privacySettings = new PrivacyShieldSettings
+        PrivacyShieldSettings? privacySettings = options.EffectivePrivacyShield
+            ? new PrivacyShieldSettings
             {
                 Enabled = true,
                 Profile = PrivacyShieldProfile.Strict,
@@ -148,72 +138,169 @@ internal static class SetupDefaults
                 AutoPointAdapterDns = true,
                 AutoUpdateSources = true,
                 AutoUpdateIntervalHours = 24,
-            };
+            }
+            : null;
 
-            try
+        try
+        {
+            if (options.RequiresWindowsService)
             {
-                var privacy = await client
-                    .SendAsync<PrivacyShieldStatus>(
-                        IpcCommandTypes.PrivacyConfigure,
-                        privacySettings,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                marker["privacyEnabled"] = privacy.Enabled && privacy.Running;
-                report(privacy.Running
-                    ? $"Privacy Shield: resolver enabled on port 53 (Strict, all {privacySettings.EnabledSourceIds.Count} sources selected)."
-                    : "Privacy Shield: enabled, but the resolver is not running yet: " + privacy.Detail);
-                if (!string.IsNullOrWhiteSpace(privacy.LastError))
+                var serviceInstalled = serviceAlreadyRegistered;
+                if (!serviceInstalled)
                 {
-                    report("Privacy Shield adapter DNS: " + privacy.LastError);
-                }
-                else if (privacy.Running && privacy.Settings.AutoPointAdapterDns)
-                {
-                    report("Privacy Shield: active adapter DNS points at 127.0.0.1 with fallback DNS preserved.");
+                    report($"{modeLabel}: registering the Axiom Windows service (one elevation prompt).");
+                    serviceInstalled = InstallService(options.InstallDir, report);
                 }
 
-                if (privacy.Running)
+                if (!serviceInstalled)
+                {
+                    WriteUserDefaults(
+                        options.InstallDir,
+                        privacySettings: null,
+                        enableAutostartAndFeed: options.EffectiveAutostartAndFeed,
+                        marker,
+                        report);
+                    marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                    WriteProfile(marker);
+                    return new CompleteDefaultsResult(
+                        false,
+                        "Axiom was installed, but Windows service protection defaults were not applied.\n\n" +
+                        "The Windows service was not registered (elevation was cancelled or failed). " +
+                        "You can enable Axiom Shield and Privacy Shield later inside Axiom; it will ask once.");
+                }
+
+                marker["serviceInstalled"] = true;
+                StopInteractiveServiceProcesses(report);
+
+                var client = new IpcPipeClient(
+                    connectTimeout: TimeSpan.FromSeconds(2),
+                    requestTimeout: TimeSpan.FromMinutes(5));
+
+                if (!await WaitForServiceAsync(client, report, cancellationToken).ConfigureAwait(false))
+                {
+                    WriteUserDefaults(
+                        options.InstallDir,
+                        privacySettings,
+                        enableAutostartAndFeed: options.EffectiveAutostartAndFeed,
+                        marker,
+                        report);
+                    marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                    WriteProfile(marker);
+                    return new CompleteDefaultsResult(
+                        false,
+                        "Axiom was installed and the service registered, but the local service did not " +
+                        "answer in time. Open Axiom and check the Firewall page.");
+                }
+
+                if (options.EffectiveFirewallShield)
                 {
                     try
                     {
-                        report($"Privacy Shield: downloading and compiling all {privacySettings.EnabledSourceIds.Count} blocklist sources...");
-                        var updated = await client
-                            .SendAsync<PrivacyShieldStatus>(
-                                IpcCommandTypes.PrivacySourcesUpdate,
-                                null,
+                        var shield = await client
+                            .SendAsync<ProtectionStatus>(
+                                IpcCommandTypes.ProtectionEnable,
+                                new ProtectionEnableRequest(),
                                 cancellationToken)
                             .ConfigureAwait(false);
-                        var entries = updated.Sources.Sum(source => source.Entries);
-                        marker["privacyEntries"] = entries;
-                        report(updated.LastError is { Length: > 0 } error
-                            ? "Privacy Shield blocklists: " + error
-                            : $"Privacy Shield blocklists: {entries:N0} entries compiled.");
+                        marker["shieldEnabled"] = shield.Enabled;
+                        report(shield.Enabled
+                            ? "Axiom Shield: enabled (default policy: ask)."
+                            : "Axiom Shield: the service kept it disabled; check the Firewall page.");
                     }
                     catch (Exception exception) when (exception is IpcClientException or IOException)
                     {
-                        report("Privacy Shield blocklists could not be downloaded; starter rules remain: " +
-                               exception.Message);
+                        report("Axiom Shield could not be enabled: " + exception.Message);
                     }
                 }
+                else
+                {
+                    report("Axiom Shield: skipped by Optional installation settings.");
+                }
+
+                if (privacySettings is not null)
+                {
+                    try
+                    {
+                        var privacy = await client
+                            .SendAsync<PrivacyShieldStatus>(
+                                IpcCommandTypes.PrivacyConfigure,
+                                privacySettings,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        marker["privacyEnabled"] = privacy.Enabled && privacy.Running;
+                        report(privacy.Running
+                            ? $"Privacy Shield: resolver enabled on port 53 (Strict, all {privacySettings.EnabledSourceIds.Count} sources selected)."
+                            : "Privacy Shield: enabled, but the resolver is not running yet: " + privacy.Detail);
+                        if (!string.IsNullOrWhiteSpace(privacy.LastError))
+                        {
+                            report("Privacy Shield adapter DNS: " + privacy.LastError);
+                        }
+                        else if (privacy.Running && privacy.Settings.AutoPointAdapterDns)
+                        {
+                            report("Privacy Shield: active adapter DNS points at 127.0.0.1 with fallback DNS preserved.");
+                        }
+
+                        if (privacy.Running)
+                        {
+                            try
+                            {
+                                report($"Privacy Shield: downloading and compiling all {privacySettings.EnabledSourceIds.Count} blocklist sources...");
+                                var updated = await client
+                                    .SendAsync<PrivacyShieldStatus>(
+                                        IpcCommandTypes.PrivacySourcesUpdate,
+                                        null,
+                                        cancellationToken)
+                                    .ConfigureAwait(false);
+                                var entries = updated.Sources.Sum(source => source.Entries);
+                                marker["privacyEntries"] = entries;
+                                report(updated.LastError is { Length: > 0 } error
+                                    ? "Privacy Shield blocklists: " + error
+                                    : $"Privacy Shield blocklists: {entries:N0} entries compiled.");
+                            }
+                            catch (Exception exception) when (exception is IpcClientException or IOException)
+                            {
+                                report("Privacy Shield blocklists could not be downloaded; starter rules remain: " +
+                                       exception.Message);
+                            }
+                        }
+                    }
+                    catch (Exception exception) when (exception is IpcClientException or IOException)
+                    {
+                        report("Privacy Shield could not be enabled: " + exception.Message);
+                    }
+                }
+                else
+                {
+                    report("Privacy Shield DNS: skipped by Optional installation settings.");
+                }
             }
-            catch (Exception exception) when (exception is IpcClientException or IOException)
+            else
             {
-                report("Privacy Shield could not be enabled: " + exception.Message);
+                report($"{modeLabel}: Axiom Windows service, Firewall Shield and Privacy Shield were not selected.");
             }
 
-            WriteUserDefaults(installDir, privacySettings, report);
+            WriteUserDefaults(
+                options.InstallDir,
+                privacySettings,
+                enableAutostartAndFeed: options.EffectiveAutostartAndFeed,
+                marker,
+                report);
             marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             WriteProfile(marker);
 
-            var complete = marker["shieldEnabled"] is true && marker["privacyEnabled"] is true;
-            report(complete
-                ? "Complete protection defaults applied: Shield on, Privacy Shield resolver on, notifications and autostart on."
-                : "Complete protection defaults were partially applied. Review Shield and Privacy Shield in Axiom.");
+            var firewallOk = !options.EffectiveFirewallShield || marker["shieldEnabled"] is true;
+            var privacyOk = !options.EffectivePrivacyShield || marker["privacyEnabled"] is true;
+            var applied = firewallOk && privacyOk;
+
+            report(applied
+                ? $"{modeLabel} defaults applied cleanly."
+                : $"{modeLabel} defaults were partially applied. Review Shield and Privacy Shield in Axiom.");
 
             return new CompleteDefaultsResult(
-                complete,
-                complete
+                applied,
+                applied
                     ? null
-                    : "Axiom was installed, but one or more protection defaults could not be enabled. " +
+                    : "Axiom was installed, but one or more selected protection defaults could not be enabled. " +
                       "Open Axiom and check the Firewall and Privacy Shield pages.");
         }
         catch (OperationCanceledException)
@@ -223,12 +310,12 @@ internal static class SetupDefaults
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                                               System.Security.SecurityException or InvalidOperationException)
         {
-            report("Complete protection defaults failed: " + exception.Message);
+            report($"{modeLabel} defaults failed: " + exception.Message);
             marker["appliedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             WriteProfile(marker);
             return new CompleteDefaultsResult(
                 false,
-                "Axiom was installed, but complete protection defaults failed: " + exception.Message);
+                $"Axiom was installed, but {modeLabel.ToLowerInvariant()} defaults failed: " + exception.Message);
         }
     }
 
@@ -367,47 +454,70 @@ internal static class SetupDefaults
 
     private static void WriteUserDefaults(
         string installDir,
-        PrivacyShieldSettings privacySettings,
+        PrivacyShieldSettings? privacySettings,
+        bool enableAutostartAndFeed,
+        Dictionary<string, object?> marker,
         Action<string> report)
     {
+        if (privacySettings is null && !enableAutostartAndFeed)
+        {
+            return;
+        }
+
         try
         {
             var directory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Axiom");
             Directory.CreateDirectory(directory);
-            File.WriteAllText(Path.Combine(directory, "notifications.txt"), "enabled");
-            File.WriteAllText(Path.Combine(directory, "tray-notifications.txt"), "enabled");
-            File.WriteAllText(Path.Combine(directory, "hide-background-windows.txt"), "enabled");
-            File.WriteAllText(
-                Path.Combine(directory, "privacy-shield.json"),
-                JsonSerializer.Serialize(privacySettings, WebJsonOptions));
-            File.WriteAllText(
-                Path.Combine(directory, "community-feed.json"),
-                JsonSerializer.Serialize(
-                    new
+
+            var enabledParts = new List<string>();
+            if (privacySettings is not null)
+            {
+                File.WriteAllText(
+                    Path.Combine(directory, "privacy-shield.json"),
+                    JsonSerializer.Serialize(privacySettings, WebJsonOptions));
+                enabledParts.Add("Privacy Shield Strict preset");
+            }
+
+            if (enableAutostartAndFeed)
+            {
+                File.WriteAllText(Path.Combine(directory, "notifications.txt"), "enabled");
+                File.WriteAllText(Path.Combine(directory, "tray-notifications.txt"), "enabled");
+                File.WriteAllText(Path.Combine(directory, "hide-background-windows.txt"), "enabled");
+                File.WriteAllText(
+                    Path.Combine(directory, "community-feed.json"),
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            enabled = true,
+                            url = CommunityFeedCatalog.RecommendedBundleUrl,
+                            autoSync = true,
+                            tokenProtected = string.Empty,
+                        },
+                        WebJsonOptions));
+
+                var desktop = Path.Combine(installDir, "Axiom.Desktop.exe");
+                File.WriteAllText(
+                    Path.Combine(directory, "startup.json"),
+                    JsonSerializer.Serialize(new
                     {
-                        enabled = true,
-                        url = CommunityFeedCatalog.RecommendedBundleUrl,
-                        autoSync = true,
-                        tokenProtected = string.Empty,
-                    },
-                    WebJsonOptions));
+                        startWithWindows = true,
+                        startMinimized = true,
+                        lastKnownExecutablePath = desktop,
+                        updatedUtc = DateTimeOffset.UtcNow,
+                    }));
 
-            var desktop = Path.Combine(installDir, "Axiom.Desktop.exe");
-            File.WriteAllText(
-                Path.Combine(directory, "startup.json"),
-                JsonSerializer.Serialize(new
-                {
-                    startWithWindows = true,
-                    startMinimized = true,
-                    lastKnownExecutablePath = desktop,
-                    updatedUtc = DateTimeOffset.UtcNow,
-                }));
+                using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
+                key?.SetValue(AutostartValueName, $"\"{desktop}\" --autostart", RegistryValueKind.String);
+                marker["autostartEnabled"] = true;
+                enabledParts.Add("Community Feed bundle, notifications, tray, background-window hiding and start with Windows");
+            }
 
-            using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
-            key?.SetValue(AutostartValueName, $"\"{desktop}\" --autostart", RegistryValueKind.String);
-            report("Privacy Shield Strict preset, Community Feed bundle, notifications, tray, background-window hiding and start with Windows: enabled.");
+            if (enabledParts.Count > 0)
+            {
+                report($"{string.Join(", ", enabledParts)}: enabled.");
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
                                               System.Security.SecurityException)

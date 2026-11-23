@@ -328,10 +328,19 @@ public sealed class CursorProtection
                 else:
                     print(json.dumps({"permission": "allow"}))
             except Exception as exc:
-                # Fail open: a Blackbox or hook fault must not break Cursor.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
-                print(json.dumps({"permission": "allow"}))
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if _is_fail_closed():
+                    record("GUARD_FAILED", tool, "block", "failed_closed", duration_ms, type(exc).__name__)
+                    msg = "Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call."
+                    print(json.dumps({
+                        "permission": "deny",
+                        "user_message": msg,
+                        "agent_message": msg,
+                    }))
+                else:
+                    # Fail open: a Blackbox or hook fault must not break Cursor.
+                    record("GUARD_FAILED", tool, "", "error", duration_ms, type(exc).__name__)
+                    print(json.dumps({"permission": "allow"}))
 
 
         if __name__ == "__main__":

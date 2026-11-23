@@ -17,8 +17,8 @@ namespace Axiom.Setup;
 internal sealed class SetupNativeWindow : IDisposable
 {
     private const string WindowClassName = "AxiomSetupModernWindow";
-    private const int LogicalWidth = 820;
-    private const int LogicalHeight = 690;
+    private const int LogicalWidth = 880;
+    private const int LogicalHeight = 730;
 
     private const uint WmCreate = 0x0001;
     private const uint WmDestroy = 0x0002;
@@ -85,7 +85,14 @@ internal sealed class SetupNativeWindow : IDisposable
     {
         None = 0,
         CardComplete,
-        CardPartial,
+        CardLight,
+        CardOptional,
+        OptFirewallCheck,
+        OptPrivacyCheck,
+        OptAutostartCheck,
+        OptBlackboxCheck,
+        OptDkgCheck,
+        OptHooksCheck,
         WriteScopeLink,
         ShortcutCheck,
         LaunchCheck,
@@ -141,7 +148,13 @@ internal sealed class SetupNativeWindow : IDisposable
 
     private double _scale = 1.0;
     private ViewMode _mode = ViewMode.Configure;
-    private bool _completeMode;
+    private SetupInstallMode _installMode;
+    private bool _optFirewallShield;
+    private bool _optPrivacyShield;
+    private bool _optAutostartAndFeed;
+    private bool _optBlackbox;
+    private bool _optDkg;
+    private bool _optAgentHooks;
     private bool _createShortcut;
     private bool _startAfterInstall;
     private bool _acceptRisk;
@@ -165,7 +178,13 @@ internal sealed class SetupNativeWindow : IDisposable
     {
         _initialOptions = options;
         _palette = SetupThemePalette.LoadCurrent();
-        _completeMode = options.CompleteInstallation;
+        _installMode = options.EffectiveMode;
+        _optFirewallShield = options.EffectiveFirewallShield;
+        _optPrivacyShield = options.EffectivePrivacyShield;
+        _optAutostartAndFeed = options.EffectiveAutostartAndFeed;
+        _optBlackbox = options.EffectiveInstallBlackbox;
+        _optDkg = options.EffectiveInstallDkg;
+        _optAgentHooks = options.EffectiveInstallAgentHooks;
         _createShortcut = options.CreateShortcut;
         _startAfterInstall = options.StartAfterInstall;
         _acceptRisk = options.AcceptRisk;
@@ -635,78 +654,127 @@ internal sealed class SetupNativeWindow : IDisposable
 
     private void DrawConfigureBody(nint g, int pad, int innerW, int footerTop)
     {
-        int y = S(112);
+        int y = S(106);
         SetupGdiPlus.DrawText(g, "CHOOSE INSTALLATION MODE", _gpSection, pad, y, innerW, S(16), _palette.TextMuted, _fmtNearCenter);
-        y += S(22);
+        y += S(20);
 
-        // Side-by-side cards (responsive height, unified CornerRadius = 6)
-        int gap = S(16);
-        int cardW = (innerW - gap) / 2;
-        int optH = S(74);
-        int riskH = S(100);
-        int cardH = Math.Clamp(footerTop - y - optH - riskH - S(38), S(196), S(234));
+        // Three side-by-side mode cards (Complete, Light, Optional) + component checklist below
+        int gap = S(12);
+        int cardW = (innerW - (gap * 2)) / 3;
+        int compH = S(104);
+        int optH = S(64);
+        int riskH = S(96);
+        int cardH = Math.Clamp(footerTop - y - compH - optH - riskH - S(40), S(156), S(182));
 
-        var leftBounds = new RECT { Left = pad, Top = y, Right = pad + cardW, Bottom = y + cardH };
-        var rightBounds = new RECT { Left = pad + cardW + gap, Top = y, Right = pad + innerW, Bottom = y + cardH };
+        var completeBounds = new RECT { Left = pad, Top = y, Right = pad + cardW, Bottom = y + cardH };
+        var lightBounds = new RECT { Left = pad + cardW + gap, Top = y, Right = pad + (cardW * 2) + gap, Bottom = y + cardH };
+        var optionalBounds = new RECT { Left = pad + ((cardW + gap) * 2), Top = y, Right = pad + innerW, Bottom = y + cardH };
 
         DrawModeCard(
-            g, leftBounds, HitId.CardComplete,
-            selected: _completeMode,
-            title: "Complete Protection",
-            subtitle: "Full firewall, DNS privacy & AI agent shield",
+            g, completeBounds, HitId.CardComplete,
+            selected: _installMode == SetupInstallMode.Complete,
+            title: "Complete",
+            subtitle: "Firewall, DNS privacy & AI agent security",
             badgeText: "RECOMMENDED",
+            badgeWidth: S(88),
             badgeFill: _palette.PillFill,
-            badgeBorder: _completeMode ? _palette.Accent : _palette.BorderStrong,
+            badgeBorder: _installMode == SetupInstallMode.Complete ? _palette.Accent : _palette.BorderStrong,
             badgeFg: _palette.PillText,
             bullets:
             [
-                "Axiom Shield — service + ask policy (1 UAC)",
-                "Privacy Shield — DNS blocker (53 + DoH 443)",
-                "Blackbox + DKG — local agent guard and known threats",
-                "Background — autostart & tray protection",
+                "Axiom Service, Shield & Privacy DNS",
+                "Blackbox guard, DKG & 11 agent hooks",
+                "Autostart, tray & community feed",
             ],
-            footerMeta: "10–20 min full setup",
+            footerMeta: "10–20 min setup",
             showWriteScopeLink: true);
 
         DrawModeCard(
-            g, rightBounds, HitId.CardPartial,
-            selected: !_completeMode,
-            title: "Core / Partial Build",
-            subtitle: "Lightweight desktop monitor & history only",
-            badgeText: "NO ADMIN",
+            g, lightBounds, HitId.CardLight,
+            selected: _installMode == SetupInstallMode.Light,
+            title: "Light",
+            subtitle: "Seamless firewall & DNS, no AI agents",
+            badgeText: "NO AGENTS",
+            badgeWidth: S(76),
             badgeFill: _palette.BtnBg,
-            badgeBorder: _palette.Border,
+            badgeBorder: _installMode == SetupInstallMode.Light ? _palette.Accent : _palette.Border,
             badgeFg: _palette.TextSecondary,
             bullets:
             [
-                "Live Monitor — real-time sockets & app rates",
-                "Local History — per-user timeline & events",
-                "Zero Elevation — no admin UAC prompt",
-                "Modular — enable Shield, DNS or AI anytime",
+                "Axiom Service & Shield (ask policy)",
+                "Privacy Shield DNS blocker + DoH",
+                "Autostart, tray & community feed",
             ],
-            footerMeta: "< 10 sec setup",
+            footerMeta: "~30–60 sec setup",
             showWriteScopeLink: false);
 
-        y += cardH + S(14);
+        DrawModeCard(
+            g, optionalBounds, HitId.CardOptional,
+            selected: _installMode == SetupInstallMode.Optional,
+            title: "Optional",
+            subtitle: "Pick individual modules to install",
+            badgeText: "CUSTOM",
+            badgeWidth: S(62),
+            badgeFill: _palette.BtnBg,
+            badgeBorder: _installMode == SetupInstallMode.Optional ? _palette.Accent : _palette.Border,
+            badgeFg: _palette.TextSecondary,
+            bullets:
+            [
+                "Toggle Firewall, DNS & Autostart",
+                "Toggle Blackbox, DKG & Hooks",
+                "Only checked items are configured",
+            ],
+            footerMeta: $"{CountSelectedComponents()} of 6 selected",
+            showWriteScopeLink: false);
+
+        y += cardH + S(10);
+
+        // Components checklist card (2 columns x 3 rows)
+        SetupGdiPlus.FillRoundedRect(g, pad, y, innerW, compH, S(6), _palette.Surface);
+        SetupGdiPlus.DrawRoundedRect(g, pad, y, innerW, compH, S(6), _palette.Border, 1f);
+
+        int cx = pad + S(16);
+        string compHeader = _installMode == SetupInstallMode.Optional
+            ? "INCLUDED COMPONENTS (CUSTOM SELECTION ACTIVE)"
+            : "INCLUDED COMPONENTS (CLICK ANY ITEM TO CUSTOMIZE IN OPTIONAL MODE)";
+        SetupGdiPlus.DrawText(g, compHeader, _gpBadge, cx, y + S(7), innerW - S(32), S(16), _palette.TextMuted, _fmtNearCenter);
+        SetupGdiPlus.DrawLine(g, cx, y + S(25), pad + innerW - S(16), y + S(25), _palette.Border, 1f);
+
+        int colW = (innerW - S(40)) / 2;
+        int col2X = cx + colW + S(12);
+        int row1Y = y + S(29);
+        int row2Y = y + S(53);
+        int row3Y = y + S(77);
+        int rowH = S(22);
+
+        DrawCheckRow(g, HitId.OptFirewallCheck, cx, row1Y, colW, rowH, _optFirewallShield, "Axiom Service & Shield Firewall (Ask policy)", _gpSmall);
+        DrawCheckRow(g, HitId.OptPrivacyCheck, cx, row2Y, colW, rowH, _optPrivacyShield, "Privacy Shield DNS & DoH Blocker (port 53)", _gpSmall);
+        DrawCheckRow(g, HitId.OptAutostartCheck, cx, row3Y, colW, rowH, _optAutostartAndFeed, "Autostart, Tray & Community Threat Feed", _gpSmall);
+
+        DrawCheckRow(g, HitId.OptBlackboxCheck, col2X, row1Y, colW, rowH, _optBlackbox, "Umanitek Blackbox AI Guard (port 9700)", _gpSmall);
+        DrawCheckRow(g, HitId.OptDkgCheck, col2X, row2Y, colW, rowH, _optDkg, "OriginTrail Local DKG Threat Graph Node", _gpSmall);
+        DrawCheckRow(g, HitId.OptHooksCheck, col2X, row3Y, colW, rowH, _optAgentHooks, "AI Coding Agent Hooks (11 harnesses)", _gpSmall);
+
+        y += compH + S(10);
 
         // Compact Path & Toggles strip (CornerRadius = 6)
         SetupGdiPlus.FillRoundedRect(g, pad, y, innerW, optH, S(6), _palette.Surface);
         SetupGdiPlus.DrawRoundedRect(g, pad, y, innerW, optH, S(6), _palette.Border, 1f);
 
         int ox = pad + S(16);
-        SetupGdiPlus.DrawText(g, "Install path:", _gpSmall, ox, y + S(11), S(82), S(18), _palette.TextMuted, _fmtNearCenter);
-        SetupGdiPlus.DrawText(g, _initialOptions.InstallDir, _gpMono, ox + S(82), y + S(11), innerW - S(110), S(18), _palette.TextPrimary, _fmtNearCenter);
+        SetupGdiPlus.DrawText(g, "Install path:", _gpSmall, ox, y + S(7), S(82), S(18), _palette.TextMuted, _fmtNearCenter);
+        SetupGdiPlus.DrawText(g, _initialOptions.InstallDir, _gpMono, ox + S(82), y + S(7), innerW - S(110), S(18), _palette.TextPrimary, _fmtNearCenter);
 
-        SetupGdiPlus.DrawLine(g, ox, y + S(36), pad + innerW - S(16), y + S(36), _palette.Border, 1f);
+        SetupGdiPlus.DrawLine(g, ox, y + S(31), pad + innerW - S(16), y + S(31), _palette.Border, 1f);
 
         int halfW = (innerW - S(32)) / 2;
-        DrawCheckRow(g, HitId.ShortcutCheck, ox, y + S(42), halfW - S(8), S(24), _createShortcut, "Create Start Menu shortcut");
-        DrawCheckRow(g, HitId.LaunchCheck, ox + halfW, y + S(42), halfW, S(24), _startAfterInstall, "Launch Axiom automatically after finish");
+        DrawCheckRow(g, HitId.ShortcutCheck, ox, y + S(36), halfW - S(8), S(24), _createShortcut, "Create Start Menu shortcut", _gpSmall);
+        DrawCheckRow(g, HitId.LaunchCheck, ox + halfW, y + S(36), halfW, S(24), _startAfterInstall, "Launch Axiom automatically after finish", _gpSmall);
 
-        y += optH + S(12);
+        y += optH + S(10);
 
         // Risk acceptance card (CornerRadius = 6)
-        riskH = Math.Max(S(88), footerTop - y - S(12));
+        riskH = Math.Max(S(88), footerTop - y - S(10));
         uint riskBg = _acceptRisk ? _palette.SuccessBg : _palette.WarnBg;
         uint riskBorder = _acceptRisk ? _palette.SuccessBorder : _palette.WarnBorder;
         uint riskBar = _acceptRisk ? _palette.SuccessAccent : _palette.WarnAccent;
@@ -721,17 +789,17 @@ internal sealed class SetupNativeWindow : IDisposable
         SetupGdiPlus.DrawText(
             g,
             "Development build notice — use at your own risk",
-            _gpBodyBold, rx, y + S(9), rw, S(18), riskTitleColor, _fmtNearCenter);
+            _gpBodyBold, rx, y + S(8), rw, S(18), riskTitleColor, _fmtNearCenter);
 
         SetupGdiPlus.DrawText(
             g,
             "Firewall, DNS and agent hook changes can affect network connectivity or block files/tools. Rely on backups and test in a VM where possible.",
-            _gpSmall, rx, y + S(29), rw, S(30), _palette.TextSecondary, _fmtNear);
+            _gpSmall, rx, y + S(27), rw, S(28), _palette.TextSecondary, _fmtNear);
 
         DrawCheckRow(
-            g, HitId.AgreeRow, rx, y + riskH - S(30), rw, S(24),
+            g, HitId.AgreeRow, rx, y + riskH - S(29), rw, S(24),
             _acceptRisk,
-            _completeMode
+            _optBlackbox
                 ? "I accept these risks, Blackbox Reporter Terms, and enable automatic threat sharing."
                 : "I understand these risks and accept using Axiom at my own risk.");
     }
@@ -744,6 +812,7 @@ internal sealed class SetupNativeWindow : IDisposable
         string title,
         string subtitle,
         string badgeText,
+        int badgeWidth,
         uint badgeFill,
         uint badgeBorder,
         uint badgeFg,
@@ -770,13 +839,13 @@ internal sealed class SetupNativeWindow : IDisposable
         }
 
         // Radio indicator ring using Axiom.Accent
-        float radioX = x + S(16);
-        float radioY = y + S(18);
-        float radioD = S(18);
+        float radioX = x + S(12);
+        float radioY = y + S(14);
+        float radioD = S(16);
         if (selected)
         {
             SetupGdiPlus.DrawEllipse(g, radioX, radioY, radioD, radioD, _palette.Accent, 1.8f);
-            float dot = S(8);
+            float dot = S(7);
             SetupGdiPlus.FillEllipse(g, radioX + (radioD - dot) / 2f, radioY + (radioD - dot) / 2f, dot, dot, _palette.Accent);
         }
         else
@@ -785,51 +854,51 @@ internal sealed class SetupNativeWindow : IDisposable
         }
 
         // Badge top-right
-        int badgeW = showWriteScopeLink ? S(98) : S(72);
-        DrawPillBadge(g, (int)(x + w - badgeW - S(14)), (int)(y + S(16)), badgeW, S(20), badgeText, badgeFill, badgeBorder, badgeFg);
+        DrawPillBadge(g, (int)(x + w - badgeWidth - S(10)), (int)(y + S(12)), badgeWidth, S(19), badgeText, badgeFill, badgeBorder, badgeFg);
 
         // Title & Subtitle
-        float textX = radioX + radioD + S(10);
-        float titleMaxW = (x + w - badgeW - S(20)) - textX;
-        SetupGdiPlus.DrawText(g, title, _gpCardTitle, textX, y + S(14), titleMaxW, S(22), _palette.TextPrimary, _fmtNearCenter);
-        SetupGdiPlus.DrawText(g, subtitle, _gpSmall, x + S(16), y + S(44), w - S(32), S(18), _palette.TextSecondary, _fmtNearCenter);
+        float textX = radioX + radioD + S(8);
+        float titleMaxW = (x + w - badgeWidth - S(14)) - textX;
+        SetupGdiPlus.DrawText(g, title, _gpCardTitle, textX, y + S(11), titleMaxW, S(22), _palette.TextPrimary, _fmtNearCenter);
+        SetupGdiPlus.DrawText(g, subtitle, _gpSmall, x + S(12), y + S(37), w - S(24), S(18), _palette.TextSecondary, _fmtNearCenter);
 
         // Divider
-        SetupGdiPlus.DrawLine(g, x + S(16), y + S(68), x + w - S(16), y + S(68), _palette.Border, 1f);
+        SetupGdiPlus.DrawLine(g, x + S(12), y + S(58), x + w - S(12), y + S(58), _palette.Border, 1f);
 
         // Bullets
-        float by = y + S(78);
+        float by = y + S(65);
         uint checkColor = selected ? _palette.Accent : _palette.TextMuted;
         uint bulletTextColor = selected ? _palette.TextPrimary : _palette.TextSecondary;
-        int bulletStep = h < S(218) ? S(23) : S(26);
+        int bulletStep = h < S(170) ? S(21) : S(23);
         foreach (string line in bullets)
         {
-            SetupGdiPlus.DrawCheckmark(g, x + S(16), by + S(2), S(13), checkColor, 1.7f);
-            SetupGdiPlus.DrawText(g, line, _gpSmall, x + S(35), by, w - S(48), S(20), bulletTextColor, _fmtNearCenter);
+            SetupGdiPlus.DrawCheckmark(g, x + S(12), by + S(2), S(12), checkColor, 1.6f);
+            SetupGdiPlus.DrawText(g, line, _gpSmall, x + S(29), by, w - S(39), S(18), bulletTextColor, _fmtNearCenter);
             by += bulletStep;
         }
 
         // Card bottom footer meta
-        SetupGdiPlus.DrawLine(g, x + S(16), y + h - S(38), x + w - S(16), y + h - S(38), _palette.Border, 1f);
-        SetupGdiPlus.DrawText(g, footerMeta, _gpSmall, x + S(16), y + h - S(31), S(140), S(22), _palette.TextMuted, _fmtNearCenter);
+        SetupGdiPlus.DrawLine(g, x + S(12), y + h - S(32), x + w - S(12), y + h - S(32), _palette.Border, 1f);
+        int metaW = showWriteScopeLink ? (int)(w - S(126)) : (int)(w - S(24));
+        SetupGdiPlus.DrawText(g, footerMeta, _gpSmall, x + S(12), y + h - S(26), metaW, S(20), _palette.TextMuted, _fmtNearCenter);
 
         _hitZones.Add(new HitZone(hitId, bounds));
 
         if (showWriteScopeLink)
         {
-            int linkW = S(132);
-            int linkH = S(22);
+            int linkW = S(104);
+            int linkH = S(20);
             var linkRect = new RECT
             {
-                Left = (int)(x + w - linkW - S(14)),
-                Top = (int)(y + h - S(31)),
-                Right = (int)(x + w - S(14)),
-                Bottom = (int)(y + h - S(9)),
+                Left = (int)(x + w - linkW - S(10)),
+                Top = (int)(y + h - S(26)),
+                Right = (int)(x + w - S(10)),
+                Bottom = (int)(y + h - S(6)),
             };
             bool linkHover = _hoverId == HitId.WriteScopeLink;
             SetupGdiPlus.DrawText(
                 g,
-                "View write scope ▸",
+                "View scope ▸",
                 _gpSmall,
                 linkRect.Left,
                 linkRect.Top,
@@ -842,10 +911,10 @@ internal sealed class SetupNativeWindow : IDisposable
     }
 
     private void DrawCheckRow(
-        nint g, HitId id, int x, int y, int w, int h, bool isChecked, string label)
+        nint g, HitId id, int x, int y, int w, int h, bool isChecked, string label, nint fontHandle = 0)
     {
         bool hovered = _hoverId == id;
-        int box = S(16);
+        int box = S(15);
         int boxY = y + ((h - box) / 2);
 
         if (isChecked)
@@ -861,7 +930,7 @@ internal sealed class SetupNativeWindow : IDisposable
         }
 
         SetupGdiPlus.DrawText(
-            g, label, _gpBody, x + box + S(9), y, w - box - S(12), h,
+            g, label, fontHandle == nint.Zero ? _gpBody : fontHandle, x + box + S(8), y, w - box - S(10), h,
             hovered ? _palette.TextPrimary : _palette.TextSecondary,
             _fmtNearCenter);
 
@@ -873,7 +942,7 @@ internal sealed class SetupNativeWindow : IDisposable
         int y = S(114);
         SetupGdiPlus.DrawText(
             g,
-            "Write scope — files, services & registry entries for Complete Protection",
+            "Write scope — files, services & registry entries touched by Axiom Setup",
             _gpBodyBold, pad, y, innerW - S(150), S(24), _palette.TextPrimary, _fmtNearCenter);
 
         var backRect = new RECT { Left = pad + innerW - S(136), Top = y - S(2), Right = pad + innerW, Bottom = y + S(28) };
@@ -1193,13 +1262,21 @@ internal sealed class SetupNativeWindow : IDisposable
 
         if (vk == VkLeft)
         {
-            _completeMode = true;
-            InvalidateWindow();
+            SelectMode(_installMode switch
+            {
+                SetupInstallMode.Optional => SetupInstallMode.Light,
+                SetupInstallMode.Light => SetupInstallMode.Complete,
+                _ => SetupInstallMode.Complete,
+            });
         }
         else if (vk == VkRight)
         {
-            _completeMode = false;
-            InvalidateWindow();
+            SelectMode(_installMode switch
+            {
+                SetupInstallMode.Complete => SetupInstallMode.Light,
+                SetupInstallMode.Light => SetupInstallMode.Optional,
+                _ => SetupInstallMode.Optional,
+            });
         }
         else if (vk == VkSpace)
         {
@@ -1216,20 +1293,39 @@ internal sealed class SetupNativeWindow : IDisposable
         switch (id)
         {
             case HitId.CardComplete:
-                if (!_completeMode)
-                {
-                    _acceptRisk = false;
-                    _allowManualThreatSharing = false;
-                    _enableAutomaticThreatSharing = false;
-                }
-
-                _completeMode = true;
-                InvalidateWindow();
+                SelectMode(SetupInstallMode.Complete);
                 break;
 
-            case HitId.CardPartial:
-                _completeMode = false;
-                InvalidateWindow();
+            case HitId.CardLight:
+                SelectMode(SetupInstallMode.Light);
+                break;
+
+            case HitId.CardOptional:
+                SelectMode(SetupInstallMode.Optional);
+                break;
+
+            case HitId.OptFirewallCheck:
+                ToggleOptionalComponent(ref _optFirewallShield);
+                break;
+
+            case HitId.OptPrivacyCheck:
+                ToggleOptionalComponent(ref _optPrivacyShield);
+                break;
+
+            case HitId.OptAutostartCheck:
+                ToggleOptionalComponent(ref _optAutostartAndFeed);
+                break;
+
+            case HitId.OptBlackboxCheck:
+                ToggleOptionalComponent(ref _optBlackbox, isBlackboxToggle: true);
+                break;
+
+            case HitId.OptDkgCheck:
+                ToggleOptionalComponent(ref _optDkg);
+                break;
+
+            case HitId.OptHooksCheck:
+                ToggleOptionalComponent(ref _optAgentHooks);
                 break;
 
             case HitId.WriteScopeLink:
@@ -1265,9 +1361,15 @@ internal sealed class SetupNativeWindow : IDisposable
                 break;
 
             case HitId.RepairBtn:
+                var repairModeName = _installMode switch
+                {
+                    SetupInstallMode.Complete => "Complete",
+                    SetupInstallMode.Light => "Light",
+                    _ => "Optional (Custom)",
+                };
                 int repairAns = NativeMethods.MessageBox(
                     _hwnd,
-                    $"Repair Axiom at {_initialOptions.InstallDir} using {(_completeMode ? "Complete Protection" : "Core / Partial Build")} mode?",
+                    $"Repair Axiom at {_initialOptions.InstallDir} using {repairModeName} mode?",
                     "Axiom Setup — Repair",
                     MbYesNo | MbIconQuestion);
                 if (repairAns == IdYes)
@@ -1365,11 +1467,79 @@ internal sealed class SetupNativeWindow : IDisposable
         }
     }
 
+    private int CountSelectedComponents() =>
+        (_optFirewallShield ? 1 : 0) +
+        (_optPrivacyShield ? 1 : 0) +
+        (_optAutostartAndFeed ? 1 : 0) +
+        (_optBlackbox ? 1 : 0) +
+        (_optDkg ? 1 : 0) +
+        (_optAgentHooks ? 1 : 0);
+
+    private void SelectMode(SetupInstallMode mode)
+    {
+        var hadBlackbox = _optBlackbox;
+        _installMode = mode;
+
+        if (mode == SetupInstallMode.Complete)
+        {
+            _optFirewallShield = true;
+            _optPrivacyShield = true;
+            _optAutostartAndFeed = true;
+            _optBlackbox = true;
+            _optDkg = true;
+            _optAgentHooks = true;
+        }
+        else if (mode == SetupInstallMode.Light)
+        {
+            _optFirewallShield = true;
+            _optPrivacyShield = true;
+            _optAutostartAndFeed = true;
+            _optBlackbox = false;
+            _optDkg = false;
+            _optAgentHooks = false;
+        }
+
+        if (!hadBlackbox && _optBlackbox)
+        {
+            _acceptRisk = false;
+            _allowManualThreatSharing = false;
+            _enableAutomaticThreatSharing = false;
+        }
+        else if (!_optBlackbox)
+        {
+            _allowManualThreatSharing = false;
+            _enableAutomaticThreatSharing = false;
+        }
+
+        InvalidateWindow();
+    }
+
+    private void ToggleOptionalComponent(ref bool flag, bool isBlackboxToggle = false)
+    {
+        var hadBlackbox = _optBlackbox;
+        flag = !flag;
+        _installMode = SetupInstallMode.Optional;
+
+        if (isBlackboxToggle && !hadBlackbox && _optBlackbox)
+        {
+            _acceptRisk = false;
+            _allowManualThreatSharing = false;
+            _enableAutomaticThreatSharing = false;
+        }
+        else if (!_optBlackbox)
+        {
+            _allowManualThreatSharing = false;
+            _enableAutomaticThreatSharing = false;
+        }
+
+        InvalidateWindow();
+    }
+
     private void ToggleInstallationConsent()
     {
         _acceptRisk = !_acceptRisk;
-        _allowManualThreatSharing = _acceptRisk && _completeMode;
-        _enableAutomaticThreatSharing = _acceptRisk && _completeMode;
+        _allowManualThreatSharing = _acceptRisk && _optBlackbox;
+        _enableAutomaticThreatSharing = _acceptRisk && _optBlackbox;
         InvalidateWindow();
     }
 
@@ -1401,10 +1571,17 @@ internal sealed class SetupNativeWindow : IDisposable
         {
             CreateShortcut = _createShortcut,
             StartAfterInstall = _startAfterInstall,
-            CompleteInstallation = _completeMode,
-            AllowManualThreatSharing = _completeMode &&
+            CompleteInstallation = _installMode == SetupInstallMode.Complete,
+            Mode = _installMode,
+            EnableFirewallShield = _optFirewallShield,
+            EnablePrivacyShield = _optPrivacyShield,
+            EnableAutostartAndFeed = _optAutostartAndFeed,
+            InstallBlackbox = _optBlackbox,
+            InstallDkg = _optDkg,
+            InstallAgentHooks = _optAgentHooks,
+            AllowManualThreatSharing = _optBlackbox &&
                 (isRepair ? ThreatSharingConsent.HasConsent() : _allowManualThreatSharing),
-            EnableAutomaticThreatSharing = _completeMode && !isRepair && _enableAutomaticThreatSharing,
+            EnableAutomaticThreatSharing = _optBlackbox && !isRepair && _enableAutomaticThreatSharing,
         };
 
         var progress = new NativeLogProgress(message =>

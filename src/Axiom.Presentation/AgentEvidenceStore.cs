@@ -33,7 +33,10 @@ public sealed record AgentEvidenceEvent(
 
             if (IsFailure)
             {
-                return "FAILED_OPEN";
+                return string.Equals(Decision, "block", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(GuardStatus, "failed_closed", StringComparison.OrdinalIgnoreCase)
+                    ? "FAILED_CLOSED"
+                    : "FAILED_OPEN";
             }
 
             return string.Equals(EventType, "GUARD_BLOCKED", StringComparison.OrdinalIgnoreCase)

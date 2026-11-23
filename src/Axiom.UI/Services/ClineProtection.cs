@@ -203,10 +203,17 @@ public sealed class ClineProtection
                 else:
                     print(json.dumps({}))
             except Exception as exc:
-                # Fail open: a Blackbox or hook fault must not break Cline.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
-                print(json.dumps({}))
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if _is_fail_closed():
+                    record("GUARD_FAILED", tool, "block", "failed_closed", duration_ms, type(exc).__name__)
+                    print(json.dumps({
+                        "cancel": True,
+                        "errorMessage": "Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.",
+                    }))
+                else:
+                    # Fail open: a Blackbox or hook fault must not break Cline.
+                    record("GUARD_FAILED", tool, "", "error", duration_ms, type(exc).__name__)
+                    print(json.dumps({}))
 
 
         if __name__ == "__main__":

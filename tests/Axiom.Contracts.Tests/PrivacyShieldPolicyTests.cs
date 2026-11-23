@@ -76,6 +76,8 @@ public sealed class PrivacyShieldPolicyTests
     [InlineData("safebrowsing.googleapis.com")]
     [InlineData("SafeBrowsing.GoogleApis.com.")]
     [InlineData("client.wns.windows.com")]
+    [InlineData("bn2wns1.wns.windows.com")]
+    [InlineData("nav.smartscreen.microsoft.com")]
     [InlineData("ctldl.windowsupdate.com")]
     [InlineData("ocsp.digicert.com")]
     public void Catalog_lists_cannot_block_security_critical_domains(string domain)
@@ -87,6 +89,8 @@ public sealed class PrivacyShieldPolicyTests
                 new PrivacyShieldStoredRule("safebrowsing.googleapis.com", "strict-list", PrivacyCategory.Tracking, now),
                 new PrivacyShieldStoredRule("googleapis.com", "strict-list", PrivacyCategory.Tracking, now),
                 new PrivacyShieldStoredRule("client.wns.windows.com", "strict-list", PrivacyCategory.Telemetry, now),
+                new PrivacyShieldStoredRule("bn2wns1.wns.windows.com", "strict-list", PrivacyCategory.Telemetry, now),
+                new PrivacyShieldStoredRule("nav.smartscreen.microsoft.com", "strict-list", PrivacyCategory.Telemetry, now),
                 new PrivacyShieldStoredRule("windowsupdate.com", "strict-list", PrivacyCategory.Telemetry, now),
                 new PrivacyShieldStoredRule("digicert.com", "strict-list", PrivacyCategory.Tracking, now),
             ]);

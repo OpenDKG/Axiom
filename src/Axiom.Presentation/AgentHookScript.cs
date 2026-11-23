@@ -150,6 +150,7 @@ public static class AgentHookScript
 
         def main():
             started = time.monotonic()
+            event = ""
             tool = ""
             sid = ""
             call = ""
@@ -164,12 +165,12 @@ public static class AgentHookScript
                 ws = workspace(payload)
                 tool = str(payload.get("tool_name") or "")
                 call = tool_call_id(payload)
-                with contextlib.redirect_stdout(sys.stderr):
-                    from plugins.blackbox.guard import hooks as guard
 
                 if event in ("sessionstart", "session_start"):
-                    if hasattr(guard, "on_session_start"):
-                        guard.on_session_start(session_id=sid, framework=FRAMEWORK, workspace=ws)
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
+                        if hasattr(guard, "on_session_start"):
+                            guard.on_session_start(session_id=sid, framework=FRAMEWORK, workspace=ws)
                     record("SESSION_STARTED", "", "", "ok", int((time.monotonic() - started) * 1000),
                            session=sid)
                     return
@@ -177,17 +178,19 @@ public static class AgentHookScript
                 if event in ("userpromptsubmit", "user_prompt_submit"):
                     value = prompt(payload)
                     request_messages = [{"role": "user", "content": value}] if value else []
-                    if hasattr(guard, "on_pre_api_request"):
-                        guard.on_pre_api_request(
-                            user_message=value,
-                            request_messages=request_messages,
-                            session_id=sid,
-                            turn_id=tid,
-                            model=payload.get("model"),
-                            provider=FRAMEWORK,
-                            framework=FRAMEWORK,
-                            workspace=ws,
-                        )
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
+                        if hasattr(guard, "on_pre_api_request"):
+                            guard.on_pre_api_request(
+                                user_message=value,
+                                request_messages=request_messages,
+                                session_id=sid,
+                                turn_id=tid,
+                                model=payload.get("model"),
+                                provider=FRAMEWORK,
+                                framework=FRAMEWORK,
+                                workspace=ws,
+                            )
                     record("PROMPT_SCANNED", "", "", "ok", int((time.monotonic() - started) * 1000),
                            session=sid)
                     return
@@ -209,15 +212,17 @@ public static class AgentHookScript
                         sys.stdout.write(json.dumps(deny(safety[1]), separators=(",", ":")))
                         sys.stdout.flush()
                         return
-                    decision = guard.on_pre_tool_call(
-                        tool_name=tool,
-                        args=parsed_args,
-                        session_id=sid,
-                        task_id=tid,
-                        tool_call_id=tool_call_id(payload),
-                        framework=FRAMEWORK,
-                        workspace=ws,
-                    )
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
+                        decision = guard.on_pre_tool_call(
+                            tool_name=tool,
+                            args=parsed_args,
+                            session_id=sid,
+                            task_id=tid,
+                            tool_call_id=tool_call_id(payload),
+                            framework=FRAMEWORK,
+                            workspace=ws,
+                        )
                     blocked = bool(decision and decision.get("action") == "block")
                     record(
                         "GUARD_BLOCKED" if blocked else "GUARD_ALLOWED",
@@ -240,17 +245,19 @@ public static class AgentHookScript
                         result = payload.get("tool_result")
                     if result is None:
                         result = payload.get("tool_output")
-                    if hasattr(guard, "on_post_tool_call"):
-                        guard.on_post_tool_call(
-                            tool_name=tool,
-                            args=tool_args(payload),
-                            result=result,
-                            session_id=sid,
-                            task_id=tid,
-                            tool_call_id=tool_call_id(payload),
-                            framework=FRAMEWORK,
-                            workspace=ws,
-                        )
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
+                        if hasattr(guard, "on_post_tool_call"):
+                            guard.on_post_tool_call(
+                                tool_name=tool,
+                                args=tool_args(payload),
+                                result=result,
+                                session_id=sid,
+                                task_id=tid,
+                                tool_call_id=tool_call_id(payload),
+                                framework=FRAMEWORK,
+                                workspace=ws,
+                            )
                     record("POST_TOOL", tool, "", "ok", int((time.monotonic() - started) * 1000),
                            session=sid, call=call)
                     return
@@ -262,14 +269,16 @@ public static class AgentHookScript
                     return
 
                 if event in ("sessionend", "session_end"):
-                    if hasattr(guard, "on_session_end"):
-                        guard.on_session_end(
-                            session_id=sid,
-                            completed=True,
-                            interrupted=False,
-                            framework=FRAMEWORK,
-                            workspace=ws,
-                        )
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
+                        if hasattr(guard, "on_session_end"):
+                            guard.on_session_end(
+                                session_id=sid,
+                                completed=True,
+                                interrupted=False,
+                                framework=FRAMEWORK,
+                                workspace=ws,
+                            )
                     record("SESSION_ENDED", "", "", "ok", int((time.monotonic() - started) * 1000),
                            session=sid)
                     return
@@ -277,17 +286,34 @@ public static class AgentHookScript
                 record("HOOK_EVENT", tool, "", "ignored", int((time.monotonic() - started) * 1000),
                        session=sid, call=call)
             except Exception as exc:
-                # Fail open: a Blackbox or hook fault must not break the host agent.
-                record(
-                    "GUARD_FAILED",
-                    tool,
-                    "",
-                    "error",
-                    int((time.monotonic() - started) * 1000),
-                    type(exc).__name__,
-                    session=sid,
-                    call=call,
-                )
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if event in ("pretooluse", "pre_tool_use", "beforetool", "before_tool") and _is_fail_closed():
+                    record(
+                        "GUARD_FAILED",
+                        tool,
+                        "block",
+                        "failed_closed",
+                        duration_ms,
+                        type(exc).__name__,
+                        session=sid,
+                        call=call,
+                    )
+                    sys.stdout.write(json.dumps(
+                        deny("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call."),
+                        separators=(",", ":")))
+                    sys.stdout.flush()
+                else:
+                    # Fail open: a Blackbox or hook fault must not break the host agent.
+                    record(
+                        "GUARD_FAILED",
+                        tool,
+                        "",
+                        "error",
+                        duration_ms,
+                        type(exc).__name__,
+                        session=sid,
+                        call=call,
+                    )
 
 
         if __name__ == "__main__":

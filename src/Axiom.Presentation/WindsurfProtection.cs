@@ -350,9 +350,13 @@ public sealed class WindsurfProtection
                     print(decision.get("message") or "Blocked by Axiom/Blackbox", file=sys.stderr)
                     sys.exit(2)
             except Exception as exc:
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if _is_fail_closed():
+                    record("GUARD_FAILED", tool, "block", "failed_closed", duration_ms, type(exc).__name__)
+                    print("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.", file=sys.stderr)
+                    sys.exit(2)
                 # Fail open: a Blackbox or hook fault must not break Windsurf.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
+                record("GUARD_FAILED", tool, "", "error", duration_ms, type(exc).__name__)
 
 
         if __name__ == "__main__":

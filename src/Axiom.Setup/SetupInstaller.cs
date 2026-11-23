@@ -168,6 +168,24 @@ internal static class SetupInstaller
                 CleanupLegacyInstall();
                 Report("Removed legacy executable and shortcut names.");
 
+                var mode = options.EffectiveMode;
+                var modeLabel = mode switch
+                {
+                    SetupInstallMode.Complete => "Complete protection",
+                    SetupInstallMode.Light => "Light protection",
+                    _ => "Optional custom setup",
+                };
+
+                var selectedComponents = new List<string>();
+                if (options.EffectiveFirewallShield) selectedComponents.Add("Firewall Shield");
+                if (options.EffectivePrivacyShield) selectedComponents.Add("Privacy Shield DNS/DoH");
+                if (options.EffectiveAutostartAndFeed) selectedComponents.Add("Autostart & Threat Feed");
+                if (options.EffectiveInstallBlackbox) selectedComponents.Add("Blackbox");
+                if (options.EffectiveInstallDkg) selectedComponents.Add("DKG node");
+                if (options.EffectiveInstallAgentHooks) selectedComponents.Add("Agent hooks");
+
+                Report($"{modeLabel} selected: {(selectedComponents.Count > 0 ? string.Join(", ", selectedComponents) : "desktop application only")}.");
+
                 var blackboxInstalled = false;
                 var dkgInstalled = false;
                 var blackboxExit = false;
@@ -175,12 +193,16 @@ internal static class SetupInstaller
                 var serviceRegisteredEarly = false;
                 string? upgradeWarning = null;
                 var partialIssues = new List<string>();
-                if (options.CompleteInstallation)
+
+                if (options.RequiresWindowsService)
                 {
-                    serviceRegisteredEarly = SetupDefaults.EnsureServiceRegistered(options.InstallDir, Report);
-                    Report("Complete installation selected: Blackbox, DKG and agent hooks will be configured.");
-                    Report("Complete installation may take 10-20 minutes: service registration, the verified " +
-                           "Blackbox download/install, a local DKG node and the agent hooks run in sequence.");
+                    serviceRegisteredEarly = SetupDefaults.EnsureServiceRegistered(options.InstallDir, Report, modeLabel);
+                }
+
+                if (options.EffectiveInstallBlackbox || options.EffectiveInstallDkg)
+                {
+                    Report("AI agent module setup may take 10-20 minutes: prerequisites, the verified " +
+                           "Blackbox runtime and/or local DKG node run in sequence.");
                     var setupProtection = new UserStateProtection();
                     var setupSnapshot = await Task.Run(
                         () => setupProtection.Capture(),
@@ -210,31 +232,39 @@ internal static class SetupInstaller
                     }
 
                     Report("Auditing official installer scope: Axiom modules, Hermes plugin config/mode and scheduled task only.");
-                    var blackboxPrereqs = Axiom.Contracts.Modules.ModulePrerequisites.Probe();
-                    if (!blackboxPrereqs.IsSatisfied)
+
+                    if (options.EffectiveInstallBlackbox)
                     {
-                        var pythonNote = blackboxPrereqs.RejectedPythonVersions.Count == 0
-                            ? string.Empty
-                            : $" Found incompatible Python: {string.Join(", ", blackboxPrereqs.RejectedPythonVersions)}.";
-                        Report(
-                            $"Blackbox was not installed: the vendor installer requires " +
-                            $"{blackboxPrereqs.MissingSummary}.{pythonNote} " +
-                            "Axiom core is installed. Install the missing tools (Python 3.11-3.13, preferably 3.12), " +
-                            "then click Repair on the Blackbox card.");
-                        blackboxExit = false;
+                        var blackboxPrereqs = Axiom.Contracts.Modules.ModulePrerequisites.Probe();
+                        if (!blackboxPrereqs.IsSatisfied)
+                        {
+                            var pythonNote = blackboxPrereqs.RejectedPythonVersions.Count == 0
+                                ? string.Empty
+                                : $" Found incompatible Python: {string.Join(", ", blackboxPrereqs.RejectedPythonVersions)}.";
+                            Report(
+                                $"Blackbox was not installed: the vendor installer requires " +
+                                $"{blackboxPrereqs.MissingSummary}.{pythonNote} " +
+                                "Axiom core is installed. Install the missing tools (Python 3.11-3.13, preferably 3.12), " +
+                                "then click Repair on the Blackbox card.");
+                            blackboxExit = false;
+                        }
+                        else
+                        {
+                            Report("Configuring the official Blackbox runtime silently in the background...");
+                            blackboxExit = await Task.Run(
+                                () => moduleInstaller.InstallBlackboxAndWait(Report),
+                                cancellationToken).ConfigureAwait(false);
+                            Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
+                            if (blackboxExit && !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
+                            {
+                                Report("Starting the installed Blackbox dashboard...");
+                                moduleInstaller.StartBlackboxDashboard();
+                            }
+                        }
                     }
                     else
                     {
-                        Report("Configuring the official Blackbox runtime silently in the background...");
-                        blackboxExit = await Task.Run(
-                            () => moduleInstaller.InstallBlackboxAndWait(Report),
-                            cancellationToken).ConfigureAwait(false);
-                        Report($"Blackbox installer exit code: {(blackboxExit ? "0" : "non-zero")}.");
-                        if (blackboxExit && !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
-                        {
-                            Report("Starting the installed Blackbox dashboard...");
-                            moduleInstaller.StartBlackboxDashboard();
-                        }
+                        Report("Blackbox runtime: skipped (not included in selected installation profile).");
                     }
 
                     if (upgradeBackup is not null)
@@ -263,32 +293,41 @@ internal static class SetupInstaller
                                $"({storageReport.ReclaimedBytes / 1_048_576.0:F1} MB reclaimed).");
                     }
 
-                    var blackboxProvidesDkg = blackboxExit &&
+                    var blackboxProvidesDkg = false;
+                    if (options.EffectiveInstallDkg)
+                    {
+                        blackboxProvidesDkg = options.EffectiveInstallBlackbox &&
+                                              blackboxExit &&
                                               await TryWaitForBlackboxDkgAsync(cancellationToken).ConfigureAwait(false);
-                    if (blackboxProvidesDkg)
-                    {
-                        Report("Blackbox reports its own DKG node reachable; skipping Axiom's standalone DKG " +
-                               "to avoid a second unused node on this machine.");
-                        dkgInstalled = true;
-                        dkgStepSucceeded = true;
-                    }
-                    else
-                    {
-                        // If the Hermes config already names a DKG home, start that node instead of
-                        // initializing a second home the guard would never read (#307).
-                        if (moduleInstaller.StartDkg())
+                        if (blackboxProvidesDkg)
                         {
-                            Report("Started the DKG node the Hermes config names; no second home was created.");
+                            Report("Blackbox reports its own DKG node reachable; skipping Axiom's standalone DKG " +
+                                   "to avoid a second unused node on this machine.");
+                            dkgInstalled = true;
                             dkgStepSucceeded = true;
                         }
                         else
                         {
-                            Report("Configuring the official DKG node silently in the background...");
-                            dkgStepSucceeded = await Task.Run(
-                                () => moduleInstaller.InstallDkgAndWait(Report),
-                                cancellationToken).ConfigureAwait(false);
-                            Report($"DKG installer exit code: {(dkgStepSucceeded ? "0" : "non-zero")}.");
+                            // If the Hermes config already names a DKG home, start that node instead of
+                            // initializing a second home the guard would never read (#307).
+                            if (moduleInstaller.StartDkg())
+                            {
+                                Report("Started the DKG node the Hermes config names; no second home was created.");
+                                dkgStepSucceeded = true;
+                            }
+                            else
+                            {
+                                Report("Configuring the official DKG node silently in the background...");
+                                dkgStepSucceeded = await Task.Run(
+                                    () => moduleInstaller.InstallDkgAndWait(Report),
+                                    cancellationToken).ConfigureAwait(false);
+                                Report($"DKG installer exit code: {(dkgStepSucceeded ? "0" : "non-zero")}.");
+                            }
                         }
+                    }
+                    else
+                    {
+                        Report("Local DKG node: skipped (not included in selected installation profile).");
                     }
 
                     var hermesLocal = Path.Combine(
@@ -333,30 +372,54 @@ internal static class SetupInstaller
                         Report("Protected user-state check: MCP servers, models, favorites, sessions and Antigravity/Gemini history were unchanged.");
                     }
 
-                    blackboxInstalled = await WaitForEndpointAsync(
-                        "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
-
-                    // #307: the node, the guard and the CLI must agree on one DKG home. Probe the
-                    // resolved home's own port and token and prove the identity endpoint accepts it.
-                    var dkgHome = DkgHomeResolver.ResolveEffective(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        ReadConfigOrNull,
-                        Directory.Exists);
-                    var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, Report, cancellationToken)
-                        .ConfigureAwait(false);
-                    dkgInstalled = dkgIdentity.Verified;
-
-                    Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}; " +
-                           $"DKG endpoint: {(dkgInstalled ? (blackboxProvidesDkg ? "provided by Blackbox" : "connected") : "not verified")}.");
-                    Report(dkgIdentity.Summary + ".");
-                    if (!dkgIdentity.Verified)
+                    if (options.EffectiveInstallBlackbox)
                     {
-                        Report("WARNING: findings cannot be written to the local graph until the DKG " +
-                               "identity check passes; check that hermes config.yaml, the guard and the " +
-                               "node use this home.");
+                        blackboxInstalled = await WaitForEndpointAsync(
+                            "http://127.0.0.1:9700/api/graph-status", cancellationToken).ConfigureAwait(false);
+                        Report($"Blackbox endpoint: {(blackboxInstalled ? "connected" : "not verified")}.");
+                        if (!blackboxExit || !blackboxInstalled)
+                        {
+                            partialIssues.Add(
+                                "Blackbox runtime did not install cleanly or could not be reached; Blackbox-dependent agent protection remains unavailable until repaired.");
+                        }
                     }
 
-                    Report("Installing agent hooks after the Blackbox runtime is prepared.");
+                    if (options.EffectiveInstallDkg)
+                    {
+                        // #307: the node, the guard and the CLI must agree on one DKG home. Probe the
+                        // resolved home's own port and token and prove the identity endpoint accepts it.
+                        var dkgHome = DkgHomeResolver.ResolveEffective(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            ReadConfigOrNull,
+                            Directory.Exists);
+                        var dkgIdentity = await WaitForDkgIdentityAsync(dkgHome, Report, cancellationToken)
+                            .ConfigureAwait(false);
+                        dkgInstalled = dkgIdentity.Verified;
+
+                        Report($"DKG endpoint: {(dkgInstalled ? (blackboxProvidesDkg ? "provided by Blackbox" : "connected") : "not verified")}.");
+                        Report(dkgIdentity.Summary + ".");
+                        if (!dkgIdentity.Verified)
+                        {
+                            Report("WARNING: findings cannot be written to the local graph until the DKG " +
+                                   "identity check passes; check that hermes config.yaml, the guard and the " +
+                                   "node use this home.");
+                        }
+
+                        if (!dkgStepSucceeded || !dkgInstalled)
+                        {
+                            partialIssues.Add(
+                                "DKG node could not be initialized or verified (install Node.js LTS / npm if missing, then click Repair).");
+                        }
+                    }
+                }
+                else
+                {
+                    Report($"{modeLabel}: Blackbox and DKG runtime installation skipped.");
+                }
+
+                if (options.EffectiveInstallAgentHooks)
+                {
+                    Report("Installing AI coding agent hooks...");
                     var enforcementPolicy = EnforcementPolicyProvisioner.EnsureDefault();
                     Report(enforcementPolicy is null
                         ? "OS enforcement policy: an existing policy was kept (the service provisions one when absent)."
@@ -450,49 +513,32 @@ internal static class SetupInstaller
                 }
                 else
                 {
-                    Report("Partial installation selected: no Blackbox, DKG or agent hook files were changed.");
+                    Report($"{modeLabel}: AI coding agent hooks were skipped.");
                 }
 
-                string? warning = null;
-                if (options.CompleteInstallation)
+                var defaults = await SetupDefaults
+                    .ApplyOptionsAsync(
+                        options,
+                        Report,
+                        cancellationToken,
+                        serviceRegisteredEarly,
+                        blackboxInstalled,
+                        dkgInstalled,
+                        options.EffectiveInstallAgentHooks)
+                    .ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(defaults.Warning))
                 {
-                    if (!blackboxExit || !blackboxInstalled)
-                    {
-                        partialIssues.Add(
-                            "Blackbox runtime did not install cleanly or could not be reached; Blackbox-dependent agent protection remains unavailable until repaired.");
-                    }
-
-                    if (!dkgStepSucceeded || !dkgInstalled)
-                    {
-                        partialIssues.Add(
-                            "DKG node could not be initialized or verified (install Node.js LTS / npm if missing, then click Repair).");
-                    }
-
-                    var defaults = await SetupDefaults
-                        .ApplyCompleteAsync(options.InstallDir, Report, cancellationToken, serviceRegisteredEarly,
-                            options.AllowManualThreatSharing,
-                            options.EnableAutomaticThreatSharing)
-                        .ConfigureAwait(false);
-                    if (!string.IsNullOrWhiteSpace(defaults.Warning))
-                    {
-                        partialIssues.Add(defaults.Warning);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(upgradeWarning))
-                    {
-                        partialIssues.Add(upgradeWarning);
-                    }
-
-                    if (partialIssues.Count > 0)
-                    {
-                        warning = string.Join("\n\n", partialIssues.Distinct(StringComparer.Ordinal));
-                    }
+                    partialIssues.Add(defaults.Warning);
                 }
-                else
+
+                if (!string.IsNullOrWhiteSpace(upgradeWarning))
                 {
-                    SetupDefaults.WritePartialProfile();
-                    Report("Partial installation: Axiom Shield, Privacy Shield, autostart and optional modules stay off until you enable them.");
+                    partialIssues.Add(upgradeWarning);
                 }
+
+                string? warning = partialIssues.Count > 0
+                    ? string.Join("\n\n", partialIssues.Distinct(StringComparer.Ordinal))
+                    : null;
 
                 if (!OnboardingStore.IsCompleted)
                 {

@@ -5,7 +5,10 @@ set -euo pipefail
 release_url='https://github.com/OpenDKG/Axiom/releases/latest/download'
 scratch=''
 package=''
-complete=false
+mode='light'
+install_blackbox=false
+install_dkg=false
+install_hooks=false
 blackbox_revision='6df9193f8ba1d0a7adb39701d67c59b560408f8d' # blackbox-v1.5.0
 
 fail() {
@@ -13,11 +16,19 @@ fail() {
     exit 1
 }
 
+usage() {
+    printf '%s\n' \
+        'Usage: install-from-github.sh [--light|--complete|--optional [--with-blackbox] [--with-dkg] [--with-agent-hooks]]' \
+        '  --light (default)  Install Axiom seamlessly without AI agent modules or hooks.' \
+        '  --complete         Install Axiom plus the pinned Umanitek Blackbox runtime, local Oxigraph DKG node, and AI agent hooks.' \
+        '  --optional         Customize which AI agent components are installed alongside Axiom (--with-*/--no-*).'
+}
+
 install_agent_modules() (
     local desktop=$1 capability=$2 runtime parent lock checkout python stage='' launcher='' graph_status=''
     [[ -r $capability && $(<"$capability") == 1 ]] ||
-        fail 'Complete setup requires a newer Axiom package. Update Axiom first.'
-    [[ $EUID -ne 0 ]] || fail 'Run Complete setup as your desktop user.'
+        fail 'Agent module setup requires a newer Axiom package. Update Axiom first.'
+    [[ $EUID -ne 0 ]] || fail 'Run Complete/Optional agent setup as your desktop user.'
     runtime=$("$desktop" --axiom-unix-agent-setup path) ||
         fail 'Could not locate the Axiom agent runtime directory.'
     [[ $runtime = /* && ! -L $runtime ]] ||
@@ -26,59 +37,64 @@ install_agent_modules() (
     mkdir -p -- "$parent"
     lock="$parent/.axiom-complete.lock"
     mkdir "$lock" ||
-        fail "Complete setup is already running. If it was interrupted, remove the empty lock directory at $lock and retry."
+        fail "Agent module setup is already running. If it was interrupted, remove the empty lock directory at $lock and retry."
     trap '[[ -z $stage ]] || rm -rf -- "$stage"; [[ -z $launcher ]] || rm -f -- "$launcher"; rmdir -- "$lock"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
-    graph_status=$(curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:9700/api/graph-status 2>/dev/null) || graph_status=''
-    if [[ -x $runtime/axiom-blackbox-python ]] &&
-        "$runtime/axiom-blackbox-python" -c 'import json, sys; from plugins.blackbox.guard import hooks; sys.exit(json.load(sys.stdin).get("node_reachable") is not True)' \
-            <<< "$graph_status" >/dev/null 2>&1; then
-        printf 'Using the existing Axiom-managed Blackbox runtime.\n'
-    else
-        command -v git >/dev/null || fail 'Install Git, then rerun Complete setup.'
-        if [[ -e $runtime ]]; then
-            [[ -d $runtime/.git && $(git -C "$runtime" rev-parse HEAD) == "$blackbox_revision" ]] ||
-                fail 'An existing runtime has a different revision. Its Blackbox checkout was preserved.'
+    if $install_blackbox || $install_dkg; then
+        graph_status=$(curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:9700/api/graph-status 2>/dev/null) || graph_status=''
+        if [[ -x $runtime/axiom-blackbox-python ]] &&
+            "$runtime/axiom-blackbox-python" -c 'import json, sys; from plugins.blackbox.guard import hooks; sys.exit(json.load(sys.stdin).get("node_reachable") is not True)' \
+                <<< "$graph_status" >/dev/null 2>&1; then
+            printf 'Using the existing Axiom-managed Blackbox runtime.\n'
         else
-            if [[ -n $graph_status || -x $HOME/.local/bin/blackbox ]] || command -v blackbox >/dev/null; then
-                fail 'Another Blackbox installation was found and preserved. Complete setup only manages its own runtime.'
+            command -v git >/dev/null || fail 'Install Git, then rerun setup.'
+            if [[ -e $runtime ]]; then
+                [[ -d $runtime/.git && $(git -C "$runtime" rev-parse HEAD) == "$blackbox_revision" ]] ||
+                    fail 'An existing runtime has a different revision. Its Blackbox checkout was preserved.'
+            else
+                if [[ -n $graph_status || -x $HOME/.local/bin/blackbox ]] || command -v blackbox >/dev/null; then
+                    fail 'Another Blackbox installation was found and preserved. Axiom only manages its own runtime.'
+                fi
+                stage=$(mktemp -d "$parent/.axiom-blackbox.XXXXXX")
             fi
-            stage=$(mktemp -d "$parent/.axiom-blackbox.XXXXXX")
-        fi
-        if [[ -n $stage ]]; then
-            checkout="$stage/agent-blackbox"
-            git init -q "$checkout"
-            git -C "$checkout" fetch -q --depth 1 https://github.com/umanitek/agent-blackbox.git "$blackbox_revision"
-            git -C "$checkout" checkout -q --detach FETCH_HEAD
-            [[ $(git -C "$checkout" rev-parse HEAD) == "$blackbox_revision" ]] ||
-                fail 'Blackbox checkout did not match the pinned revision.'
-            mv -n "$checkout" "$parent/"
-            [[ ! -e $checkout ]] || fail 'Another Blackbox installation started. Retry Complete setup.'
-        fi
-        (
-            cd "$runtime"
-            BLACKBOX_SETUP_ONLY=false BLACKBOX_USE_EXISTING_HERMES=0 BLACKBOX_MODE=block \
-                BLACKBOX_HERMES_SETUP=never BLACKBOX_SYNC_MODE=wait \
-                bash scripts/blackbox-install.sh --store oxigraph
-        ) || fail 'Core Axiom is installed. Blackbox/DKG setup did not finish. Fix the error above and rerun --complete.'
+            if [[ -n $stage ]]; then
+                checkout="$stage/agent-blackbox"
+                git init -q "$checkout"
+                git -C "$checkout" fetch -q --depth 1 https://github.com/umanitek/agent-blackbox.git "$blackbox_revision"
+                git -C "$checkout" checkout -q --detach FETCH_HEAD
+                [[ $(git -C "$checkout" rev-parse HEAD) == "$blackbox_revision" ]] ||
+                    fail 'Blackbox checkout did not match the pinned revision.'
+                mv -n "$checkout" "$parent/"
+                [[ ! -e $checkout ]] || fail 'Another Blackbox installation started. Retry setup.'
+            fi
+            (
+                cd "$runtime"
+                BLACKBOX_SETUP_ONLY=false BLACKBOX_USE_EXISTING_HERMES=0 BLACKBOX_MODE=block \
+                    BLACKBOX_HERMES_SETUP=never BLACKBOX_SYNC_MODE=wait \
+                    bash scripts/blackbox-install.sh --store oxigraph
+            ) || fail 'Core Axiom is installed. Blackbox/DKG setup did not finish. Fix the error above and rerun --complete.'
 
-        python=$("$runtime/scripts/run-in-hermes-env" python3 -c \
-            'import sys; from plugins.blackbox.guard import hooks; print(sys.executable)' | tail -n 1) ||
-            fail 'Blackbox was installed, but its Python guard could not be loaded.'
-        [[ $python = /* && -x $python ]] || fail 'Blackbox did not report a usable Python interpreter.'
-        launcher=$(mktemp "$runtime/.axiom-python.XXXXXX")
-        # Pin the interpreter selected by Hermes at setup time so a tool call does not trigger an env sync.
-        printf '#!/bin/bash\nexport HERMES_HOME=%q\nexec %q "$@"\n' "${HERMES_HOME:-$HOME/.hermes}" "$python" > "$launcher"
-        chmod 0700 "$launcher"
-        [[ ! -d $runtime/axiom-blackbox-python ]] || fail 'The Blackbox interpreter launcher path is occupied.'
-        mv -f "$launcher" "$runtime/axiom-blackbox-python"
-        launcher=''
+            python=$("$runtime/scripts/run-in-hermes-env" python3 -c \
+                'import sys; from plugins.blackbox.guard import hooks; print(sys.executable)' | tail -n 1) ||
+                fail 'Blackbox was installed, but its Python guard could not be loaded.'
+            [[ $python = /* && -x $python ]] || fail 'Blackbox did not report a usable Python interpreter.'
+            launcher=$(mktemp "$runtime/.axiom-python.XXXXXX")
+            # Pin the interpreter selected by Hermes at setup time so a tool call does not trigger an env sync.
+            printf '#!/bin/bash\nexport HERMES_HOME=%q\nexec %q "$@"\n' "${HERMES_HOME:-$HOME/.hermes}" "$python" > "$launcher"
+            chmod 0700 "$launcher"
+            [[ ! -d $runtime/axiom-blackbox-python ]] || fail 'The Blackbox interpreter launcher path is occupied.'
+            mv -f "$launcher" "$runtime/axiom-blackbox-python"
+            launcher=''
+        fi
     fi
-    "$desktop" --axiom-unix-agent-setup refresh ||
-        fail 'Blackbox/DKG setup finished, but Axiom could not refresh its agent hooks.'
-    printf 'Blackbox/DKG setup complete. Axiom checked hooks for detected agents. Review each agent status in Axiom.\n'
+
+    if $install_hooks; then
+        "$desktop" --axiom-unix-agent-setup refresh ||
+            fail 'Agent setup finished, but Axiom could not refresh its agent hooks.'
+    fi
+    printf 'Agent module setup (%s) complete. Review each status inside Axiom.\n' "$mode"
 )
 
 download_package() {
@@ -122,7 +138,8 @@ install_linux() {
     chmod a+r "$package"
     sudo apt-get install -y "$package"
     [[ -x /usr/bin/axiom-firewall ]] || fail 'The Axiom desktop launcher is missing.'
-    if $complete; then
+    /usr/bin/axiom-firewall --axiom-unix-agent-setup profile "$mode" >/dev/null 2>&1 || true
+    if $install_blackbox || $install_dkg || $install_hooks; then
         install_agent_modules /usr/bin/axiom-firewall /usr/lib/axiom-firewall/axiom-unix-agent-setup
     fi
     nohup /usr/bin/axiom-firewall </dev/null >/dev/null 2>&1 &
@@ -147,23 +164,65 @@ install_macos() {
         mv -n "$bundle" "$applications_dir/"
         [[ ! -e $bundle ]] || fail 'The destination already exists.'
     fi
-    if $complete; then
+    "$application/Contents/MacOS/Axiom" --axiom-unix-agent-setup profile "$mode" >/dev/null 2>&1 || true
+    if $install_blackbox || $install_dkg || $install_hooks; then
         install_agent_modules "$application/Contents/MacOS/Axiom" "$application/Contents/Resources/axiom-unix-agent-setup"
     fi
     open "$application"
 }
 
-case "${1:-}" in
-    '') ;;
-    --complete) complete=true ;;
-    -h|--help)
-        printf '%s\n' 'Usage: install-from-github.sh [--complete]' \
-            'By default install Axiom. --complete also installs the Umanitek Blackbox runtime and its local DKG node.'
-        exit 0
-        ;;
-    *) fail 'Usage: install-from-github.sh [--complete]' ;;
-esac
-[[ $# -le 1 ]] || fail 'Usage: install-from-github.sh [--complete]'
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --complete|--full)
+            mode='complete'
+            install_blackbox=true
+            install_dkg=true
+            install_hooks=true
+            ;;
+        --light|--partial|--no-hooks)
+            mode='light'
+            install_blackbox=false
+            install_dkg=false
+            install_hooks=false
+            ;;
+        --optional|--custom)
+            mode='optional'
+            ;;
+        --with-blackbox)
+            mode='optional'
+            install_blackbox=true
+            ;;
+        --no-blackbox)
+            mode='optional'
+            install_blackbox=false
+            ;;
+        --with-dkg)
+            mode='optional'
+            install_dkg=true
+            ;;
+        --no-dkg)
+            mode='optional'
+            install_dkg=false
+            ;;
+        --with-agent-hooks)
+            mode='optional'
+            install_hooks=true
+            ;;
+        --no-agent-hooks)
+            mode='optional'
+            install_hooks=false
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 case "$(uname -s)" in
     Linux) install_linux ;;

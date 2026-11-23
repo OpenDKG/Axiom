@@ -267,10 +267,17 @@ public sealed class CopilotProtection
                 else:
                     print(json.dumps({"permissionDecision": "allow"}))
             except Exception as exc:
-                # Fail open by emitting an explicit allow; runtime failures never crash the CLI.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
-                print(json.dumps({"permissionDecision": "allow"}))
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if _is_fail_closed():
+                    record("GUARD_FAILED", tool, "block", "failed_closed", duration_ms, type(exc).__name__)
+                    print(json.dumps({
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": "Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.",
+                    }))
+                else:
+                    # Fail open by emitting an explicit allow; runtime failures never crash the CLI.
+                    record("GUARD_FAILED", tool, "", "error", duration_ms, type(exc).__name__)
+                    print(json.dumps({"permissionDecision": "allow"}))
 
 
         if __name__ == "__main__":

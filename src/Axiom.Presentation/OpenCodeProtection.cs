@@ -228,12 +228,25 @@ public sealed class OpenCodeProtection
         return $$"""
             // Managed by Axiom. OpenCode V1 fallback; V2 is handled by the directory plugin.
             import { spawn, spawnSync } from "node:child_process"
-            import { appendFileSync } from "node:fs"
+            import { appendFileSync, readFileSync } from "node:fs"
 
             const python = "{{python}}"
             const bridge = "{{bridge}}"
             const workingDirectory = "{{workingDirectory}}"
             const evidence = "{{evidence}}"
+            const policyPath = evidence.replace(/agent-evidence\.jsonl$/i, "guard-failure-policy.txt")
+
+            function isFailClosed() {
+              const envFlag = (process.env.AXIOM_GUARD_FAIL_CLOSED || "").trim().toLowerCase()
+              if (["1", "true", "yes", "fail-closed", "strict"].includes(envFlag)) return true
+              if (["0", "false", "no", "fail-open"].includes(envFlag)) return false
+              try {
+                const value = readFileSync(policyPath, "utf8").trim().toLowerCase()
+                return ["fail-closed", "fail_closed", "strict", "true", "1"].includes(value)
+              } catch {
+                return false
+              }
+            }
 
             function record(eventType, tool, decision, guardStatus, durationMs, errorCode, session, call) {
               try {
@@ -288,11 +301,19 @@ public sealed class OpenCodeProtection
                       windowsHide: true,
                     })
                     if (result.status !== 0 || !result.stdout) {
+                      if (isFailClosed()) {
+                        record("GUARD_FAILED", event.tool, "block", "failed_closed", Date.now() - started, "bridge", event.sessionID, event.id)
+                        throw new Error("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.")
+                      }
                       record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge", event.sessionID, event.id)
                       return
                     }
                     decision = JSON.parse(result.stdout)
                   } catch {
+                    if (isFailClosed()) {
+                      record("GUARD_FAILED", event.tool, "block", "failed_closed", Date.now() - started, "spawn", event.sessionID, event.id)
+                      throw new Error("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.")
+                    }
                     record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn", event.sessionID, event.id)
                     return
                   }
@@ -328,12 +349,25 @@ public sealed class OpenCodeProtection
             // Managed by Axiom. OpenCode V2 directory plugin.
             import { Plugin } from "@opencode/plugin"
             import { spawn, spawnSync } from "node:child_process"
-            import { appendFileSync } from "node:fs"
+            import { appendFileSync, readFileSync } from "node:fs"
 
             const python = "{{python}}"
             const bridge = "{{bridge}}"
             const workingDirectory = "{{workingDirectory}}"
             const evidence = "{{evidence}}"
+            const policyPath = evidence.replace(/agent-evidence\.jsonl$/i, "guard-failure-policy.txt")
+
+            function isFailClosed() {
+              const envFlag = (process.env.AXIOM_GUARD_FAIL_CLOSED || "").trim().toLowerCase()
+              if (["1", "true", "yes", "fail-closed", "strict"].includes(envFlag)) return true
+              if (["0", "false", "no", "fail-open"].includes(envFlag)) return false
+              try {
+                const value = readFileSync(policyPath, "utf8").trim().toLowerCase()
+                return ["fail-closed", "fail_closed", "strict", "true", "1"].includes(value)
+              } catch {
+                return false
+              }
+            }
 
             function record(eventType, tool, decision, guardStatus, durationMs, errorCode, session, call) {
               try {
@@ -384,11 +418,19 @@ public sealed class OpenCodeProtection
                       windowsHide: true,
                     })
                     if (result.status !== 0 || !result.stdout) {
+                      if (isFailClosed()) {
+                        record("GUARD_FAILED", event.tool, "block", "failed_closed", Date.now() - started, "bridge", event.sessionID, event.id)
+                        throw new Error("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.")
+                      }
                       record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "bridge", event.sessionID, event.id)
                       return
                     }
                     decision = JSON.parse(result.stdout)
                   } catch {
+                    if (isFailClosed()) {
+                      record("GUARD_FAILED", event.tool, "block", "failed_closed", Date.now() - started, "spawn", event.sessionID, event.id)
+                      throw new Error("Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.")
+                    }
                     record("GUARD_FAILED", event.tool, "", "error", Date.now() - started, "spawn", event.sessionID, event.id)
                     return
                   }
@@ -655,6 +697,7 @@ public sealed class OpenCodeProtection
             payload = {}
             started = time.monotonic()
             framework = "opencode"
+            event = ""
             tool = ""
             session = ""
             call = ""
@@ -667,19 +710,21 @@ public sealed class OpenCodeProtection
                 event = str(payload.get("event", ""))
                 workspace = str(payload.get("workspace", ""))
                 _out = sys.stdout
-                with contextlib.redirect_stdout(sys.stderr):
-                    from plugins.blackbox.guard import hooks as guard
 
-                    if event == "session_start":
+                if event == "session_start":
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
                         if hasattr(guard, "on_session_start"):
                             guard.on_session_start(session_id=session, framework=framework, workspace=workspace)
-                        record(framework, "SESSION_STARTED", "", "ok", "ok", 0, session=session)
-                        print("{}", file=_out, flush=True)
-                        return
+                    record(framework, "SESSION_STARTED", "", "ok", "ok", 0, session=session)
+                    print("{}", file=_out, flush=True)
+                    return
 
-                    if event == "pre_api_request":
-                        user_text = str(payload.get("user_message") or "")
-                        request_messages = payload.get("request_messages") or []
+                if event == "pre_api_request":
+                    user_text = str(payload.get("user_message") or "")
+                    request_messages = payload.get("request_messages") or []
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
                         if hasattr(guard, "on_pre_api_request"):
                             guard.on_pre_api_request(
                                 user_message=user_text,
@@ -714,11 +759,13 @@ public sealed class OpenCodeProtection
                                     return
                             except Exception:
                                 pass
-                        record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
-                        print("{}", file=_out, flush=True)
-                        return
+                    record(framework, "PROMPT_SCANNED", "", "ok", "ok", 0, session=session)
+                    print("{}", file=_out, flush=True)
+                    return
 
-                    if event == "session_end":
+                if event == "session_end":
+                    with contextlib.redirect_stdout(sys.stderr):
+                        from plugins.blackbox.guard import hooks as guard
                         if hasattr(guard, "on_session_end"):
                             guard.on_session_end(
                                 session_id=session,
@@ -727,65 +774,68 @@ public sealed class OpenCodeProtection
                                 framework=framework,
                                 workspace=workspace,
                             )
-                        record(framework, "SESSION_ENDED", "", "ok", "ok", 0, session=session)
-                        print("{}", file=_out, flush=True)
-                        return
+                    record(framework, "SESSION_ENDED", "", "ok", "ok", 0, session=session)
+                    print("{}", file=_out, flush=True)
+                    return
 
-                    raw_args = payload.get("args") or {}
-                    if isinstance(raw_args, dict) and "filePath" in raw_args and "path" not in raw_args:
-                        # OpenCode names the file argument filePath; Blackbox's detectors read
-                        # "path" (action_parsing._PATH_KEYS is case-sensitive), so a raw
-                        # pass-through misses every file-access rule.
-                        raw_args = {**raw_args, "path": raw_args["filePath"]}
-                    try:
-                        from plugins.blackbox.kernel.config import load_blackbox_config
-                        protected = load_blackbox_config().protected_paths
-                    except Exception:
-                        protected = ()
-                    command_text = _command_text(raw_args)
-                    if _is_quarantined(session):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "quarantine", session, call)
-                        print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}), file=_out, flush=True)
-                        return
-                    if _tampers_with_guard(command_text):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "tamper", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}), file=_out, flush=True)
-                        return
-                    if _deletes_protected(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "delete", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}), file=_out, flush=True)
-                        return
-                    if _hidden_path_read(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "read", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}), file=_out, flush=True)
-                        return
-                    if _tampers_with_protected(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
-                        return
-                    store = _sensitive_store(command_text) or _sensitive_store(_arg_path(raw_args))
-                    if store:
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "credential-store", session, call)
-                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: it accesses a credential store ({store})."}), file=_out, flush=True)
-                        return
-                    injection = _axiom_injection(raw_args)
-                    if injection:
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "injection-heuristic", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: prompt-injection phrasing in the tool arguments."}), file=_out, flush=True)
-                        return
-                    if _exfiltrates_protected(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
-                        return
-                    if _executes_protected(command_text, protected):
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "execution", session, call)
-                        print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}), file=_out, flush=True)
-                        return
-                    escalation = _escalation_risk(command_text)
-                    if escalation:
-                        record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "escalation", session, call)
-                        print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}), file=_out, flush=True)
-                        return
+                raw_args = payload.get("args") or {}
+                if isinstance(raw_args, dict) and "filePath" in raw_args and "path" not in raw_args:
+                    # OpenCode names the file argument filePath; Blackbox's detectors read
+                    # "path" (action_parsing._PATH_KEYS is case-sensitive), so a raw
+                    # pass-through misses every file-access rule.
+                    raw_args = {**raw_args, "path": raw_args["filePath"]}
+                protected = _load_protected_paths()
+                command_text = _command_text(raw_args)
+                if _is_quarantined(session):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "quarantine", session, call)
+                    print(json.dumps({"action": "block", "message": "Session quarantined after a prompt-injection finding."}), file=_out, flush=True)
+                    return
+                if _tampers_with_guard(command_text):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "tamper", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it modifies the local guard."}), file=_out, flush=True)
+                    return
+                if _deletes_protected(command_text, protected):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "delete", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it deletes a protected path."}), file=_out, flush=True)
+                    return
+                if _hidden_path_read(command_text, protected):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "read", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it reads a protected path through a hidden path form."}), file=_out, flush=True)
+                    return
+                if _tampers_with_protected(command_text, protected):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "permissions", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it changes ownership or permissions of a protected path."}), file=_out, flush=True)
+                    return
+                store = _sensitive_store(command_text) or _sensitive_store(_arg_path(raw_args))
+                if store:
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "credential-store", session, call)
+                    print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: it accesses a credential store ({store})."}), file=_out, flush=True)
+                    return
+                injection = _axiom_injection(raw_args)
+                if injection:
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "injection-heuristic", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: prompt-injection phrasing in the tool arguments."}), file=_out, flush=True)
+                    return
+                if _exfiltrates_protected(command_text, protected):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "exfiltration", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it uploads a file from a protected path."}), file=_out, flush=True)
+                    return
+                if _executes_protected(command_text, protected):
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "execution", session, call)
+                    print(json.dumps({"action": "block", "message": "Blackbox blocked this call: it launches a file from a protected path."}), file=_out, flush=True)
+                    return
+                escalation = _escalation_risk(command_text)
+                if escalation:
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, "escalation", session, call)
+                    print(json.dumps({"action": "block", "message": f"Blackbox blocked this call: {escalation}."}), file=_out, flush=True)
+                    return
+                safety = _check_command_safety(raw_args, protected)
+                if safety is not None:
+                    record(framework, "GUARD_BLOCKED", tool, "block", "blocked", 0, safety[0], session, call)
+                    print(json.dumps({"action": "block", "message": safety[1]}), file=_out, flush=True)
+                    return
+                with contextlib.redirect_stdout(sys.stderr):
+                    from plugins.blackbox.guard import hooks as guard
                     decision = guard.on_pre_tool_call(
                         tool_name=tool,
                         args=raw_args,
@@ -804,11 +854,21 @@ public sealed class OpenCodeProtection
                     call=call)
                 print(json.dumps(decision or {}))
             except Exception as exc:
-                # Fail open: a Blackbox or bridge fault must not break the host agent.
-                record(framework, "GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__,
-                       session=session, call=call)
-                print("{}")
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if event not in ("session_start", "pre_api_request", "session_end") and _is_fail_closed():
+                    record(framework, "GUARD_FAILED", tool, "block", "failed_closed",
+                           duration_ms, type(exc).__name__,
+                           session=session, call=call)
+                    print(json.dumps({
+                        "action": "block",
+                        "message": "Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.",
+                    }))
+                else:
+                    # Fail open: a Blackbox or bridge fault must not break the host agent.
+                    record(framework, "GUARD_FAILED", tool, "", "error",
+                           duration_ms, type(exc).__name__,
+                           session=session, call=call)
+                    print("{}")
 
 
         if __name__ == "__main__":

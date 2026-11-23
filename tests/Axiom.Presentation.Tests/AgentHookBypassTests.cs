@@ -631,8 +631,126 @@ public sealed class AgentHookBypassTests
         var stdout = process.StandardOutput.ReadToEnd();
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit(15_000);
-        Assert.True(process.HasExited, "Python subprocess did not finish within 15s.");
+            Assert.True(process.HasExited, "Python subprocess did not finish within 15s.");
         return (process.ExitCode, stdout, stderr);
+    }
+
+    [Theory]
+    [MemberData(nameof(HostAdapters))]
+    public void Built_in_local_fallback_blocks_protected_secrets_without_blackbox_installed(string host)
+    {
+        var python = FindWorkingPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var sandbox = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), $"axiom-fallback-{Guid.NewGuid():N}"));
+        try
+        {
+            // Deliberately do NOT write plugins.blackbox in the sandbox.
+            var scriptPath = Path.Combine(sandbox.FullName, "hook.py");
+            File.WriteAllText(scriptPath, BuildHostScript(host, sandbox.FullName));
+
+            var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["LOCALAPPDATA"] = sandbox.FullName,
+                ["HOME"] = sandbox.FullName,
+                ["USERPROFILE"] = sandbox.FullName,
+            };
+
+            var (exitCode, stdout, stderr) = RunProcess(
+                python,
+                [scriptPath],
+                sandbox.FullName,
+                BuildPreToolPayload(host, @"type C:\Users\alice\.ssh\id_rsa"),
+                env);
+
+            AssertHostDeny(host, exitCode, stdout, stderr);
+        }
+        finally
+        {
+            try
+            {
+                sandbox.Delete(recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(HostAdapters))]
+    public void Strict_fail_closed_denies_when_guard_is_unavailable_and_fail_open_allows_by_default(string host)
+    {
+        var python = FindWorkingPython();
+        if (python is null)
+        {
+            return;
+        }
+
+        var sandbox = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), $"axiom-strict-{Guid.NewGuid():N}"));
+        try
+        {
+            var scriptPath = Path.Combine(sandbox.FullName, "hook.py");
+            File.WriteAllText(scriptPath, BuildHostScript(host, sandbox.FullName));
+
+            var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["LOCALAPPDATA"] = sandbox.FullName,
+                ["HOME"] = sandbox.FullName,
+                ["USERPROFILE"] = sandbox.FullName,
+            };
+
+            var benignPayload = BuildPreToolPayload(host, "git status");
+
+            // 1) Default fail-open: benign call is allowed when Blackbox is absent, recording FAILED_OPEN.
+            var (openCode, openStdout, openStderr) = RunProcess(python, [scriptPath], sandbox.FullName, benignPayload, env);
+            Assert.Equal(0, openCode);
+            Assert.DoesNotContain("\"decision\":\"block\"", openStdout, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"decision\":\"deny\"", openStdout, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"permission\":\"deny\"", openStdout, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"permissionDecision\":\"deny\"", openStdout, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("\"cancel\":true", openStdout, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Fail-closed", openStderr, StringComparison.OrdinalIgnoreCase);
+
+            var evidencePath = Path.Combine(sandbox.FullName, "Axiom", "agent-evidence.jsonl");
+            var openEvents = new Axiom.Presentation.AgentEvidenceStore(evidencePath).ReadRecent();
+            var openEvent = Assert.Single(openEvents);
+            Assert.Equal("GUARD_FAILED", openEvent.EventType);
+            Assert.Equal("FAILED_OPEN", openEvent.EffectiveChannel);
+
+            // 2) Opt-in fail-closed: same unavailable guard strictly denies the benign call.
+            Assert.True(Axiom.Contracts.Blackbox.AgentGuardFailurePolicyStore.SetFailClosed(true, sandbox.FullName));
+            Assert.True(Axiom.Contracts.Blackbox.AgentGuardFailurePolicyStore.IsFailClosed(sandbox.FullName));
+
+            var (closedCode, closedStdout, closedStderr) = RunProcess(python, [scriptPath], sandbox.FullName, benignPayload, env);
+            AssertHostDeny(host, closedCode, closedStdout, closedStderr);
+
+            var closedEvents = new Axiom.Presentation.AgentEvidenceStore(evidencePath).ReadRecent();
+            Assert.Equal(2, closedEvents.Count);
+            Assert.Equal("GUARD_FAILED", closedEvents[^1].EventType);
+            Assert.Equal("FAILED_CLOSED", closedEvents[^1].EffectiveChannel);
+        }
+        finally
+        {
+            try
+            {
+                sandbox.Delete(recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
     }
 
     private static JsonDocument ParseJson(string stdout, string stderr, string host)

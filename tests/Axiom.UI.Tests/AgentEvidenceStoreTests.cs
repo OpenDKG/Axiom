@@ -98,6 +98,7 @@ public sealed class AgentEvidenceStoreTests
                 $"{{\"timestampUtc\":\"{now.AddSeconds(1):O}\",\"framework\":\"codex\",\"eventType\":\"GUARD_BLOCKED\",\"tool\":\"bash\",\"decision\":\"block\",\"guardStatus\":\"blocked\"}}",
                 $"{{\"timestampUtc\":\"{now.AddSeconds(2):O}\",\"framework\":\"gemini\",\"eventType\":\"GUARD_ALLOWED\",\"tool\":\"read_file\",\"decision\":\"allowed\",\"guardStatus\":\"allowed\"}}",
                 $"{{\"timestampUtc\":\"{now.AddSeconds(3):O}\",\"framework\":\"cursor\",\"eventType\":\"GUARD_FAILED\",\"tool\":\"bash\",\"decision\":\"\",\"guardStatus\":\"error\"}}",
+                $"{{\"timestampUtc\":\"{now.AddSeconds(4):O}\",\"framework\":\"codex\",\"eventType\":\"GUARD_FAILED\",\"tool\":\"bash\",\"decision\":\"block\",\"guardStatus\":\"failed_closed\"}}",
             ]);
 
             var events = new AgentEvidenceStore(path).ReadRecent();
@@ -106,6 +107,7 @@ public sealed class AgentEvidenceStoreTests
             Assert.Equal("HOST_DENY_SENT", events[1].EffectiveChannel);
             Assert.Equal("DETECTOR_ONLY", events[2].EffectiveChannel);
             Assert.Equal("FAILED_OPEN", events[3].EffectiveChannel);
+            Assert.Equal("FAILED_CLOSED", events[4].EffectiveChannel);
         }
         finally
         {

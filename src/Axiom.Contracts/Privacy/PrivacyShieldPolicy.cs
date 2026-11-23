@@ -68,23 +68,31 @@ public sealed class PrivacyShieldPolicy
     /// </summary>
     private static readonly string[] ProtectedSecurityDomains =
     [
-        // Google Safe Browsing (Chrome, Edge-on-Chromium fallbacks, Firefox)
+        // Google / Mozilla Safe Browsing (Chrome, Edge-on-Chromium fallbacks, Firefox)
         "safebrowsing.googleapis.com",
         "safebrowsing.google.com",
         "sb-ssl.google.com",
+        "safebrowsing-cache.google.com",
+        "shavar.services.mozilla.com",
         // Microsoft Defender SmartScreen and cloud-delivered protection
         "smartscreen.microsoft.com",
         "smartscreen-prod.microsoft.com",
+        "nav.smartscreen.microsoft.com",
         "checkappexec.microsoft.com",
         "urs.microsoft.com",
         "wdcp.microsoft.com",
         "wdcpalt.microsoft.com",
+        "definitionupdates.microsoft.com",
         // Windows Update and root/disallowed certificate trust list updates
         "update.microsoft.com",
         "windowsupdate.com",
+        "windowsupdate.microsoft.com",
         "delivery.mp.microsoft.com",
-        // Windows Push Notification Services
+        // Windows Push Notification Services & NCSI connectivity probes
         "client.wns.windows.com",
+        "wns.windows.com",
+        "dns.msftncsi.com",
+        "www.msftconnecttest.com",
         // Certificate revocation (OCSP/CRL) for common public CAs
         "ocsp.digicert.com",
         "crl3.digicert.com",
@@ -94,6 +102,9 @@ public sealed class PrivacyShieldPolicy
         "o.lencr.org",
         "ocsp.sectigo.com",
         "crl.sectigo.com",
+        "oneocsp.microsoft.com",
+        "crl.microsoft.com",
+        "mscrl.microsoft.com",
     ];
 
     private static readonly HashSet<string> ProtectedSecuritySet =

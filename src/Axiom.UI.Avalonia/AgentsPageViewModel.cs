@@ -176,6 +176,38 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
     [ObservableProperty]
     private EnforcementSurfaceState _enforcement = EnforcementSurfaceState.Current;
 
+    [ObservableProperty]
+    private bool _isFailClosedMode = AgentGuardFailurePolicyStore.IsFailClosed();
+
+    public string GuardFailurePolicyStatusText => IsFailClosedMode
+        ? "Fail-closed (Strict) · Local Fallback Active"
+        : "Fail-open (Default) · Local Fallback Active";
+
+    public string GuardFailurePolicyButtonText => IsFailClosedMode
+        ? "Switch to Fail-open"
+        : "Enable Fail-closed (Strict)";
+
+    public string GuardFailurePolicyDetailText => IsFailClosedMode
+        ? "Strict mode active: if Blackbox is offline or times out, hooks enforce Axiom's built-in local rules first and refuse unverified tool calls."
+        : "Default mode: if Blackbox is offline or times out, Axiom's built-in local rules still block protected secrets, SSH keys, crypto wallets and dangerous commands before failing open.";
+
+    partial void OnIsFailClosedModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(GuardFailurePolicyStatusText));
+        OnPropertyChanged(nameof(GuardFailurePolicyButtonText));
+        OnPropertyChanged(nameof(GuardFailurePolicyDetailText));
+    }
+
+    [RelayCommand]
+    private void ToggleGuardFailurePolicy()
+    {
+        var target = !IsFailClosedMode;
+        if (AgentGuardFailurePolicyStore.SetFailClosed(target))
+        {
+            IsFailClosedMode = target;
+        }
+    }
+
     private bool _enforcementReported;
 
     private bool _blackboxSharingKnown;
@@ -537,6 +569,8 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         {
             return;
         }
+
+        IsFailClosedMode = AgentGuardFailurePolicyStore.IsFailClosed();
 
         if (!IsAvailable)
         {
@@ -2740,24 +2774,39 @@ public sealed partial class AgentsPageViewModel : PageViewModel, IActivatablePag
         }
 
         HasSelectedHookEvidence = true;
-        var isBlocked = string.Equals(evidence.EventType, "GUARD_BLOCKED", StringComparison.OrdinalIgnoreCase) ||
+        var isFailedClosed = string.Equals(evidence.EffectiveChannel, "FAILED_CLOSED", StringComparison.OrdinalIgnoreCase);
+        var isBlocked = isFailedClosed ||
+                        string.Equals(evidence.EventType, "GUARD_BLOCKED", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(evidence.Decision, "block", StringComparison.OrdinalIgnoreCase);
         IsSelectedHookEvidenceBlocked = isBlocked;
         IsSelectedHookEvidenceAllowed = !isBlocked &&
                                         string.Equals(evidence.EventType, "GUARD_ALLOWED", StringComparison.OrdinalIgnoreCase);
 
-        var actionLabel = isBlocked
-            ? "BLOCKED"
-            : IsSelectedHookEvidenceAllowed
-                ? "ALLOWED"
-                : evidence.EventType;
+        var actionLabel = isFailedClosed
+            ? "FAILED CLOSED (DENIED)"
+            : isBlocked
+                ? "BLOCKED"
+                : IsSelectedHookEvidenceAllowed
+                    ? "ALLOWED"
+                    : evidence.EventType;
         SelectedHookEvidenceTitle = string.IsNullOrWhiteSpace(evidence.Tool)
             ? $"{evidence.Framework} · {actionLabel}"
             : $"{evidence.Framework} · {actionLabel} · {evidence.Tool}";
 
+        var evaluationLabel = isFailedClosed
+            ? "Fail-closed strict refusal (guard offline or error)"
+            : evidence.IsFailure
+                ? "Fail-open (guard offline or error)"
+                : isBlocked && !string.IsNullOrWhiteSpace(evidence.ErrorCode)
+                    ? $"Built-in local fallback guard ({evidence.ErrorCode})"
+                    : isBlocked
+                        ? "Blackbox guard policy block"
+                        : "Evaluated by guard";
+
         AddHookEvidenceDetail("Date & time", evidence.DateTimeText);
         AddHookEvidenceDetail("Framework", evidence.Framework);
         AddHookEvidenceDetail("Event", evidence.EventType);
+        AddHookEvidenceDetail("Evaluation", evaluationLabel);
         AddHookEvidenceDetail("Decision", evidence.Decision);
         AddHookEvidenceDetail("Guard status", evidence.GuardStatus);
         AddHookEvidenceDetail("Tool", evidence.Tool);

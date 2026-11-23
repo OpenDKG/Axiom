@@ -462,12 +462,96 @@ public static class AgentCommandGuard
             return ""
 
 
+        _DEFAULT_PROTECTED_PATHS = (
+            "~/.ssh/*",
+            "~/.gnupg/*",
+            "~/.aws/*",
+            "~/.azure/*",
+            "~/.kube/*",
+            "~/.config/gcloud/*",
+            "~/.solana/*",
+            "~/.config/solana/*",
+            "~/.ethereum/*",
+            "~/.bitcoin/*",
+            "~/.electrum/*",
+            "wallet.dat",
+            "id_rsa",
+            "id_ed25519",
+            "id_ecdsa",
+            ".env",
+            ".env.local",
+            ".env.production",
+            ".npmrc",
+            ".pypirc",
+            ".git-credentials",
+            ".netrc",
+            ".pgpass",
+            ".vault-token",
+        )
+
+
+        def _is_fail_closed() -> bool:
+            env_flag = (os.environ.get("AXIOM_GUARD_FAIL_CLOSED") or "").strip().lower()
+            if env_flag in ("1", "true", "yes", "fail-closed", "strict"):
+                return True
+            if env_flag in ("0", "false", "no", "fail-open"):
+                return False
+            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
+            policy_file = Path(local) / "Axiom" / "guard-failure-policy.txt"
+            try:
+                if policy_file.is_file():
+                    value = policy_file.read_text(encoding="utf-8").strip().lower()
+                    return value in ("fail-closed", "fail_closed", "strict", "true", "1")
+            except Exception:
+                pass
+            return False
+
+
         def _load_protected_paths():
+            merged = list(_DEFAULT_PROTECTED_PATHS)
+            seen = {item.lower() for item in merged}
+
+            def add_path(candidate):
+                if isinstance(candidate, str):
+                    trimmed = candidate.strip()
+                    if trimmed and trimmed.lower() not in seen:
+                        seen.add(trimmed.lower())
+                        merged.append(trimmed)
+
             try:
                 from plugins.blackbox.kernel.config import load_blackbox_config
-                return load_blackbox_config().protected_paths
+                for item in (load_blackbox_config().protected_paths or ()):
+                    add_path(item)
             except Exception:
-                return ()
+                pass
+
+            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
+            candidates = [Path(local) / "Axiom" / "enforcement-policy.json"]
+            program_data = os.environ.get("ProgramData") or os.environ.get("PROGRAMDATA")
+            if program_data:
+                candidates.append(Path(program_data) / "Axiom" / "enforcement-policy.json")
+            elif os.name != "nt":
+                candidates.append(Path("/etc/axiom/enforcement-policy.json"))
+
+            for policy_path in candidates:
+                try:
+                    if not policy_path.is_file():
+                        continue
+                    import json as _json
+                    data = _json.loads(policy_path.read_text(encoding="utf-8"))
+                    if not isinstance(data, dict):
+                        continue
+                    for item in (data.get("protectedPaths") or ()):
+                        add_path(item)
+                    inner = data.get("policy")
+                    if isinstance(inner, dict):
+                        for res in (inner.get("resources") or ()):
+                            if isinstance(res, dict):
+                                add_path(res.get("scope"))
+                except Exception:
+                    continue
+
+            return tuple(merged)
 
 
         def _arg_path(args) -> str:
@@ -556,15 +640,22 @@ public static class AgentCommandGuard
             if injection:
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
             command_text = _command_text(args)
+            arg_path = _arg_path(args)
             store = _sensitive_store(command_text)
             if not store:
-                store = _sensitive_store(_arg_path(args))
+                store = _sensitive_store(arg_path)
             if store:
                 return ("credential-store", f"Blackbox blocked this call: it accesses a credential store ({store}).")
-            if not command_text:
-                return None
             if protected is None:
                 protected = _load_protected_paths()
+            if arg_path:
+                norm_arg = _normalize_command(arg_path)
+                tokens = _protected_tokens(protected)
+                words = norm_arg.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
+                if any(word in tokens for word in words) or _glob_hits(norm_arg, tokens):
+                    return ("protected-path", "Blackbox blocked this call: it accesses a protected path.")
+            if not command_text:
+                return None
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):

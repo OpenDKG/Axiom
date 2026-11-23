@@ -337,9 +337,16 @@ public sealed class GeminiProtection
                         "reason": decision.get("message") or "Blocked by Axiom/Blackbox",
                     }))
             except Exception as exc:
-                # Fail open: a Blackbox or hook fault must not break Gemini CLI.
-                record("GUARD_FAILED", tool, "", "error",
-                       int((time.monotonic() - started) * 1000), type(exc).__name__)
+                duration_ms = int((time.monotonic() - started) * 1000)
+                if _is_fail_closed():
+                    record("GUARD_FAILED", tool, "block", "failed_closed", duration_ms, type(exc).__name__)
+                    print(json.dumps({
+                        "decision": "deny",
+                        "reason": "Blocked by Axiom (Fail-closed strict mode): Blackbox guard is unavailable or failed to verify this tool call.",
+                    }))
+                else:
+                    # Fail open: a Blackbox or hook fault must not break Gemini CLI.
+                    record("GUARD_FAILED", tool, "", "error", duration_ms, type(exc).__name__)
 
 
         if __name__ == "__main__":

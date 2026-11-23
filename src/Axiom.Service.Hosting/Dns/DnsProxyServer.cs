@@ -19,11 +19,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
 {
     private const int MaxUpstreamResponseBytes = 4096;
 
-    private static readonly TimeSpan UpstreamTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan UpstreamTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly TimeSpan TcpClientTimeout = TimeSpan.FromSeconds(10);
 
-    private static readonly TimeSpan MultiTargetAttemptTimeout = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan MultiTargetAttemptTimeout = TimeSpan.FromMilliseconds(3500);
 
     private readonly UdpClient _udp4;
 
@@ -615,6 +615,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
             UseProxy = false,
             UseCookies = false,
             AllowAutoRedirect = false,
+            EnableMultipleHttp2Connections = true,
             ConnectTimeout = UpstreamTimeout,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             ConnectCallback = async (context, cancellationToken) =>

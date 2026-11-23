@@ -2139,7 +2139,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             : evidence is null
                 ? "Guard plugin installed; no hook invocation has been observed yet."
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2196,7 +2196,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                             ? "Codex is running; the hooks are installed and trusted, but no runtime invocation has been observed yet."
                             : "Hooks are installed and trusted; start Codex to verify runtime loading.")
                         : evidence.IsFailure
-                            ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                            ? FormatHookFailureDetail(evidence)
                             : $"Runtime observed: {evidence.EventType} at {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end host blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2234,7 +2234,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                     ? "Antigravity is running; the hook is installed but no invocation has been observed. Restart Antigravity if it was started before the hook."
                     : "Hook is installed; start Antigravity to verify runtime loading.")
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2272,7 +2272,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                         ? "Claude Code is running; hooks are installed, but no runtime invocation has been observed yet."
                         : "Hooks are installed; start Claude Code to verify runtime loading.")
                     : evidence.IsFailure
-                        ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                        ? FormatHookFailureDetail(evidence)
                         : $"Runtime observed: {evidence.EventType} at {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end host blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2305,7 +2305,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             : evidence is null
                 ? "Hook configuration detected; runtime not verified. Restart Cursor if it was already running."
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2365,7 +2365,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             : evidence is null
                 ? "Gemini hook configuration detected; runtime not verified. Antigravity CLI is not assumed to share this surface."
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. Antigravity history/MCP files were not modified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2425,7 +2425,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             : evidence is null
                 ? "Hook file detected; runtime not verified. Cline must have hooks enabled and may need a restart."
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2455,7 +2455,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             : evidence is null
                 ? "Hook config detected; runtime not verified. ZCode snapshots hooks at session start, so restart it or start a new session."
                 : evidence.IsFailure
-                    ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                    ? FormatHookFailureDetail(evidence)
                     : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2492,7 +2492,7 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                         : evidence is null
                             ? "Hook config and bridge mount detected; runtime not verified. Restart DSH."
                             : evidence.IsFailure
-                                ? $"Hook observed but guard failed ({evidence.ErrorCode}); fail-open means protection is degraded."
+                                ? FormatHookFailureDetail(evidence)
                                 : $"Runtime observed: {evidence.EventType} · {evidence.Tool} · {evidence.Timestamp.ToLocalTime():HH:mm:ss}. End-to-end blocking is not verified.";
 
         ProtectedAgents.Add(new ProtectedAgent(
@@ -2501,6 +2501,11 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             status,
             detail));
     }
+
+    private static string FormatHookFailureDetail(AgentEvidenceEvent evidence) =>
+        string.Equals(evidence.EffectiveChannel, "FAILED_CLOSED", StringComparison.OrdinalIgnoreCase)
+            ? $"Hook observed, guard failed ({evidence.ErrorCode}); Fail-closed strict mode denied the tool call."
+            : $"Hook observed but guard failed ({evidence.ErrorCode}); built-in local fallback checks protected paths before failing open.";
 
     private static string? ReadString(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String

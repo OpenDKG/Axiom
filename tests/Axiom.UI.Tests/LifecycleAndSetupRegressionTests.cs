@@ -16,6 +16,12 @@ public sealed class LifecycleAndSetupRegressionTests
     private static readonly string[] ConsentedCompleteArgs = ["--silent", "--accept-risk"];
     private static readonly string[] OptedOutCompleteArgs = ["--silent", "--accept-risk", "--no-automatic-threat-sharing"];
     private static readonly string[] ConsentedPartialArgs = ["--silent", "--accept-risk", "--partial"];
+    private static readonly string[] LightModeArgs = ["--silent", "--accept-risk", "--light"];
+    private static readonly string[] OptionalDefaultArgs = ["--silent", "--accept-risk", "--optional"];
+    private static readonly string[] OptionalCustomArgs =
+    [
+        "--silent", "--accept-risk", "--optional", "--no-privacy-shield", "--with-blackbox", "--with-agent-hooks",
+    ];
     [Fact]
     public void Wpf_agents_merge_activity_caps_retained_entries_at_activity_max()
     {
@@ -89,6 +95,36 @@ public sealed class LifecycleAndSetupRegressionTests
 
         var consentedPartial = parse.Invoke(null, [ConsentedPartialArgs])!;
         Assert.False((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(consentedPartial)!);
+        Assert.Equal("Light", optionsType.GetProperty("EffectiveMode")!.GetValue(consentedPartial)!.ToString());
+        Assert.True((bool)optionsType.GetProperty("EffectiveFirewallShield")!.GetValue(consentedPartial)!);
+        Assert.True((bool)optionsType.GetProperty("EffectivePrivacyShield")!.GetValue(consentedPartial)!);
+        Assert.True((bool)optionsType.GetProperty("EffectiveAutostartAndFeed")!.GetValue(consentedPartial)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallBlackbox")!.GetValue(consentedPartial)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallDkg")!.GetValue(consentedPartial)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallAgentHooks")!.GetValue(consentedPartial)!);
+        Assert.True((bool)optionsType.GetProperty("RequiresWindowsService")!.GetValue(consentedPartial)!);
+
+        var lightParsed = parse.Invoke(null, [LightModeArgs])!;
+        Assert.Equal("Light", optionsType.GetProperty("EffectiveMode")!.GetValue(lightParsed)!.ToString());
+        Assert.True((bool)optionsType.GetProperty("EffectiveFirewallShield")!.GetValue(lightParsed)!);
+        Assert.True((bool)optionsType.GetProperty("EffectivePrivacyShield")!.GetValue(lightParsed)!);
+        Assert.True((bool)optionsType.GetProperty("EffectiveAutostartAndFeed")!.GetValue(lightParsed)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallBlackbox")!.GetValue(lightParsed)!);
+
+        var optionalDefault = parse.Invoke(null, [OptionalDefaultArgs])!;
+        Assert.Equal("Optional", optionsType.GetProperty("EffectiveMode")!.GetValue(optionalDefault)!.ToString());
+        Assert.True((bool)optionsType.GetProperty("EffectiveFirewallShield")!.GetValue(optionalDefault)!);
+        Assert.True((bool)optionsType.GetProperty("EffectivePrivacyShield")!.GetValue(optionalDefault)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallBlackbox")!.GetValue(optionalDefault)!);
+
+        var optionalCustom = parse.Invoke(null, [OptionalCustomArgs])!;
+        Assert.Equal("Optional", optionsType.GetProperty("EffectiveMode")!.GetValue(optionalCustom)!.ToString());
+        Assert.True((bool)optionsType.GetProperty("EffectiveFirewallShield")!.GetValue(optionalCustom)!);
+        Assert.False((bool)optionsType.GetProperty("EffectivePrivacyShield")!.GetValue(optionalCustom)!);
+        Assert.True((bool)optionsType.GetProperty("EffectiveInstallBlackbox")!.GetValue(optionalCustom)!);
+        Assert.False((bool)optionsType.GetProperty("EffectiveInstallDkg")!.GetValue(optionalCustom)!);
+        Assert.True((bool)optionsType.GetProperty("EffectiveInstallAgentHooks")!.GetValue(optionalCustom)!);
+        Assert.True((bool)optionsType.GetProperty("EnableAutomaticThreatSharing")!.GetValue(optionalCustom)!);
 
         // Empty or invalid --install-dir values must fall back cleanly instead of throwing ArgumentException.
         var emptyParsed = parse.Invoke(null, [EmptyInstallDirArgs])!;
