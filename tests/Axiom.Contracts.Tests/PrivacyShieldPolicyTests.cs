@@ -72,6 +72,53 @@ public sealed class PrivacyShieldPolicyTests
         Assert.Equal("Matched an allow rule.", decision.Reason);
     }
 
+    [Theory]
+    [InlineData("safebrowsing.googleapis.com")]
+    [InlineData("SafeBrowsing.GoogleApis.com.")]
+    [InlineData("client.wns.windows.com")]
+    [InlineData("ctldl.windowsupdate.com")]
+    [InlineData("ocsp.digicert.com")]
+    public void Catalog_lists_cannot_block_security_critical_domains(string domain)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var policy = PrivacyShieldPolicy.Create(
+            new PrivacyShieldSettings(),
+            [
+                new PrivacyShieldStoredRule("safebrowsing.googleapis.com", "strict-list", PrivacyCategory.Tracking, now),
+                new PrivacyShieldStoredRule("googleapis.com", "strict-list", PrivacyCategory.Tracking, now),
+                new PrivacyShieldStoredRule("client.wns.windows.com", "strict-list", PrivacyCategory.Telemetry, now),
+                new PrivacyShieldStoredRule("windowsupdate.com", "strict-list", PrivacyCategory.Telemetry, now),
+                new PrivacyShieldStoredRule("digicert.com", "strict-list", PrivacyCategory.Tracking, now),
+            ]);
+
+        var decision = policy.Evaluate(domain);
+
+        Assert.False(decision.Blocked);
+        Assert.Equal("Security-critical domain; blocklists cannot block it.", decision.Reason);
+    }
+
+    [Fact]
+    public void Catalog_parent_block_still_applies_to_unprotected_siblings()
+    {
+        var policy = PrivacyShieldPolicy.Create(
+            new PrivacyShieldSettings(),
+            [new PrivacyShieldStoredRule("googleapis.com", "strict-list", PrivacyCategory.Tracking, DateTimeOffset.UtcNow)]);
+
+        Assert.True(policy.Evaluate("ads.googleapis.com").Blocked);
+        Assert.False(policy.Evaluate("safebrowsing.googleapis.com").Blocked);
+    }
+
+    [Fact]
+    public void User_block_rule_still_applies_to_security_critical_domain()
+    {
+        var policy = PrivacyShieldPolicy.Create(new PrivacyShieldSettings
+        {
+            BlockedDomains = ["client.wns.windows.com"],
+        });
+
+        Assert.True(policy.Evaluate("client.wns.windows.com").Blocked);
+    }
+
     [Fact]
     public void Profile_categories_control_starter_rules()
     {
