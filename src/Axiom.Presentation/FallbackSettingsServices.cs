@@ -36,6 +36,31 @@ public sealed class FixedUiModeService(UiMode initial = UiMode.Advanced) : IUiMo
     }
 }
 
+/// <summary>Persists and broadcasts the user's Simple / Mini / Advanced shell mode preference.</summary>
+public sealed class PersistentUiModeService : IUiModeService
+{
+    public PersistentUiModeService()
+    {
+        Current = UiModeSettingsStore.Load();
+    }
+
+    public UiMode Current { get; private set; }
+
+    public event EventHandler? Changed;
+
+    public void Apply(UiMode mode)
+    {
+        if (Current == mode)
+        {
+            return;
+        }
+
+        Current = mode;
+        UiModeSettingsStore.Save(mode);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+}
+
 /// <summary>Host without Windows autostart support. It reports unsupported and changes nothing.</summary>
 public sealed class UnsupportedAutostartService : IAutostartService
 {

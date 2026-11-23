@@ -10,7 +10,7 @@
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.ps1'))) -PublicRelease
 ```
 
-**Ubuntu 24.04 amd64 and macOS Intel** · Run in a desktop terminal with `curl` and Bash. The same command selects the published preview for your platform.
+**Ubuntu 24.04 amd64 and macOS Intel** · Run in a desktop terminal with `curl` and Bash. The same command selects the published package for your platform.
 
 ```bash
 installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scripts/install-from-github.sh)" && bash -c "$installer"
@@ -19,7 +19,7 @@ installer="$(curl -fsSL https://raw.githubusercontent.com/OpenDKG/Axiom/main/scr
 The scripts verify downloaded packages against their SHA-256 hashes. On Windows this installs
 the core app. Use the graphical setup for the optional Complete installation. On Ubuntu, APT
 installs the package and required dependencies and may prompt for `sudo`. On macOS, the installer
-installs Axiom to `/Applications` and preserves any app already there. The ad hoc-signed macOS preview
+installs Axiom to `/Applications` and preserves any app already there. The ad hoc-signed macOS package
 may need macOS approval, and its Network Extension has separate activation requirements.
 
 For a package that includes Unix Complete setup, add `--complete` to also install Umanitek
@@ -111,12 +111,12 @@ agent-level guardrails and signed threat-intelligence context respectively.
 | Platform | Published build |
 | --- | --- |
 | Windows x64 | [Latest release](https://github.com/OpenDKG/Axiom/releases/latest), installer and portable ZIP. |
-| Linux amd64 | [Linux preview](https://github.com/OpenDKG/Axiom/releases/latest), Ubuntu 24.04 Debian package. |
-| macOS Intel | [macOS preview](https://github.com/OpenDKG/Axiom/releases/latest), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
+| Linux amd64 | [Linux release](https://github.com/OpenDKG/Axiom/releases/latest), Ubuntu 24.04 Debian package (`axiom-firewall_<version>_amd64.deb`). |
+| macOS Intel | [macOS release](https://github.com/OpenDKG/Axiom/releases/latest), ad hoc-signed app archive. The system extension has separate activation and signing requirements. |
 
 For Windows, choose **Axiom-Setup.exe** for installation or the ZIP for the portable build.
-Verify the package against its published SHA-256. The platform previews have their own feature
-and install limits in their release notes.
+Verify the package against its published SHA-256. Check the release notes for platform-specific
+signing or network extension activation details.
 
 ### Quick links
 
@@ -385,7 +385,7 @@ The recommended release asset is **`Axiom-Setup.exe`** (published alongside **`A
 
 The desktop starts the bundled local service automatically, while the privileged Windows service provisions the machine-scope default enforcement policy (`%ProgramData%\Axiom\enforcement-policy.json`) if no operator policy exists yet. VirusTotal remains optional; its API key is configured later on the Security page.
 
-**Linux preview:** a `.deb` built by `scripts/linux/package.sh` installs
+**Linux package:** a `.deb` built by `scripts/linux/package.sh` installs
 the desktop app under `/usr/lib/axiom-firewall` (launched through `/usr/bin/axiom-firewall`),
 the app-grid entry and icon, the polkit action and registers
 the `axiomd` systemd service (nftables + optional eBPF enforcement) in its postinst; no terminal

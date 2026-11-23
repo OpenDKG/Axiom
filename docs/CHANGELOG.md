@@ -3,7 +3,7 @@
 - **Three-mode installer (`Complete`, `Light`, `Optional`) across Windows and Unix:** **Light** installation now configures the Windows service, Axiom Shield firewall (`ask` policy), Privacy Shield DoH DNS resolver and blocklists, Community Feed, notifications, tray, and autostart seamlessly without AI agent modules; **Optional** mode adds individual component toggles in `Axiom.Setup` and `scripts/install-from-github.sh`.
 - **Opt-in `Fail-closed (Strict)` mode & built-in local `AgentCommandGuard` fallback (#26):** All 11 AI agent hook adapters run Axiom's built-in secret, wallet, SSH key, and escalation checks prior to Blackbox evaluation, and an opt-in **Fail-closed (Strict)** policy toggle on the Agents page denies unverified calls (`FAILED_CLOSED`) whenever Blackbox is offline or times out.
 - **Protected security-critical DNS domains (#28, #29) & DoH hardening:** Prevents catalog blocklists from blocking Safe Browsing, Defender SmartScreen, Windows Update, WNS push notifications (`wns.windows.com`), NCSI probes, and CA OCSP/CRL endpoints while increasing DoH timeouts and HTTP/2 connection concurrency.
-- **macOS `launchd` daemon fix (#18), Unix `--complete` Blackbox + Oxigraph DKG installer (#21, #22), Linux e2e tests (#19), Windows Firewall shared STA fix (#25), and in-app Privacy Policy (`PRIVACY.md`).**
+- **macOS `launchd` daemon fix (#18), Unix `--complete` Blackbox + Oxigraph DKG installer (#21, #22), Linux e2e tests (#19), full Linux/macOS node, Trader Shield & Settings parity (`axiom-firewall_1.4.9_amd64.deb`), Windows Firewall shared STA fix (#25), and in-app Privacy Policy (`PRIVACY.md`).**
 
 ## What's in 1.4.4
 

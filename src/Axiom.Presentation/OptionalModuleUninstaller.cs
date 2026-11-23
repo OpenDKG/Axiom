@@ -39,7 +39,7 @@ public sealed class OptionalModuleUninstaller
         _userProfile,
         ".local",
         "bin",
-        "blackbox.cmd");
+        OperatingSystem.IsWindows() ? "blackbox.cmd" : "blackbox");
 
     public string OpenCodePluginDirectory => Path.Combine(
         _userProfile,
@@ -64,11 +64,11 @@ public sealed class OptionalModuleUninstaller
         "plugin",
         "axiom-blackbox.ts");
 
-    public string BlackboxPython => Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "python.exe");
+    public string BlackboxPython => AgentPlatform.VenvPython(Path.Combine(BlackboxRoot, "agent-blackbox"));
 
-    public string BlackboxPythonW => Path.Combine(BlackboxRoot, "agent-blackbox", "venv", "Scripts", "pythonw.exe");
+    public string BlackboxPythonW => AgentPlatform.VenvPythonNoConsole(Path.Combine(BlackboxRoot, "agent-blackbox"));
 
-    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", "dkg.cmd");
+    public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", AgentPlatform.NpmShimName("dkg"));
 
     public bool HasBlackboxFiles => Directory.Exists(BlackboxRoot) || File.Exists(BlackboxCommand);
 
@@ -133,7 +133,15 @@ public sealed class OptionalModuleUninstaller
         }
 
         PrepareBlackboxRemoval();
-        StartPowerShell(BuildBlackboxUninstallScript());
+        if (OperatingSystem.IsWindows())
+        {
+            StartPowerShell(BuildBlackboxUninstallScript());
+        }
+        else
+        {
+            StopUnixBlackboxProcesses();
+            _ = RunUnixUninstallScript(BuildUnixBlackboxUninstallScript());
+        }
     }
 
     public bool UninstallBlackboxAndWait()
@@ -144,7 +152,13 @@ public sealed class OptionalModuleUninstaller
         }
 
         PrepareBlackboxRemoval();
-        return RunPowerShellScript(BuildBlackboxUninstallScript());
+        if (OperatingSystem.IsWindows())
+        {
+            return RunPowerShellScript(BuildBlackboxUninstallScript());
+        }
+
+        StopUnixBlackboxProcesses();
+        return RunUnixUninstallScript(BuildUnixBlackboxUninstallScript());
     }
 
     public void UninstallDkg()
@@ -154,11 +168,32 @@ public sealed class OptionalModuleUninstaller
             return;
         }
 
-        StartPowerShell(BuildDkgUninstallScript());
+        if (OperatingSystem.IsWindows())
+        {
+            StartPowerShell(BuildDkgUninstallScript());
+        }
+        else
+        {
+            StopUnixDkgProcesses();
+            _ = RunUnixUninstallScript(BuildUnixDkgUninstallScript());
+        }
     }
 
-    public bool UninstallDkgAndWait() =>
-        !DistributionContext.IsStorePackage && RunPowerShellScript(BuildDkgUninstallScript());
+    public bool UninstallDkgAndWait()
+    {
+        if (DistributionContext.IsStorePackage)
+        {
+            return false;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return RunPowerShellScript(BuildDkgUninstallScript());
+        }
+
+        StopUnixDkgProcesses();
+        return RunUnixUninstallScript(BuildUnixDkgUninstallScript());
+    }
 
     private void PrepareBlackboxRemoval()
     {
@@ -230,7 +265,7 @@ public sealed class OptionalModuleUninstaller
     {
         if (!OperatingSystem.IsWindows())
         {
-            // The uninstall scripts are PowerShell; nothing was installed by them elsewhere.
+            // The uninstall scripts are PowerShell; Unix uses RunUnixUninstallScript.
             return false;
         }
 
@@ -260,6 +295,75 @@ public sealed class OptionalModuleUninstaller
         }
 
         return ok;
+    }
+
+    private bool RunUnixUninstallScript(string script)
+    {
+        LastError = null;
+        var lines = new List<string>();
+        var ok = LocalModuleRuntime.RunHiddenShell(
+            script,
+            line =>
+            {
+                lock (lines)
+                {
+                    lines.Add(line);
+                }
+            },
+            TimeSpan.FromMinutes(3));
+        if (!ok)
+        {
+            string tail;
+            lock (lines)
+            {
+                tail = string.Join(" ", lines.TakeLast(6));
+            }
+
+            LastError = string.IsNullOrWhiteSpace(tail)
+                ? "The uninstall script did not finish cleanly."
+                : tail;
+        }
+
+        return ok;
+    }
+
+    private void StopUnixBlackboxProcesses()
+    {
+        var blackboxHome = BlackboxPaths.ResolveBlackboxHome(_userProfile, _localAppData);
+        LocalModuleRuntime.StopProcesses(
+            [BlackboxRoot, blackboxHome, Path.Combine(BlackboxRoot, "agent-blackbox"), "start-dashboard.py", "hermes_cli.main blackbox"],
+            log: null,
+            timeoutSeconds: 15);
+    }
+
+    private void StopUnixDkgProcesses() =>
+        LocalModuleRuntime.StopProcesses([DkgRoot, DkgHome], log: null, timeoutSeconds: 15);
+
+    private string BuildUnixBlackboxUninstallScript()
+    {
+        var hermesHome = BlackboxPaths.ResolveHermesHome(_userProfile, _localAppData);
+        var blackboxHome = BlackboxPaths.ResolveBlackboxHome(_userProfile, _localAppData);
+        static string Esc(string v) => v.Replace("'", "'\\''", StringComparison.Ordinal);
+        return $$"""
+            set -e
+            for p in '{{Esc(BlackboxRoot)}}' '{{Esc(blackboxHome)}}' '{{Esc(Path.Combine(hermesHome, "plugins", "blackbox"))}}'; do
+              if [ -e "$p" ] && [ ! -L "$p" ]; then rm -rf -- "$p"; fi
+            done
+            if [ -e '{{Esc(BlackboxCommand)}}' ] && [ ! -L '{{Esc(BlackboxCommand)}}' ]; then
+              rm -f -- '{{Esc(BlackboxCommand)}}'
+            fi
+            """;
+    }
+
+    private string BuildUnixDkgUninstallScript()
+    {
+        static string Esc(string v) => v.Replace("'", "'\\''", StringComparison.Ordinal);
+        return $$"""
+            set -e
+            for p in '{{Esc(DkgRoot)}}' '{{Esc(DkgHome)}}'; do
+              if [ -e "$p" ] && [ ! -L "$p" ]; then rm -rf -- "$p"; fi
+            done
+            """;
     }
 
     private static void StartPowerShell(string script)

@@ -157,9 +157,13 @@ cp -a "$PKG/icons/hicolor/." "$STAGE/usr/share/icons/hicolor/"
 install -m 0644 "$PKG/debian/copyright" "$STAGE/usr/share/doc/axiom-firewall/copyright"
 install -m 0644 "$ROOT/README.md" "$STAGE/usr/share/doc/axiom-firewall/README.md"
 [[ -f "$ROOT/docs/LINUX_PACKAGING.md" ]] && install -m 0644 "$ROOT/docs/LINUX_PACKAGING.md" "$STAGE/usr/share/doc/axiom-firewall/"
-# Why a local build sorts after the release it is based on, and is not claimed as one.
-printf 'axiom-firewall (%s) unstable; urgency=medium\n\n  * Local Linux build; not an upstream release.\n\n -- The Axiom contributors <51213010+a-51-50@users.noreply.github.com>  %s\n' \
-  "$VERSION" "$(LC_ALL=C date -R)" | gzip -9n >"$STAGE/usr/share/doc/axiom-firewall/changelog.gz"
+# Changelog entry in the package metadata.
+CHANGELOG_NOTE="Upstream Linux release."
+if [[ $SNAPSHOT -eq 1 || -n "$LOCAL" ]]; then
+  CHANGELOG_NOTE="Local Linux build; not an upstream release."
+fi
+printf 'axiom-firewall (%s) unstable; urgency=medium\n\n  * %s\n\n -- The Axiom contributors <51213010+a-51-50@users.noreply.github.com>  %s\n' \
+  "$VERSION" "$CHANGELOG_NOTE" "$(LC_ALL=C date -R)" | gzip -9n >"$STAGE/usr/share/doc/axiom-firewall/changelog.gz"
 install -m 0644 "$PKG/debian/lintian-overrides" "$STAGE/usr/share/lintian/overrides/axiom-firewall"
 gzip -9n <"$PKG/man/axiom-firewall.1" >"$STAGE/usr/share/man/man1/axiom-firewall.1.gz"
 

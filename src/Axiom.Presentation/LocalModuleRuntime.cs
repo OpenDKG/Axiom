@@ -48,6 +48,11 @@ public static class LocalModuleRuntime
 
     internal static bool StopBlackboxDashboard(string launcher)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return StopProcesses([launcher, "start-dashboard.py"], log: null, timeoutSeconds: 10);
+        }
+
         var escaped = launcher.Replace("'", "''", StringComparison.Ordinal);
         var script = $$"""
             $ErrorActionPreference = 'Stop'
@@ -110,6 +115,39 @@ public static class LocalModuleRuntime
         Action<string>? log = null,
         int timeoutSeconds = 30)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            var unixMarkers = markers
+                .Where(marker => !string.IsNullOrWhiteSpace(marker))
+                .ToArray();
+            if (unixMarkers.Length == 0)
+            {
+                return true;
+            }
+
+            var escapedMarkers = string.Join(" ", unixMarkers.Select(m => "'" + m.Replace("'", "'\\''", StringComparison.Ordinal) + "'"));
+            var unixScript = $$"""
+                pids=""
+                for m in {{escapedMarkers}}; do
+                  matched=$(ps -u "$(id -u)" -o pid=,args= 2>/dev/null | awk -v m="$m" -v self="$$" 'index(tolower($0), tolower(m)) > 0 && $1 != self {print $1}')
+                  pids="$pids $matched"
+                done
+                uniq_pids=$(printf '%s\n' $pids | awk 'NF && !seen[$1]++')
+                count=0
+                for p in $uniq_pids; do
+                  kill -TERM "$p" 2>/dev/null && count=$((count+1))
+                done
+                if [ -n "$uniq_pids" ]; then
+                  sleep 1
+                  for p in $uniq_pids; do
+                    kill -0 "$p" 2>/dev/null && kill -KILL "$p" 2>/dev/null || true
+                  done
+                fi
+                echo "stopped=$count"
+                """;
+            return RunHiddenShell(unixScript, log, TimeSpan.FromSeconds(timeoutSeconds));
+        }
+
         var needles = markers
             .Where(marker => !string.IsNullOrWhiteSpace(marker))
             .Select(marker => "'" + marker.Replace("'", "''", StringComparison.Ordinal) + "'")
@@ -241,5 +279,14 @@ public static class LocalModuleRuntime
             $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
             log,
             timeout);
+    }
+
+    /// <summary>Runs a hidden POSIX shell script and mirrors its output to the caller's log.</summary>
+    public static bool RunHiddenShell(string script, Action<string>? log, TimeSpan timeout)
+    {
+        var shell = File.Exists("/bin/bash") ? "/bin/bash" : "/bin/sh";
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
+        var runner = $"eval \"$(printf '%s' '{encoded}' | base64 -d 2>/dev/null || printf '%s' '{encoded}' | base64 -D)\"";
+        return RunProcess(shell, $"-c \"{runner.Replace("\"", "\\\"", StringComparison.Ordinal)}\"", log, timeout);
     }
 }

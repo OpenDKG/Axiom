@@ -11,57 +11,21 @@ namespace Axiom.UI.Avalonia.Tests;
 /// </summary>
 public sealed class StartLocalModulesTextTests
 {
-    [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void Off_windows_the_result_never_points_to_repair_or_guided_install(bool dkgUp, bool blackboxUp)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        Assert.False(OptionalModuleInstaller.IsInstallSupported);
-        var text = SecurityPageViewModel.StartLocalModulesResultText(dkgUp, blackboxUp);
-
-        Assert.DoesNotContain("Repair", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("guided", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Install or", text, StringComparison.Ordinal);
-        if (!blackboxUp)
-        {
-            Assert.Contains("manually", text, StringComparison.Ordinal);
-            Assert.Contains("--complete", text, StringComparison.Ordinal);
-        }
-    }
-
     [Fact]
-    public void Off_windows_dashboard_up_without_dkg_does_not_claim_blocking()
+    public void Start_local_modules_result_matches_across_all_desktop_platforms()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var text = SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: true);
-
-        Assert.Contains("blocking in the agent host remains unverified", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Windows_keeps_the_install_or_repair_text()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
+        Assert.True(OptionalModuleInstaller.IsInstallSupported);
         Assert.Equal(
-            "Neither local module answered. Install or Repair each card, then try Start local modules again.",
-            SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: false));
+            "Local modules are up: DKG node and Blackbox dashboard connected.",
+            SecurityPageViewModel.StartLocalModulesResultText(dkgUp: true, blackboxUp: true));
+        Assert.Equal(
+            "Blackbox is up. DKG is still offline, so local blocking works but shared-graph evidence is unavailable.",
+            SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: true));
         Assert.Equal(
             "DKG is up. Blackbox is still offline, so agent protection is not enforcing; use Repair on its card.",
             SecurityPageViewModel.StartLocalModulesResultText(dkgUp: true, blackboxUp: false));
+        Assert.Equal(
+            "Neither local module answered. Install or Repair each card, then try Start local modules again.",
+            SecurityPageViewModel.StartLocalModulesResultText(dkgUp: false, blackboxUp: false));
     }
 }

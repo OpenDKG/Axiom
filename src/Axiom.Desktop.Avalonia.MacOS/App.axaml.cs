@@ -81,6 +81,26 @@ public partial class App : Application
             StartupLog.Write("hooks", exception.Message);
         }
 
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var protection = ProtectionProvisioner.ProvisionAtStartup();
+                if (protection is not null)
+                {
+                    var configPath = TraderShieldProvisioner.ResolveConfigPath();
+                    TraderShieldProvisioner.ApplyToFile(configPath);
+                    HermesPluginSettings.ApplyToFile(configPath);
+                }
+            }
+#pragma warning disable CA1031 // Startup provisioning is best-effort.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                StartupLog.Write("protection", exception.Message);
+            }
+        });
+
         // macOS always talks to the axiomd launchd daemon over /var/run/axiom/axiom.sock. There is
         // no in-process fallback monitor: pages show the offline state until the daemon runs.
         var client = new ServicePipeClient();
@@ -114,8 +134,9 @@ public partial class App : Application
             new AvaloniaShellActions(() => desktop.Shutdown()),
             new AvaloniaBlackboxDialogs(() => window),
             new Axiom.Persistence.AgentSessionReader(),
-            visualEffects: null,
-            restoreNetwork: networkRecovery.RestoreAsync);
+            visualEffects: new PersistentVisualEffectsService(),
+            restoreNetwork: networkRecovery.RestoreAsync,
+            uiModeService: new PersistentUiModeService());
 
         window = new MainWindow { DataContext = _shell };
         _window = window;

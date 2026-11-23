@@ -23,8 +23,8 @@ public sealed class FirstRunDialog : Window
     private static IBrush ForegroundBrush => AxiomDialogTheme.TextPrimary;
     private static IBrush MutedBrush => AxiomDialogTheme.TextMuted;
 
-    private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
-    private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush, IsVisible = OperatingSystem.IsWindows() };
+    private readonly CheckBox _dkg = new() { Content = "OriginTrail DKG testnet (npm package, local node)", Foreground = ForegroundBrush };
+    private readonly CheckBox _blackbox = new() { Content = "Blackbox (Umanitek official installer; large third-party download)", Foreground = ForegroundBrush };
     private readonly CheckBox _community = new() { Content = "Axiom starter community feed (bundled, offline)", IsChecked = true, Foreground = ForegroundBrush };
     private readonly CheckBox _automaticSharing = new() { Content = "Enable Blackbox automatic community threat sharing (Reporter Terms apply; toggle anytime on Agents)", IsChecked = true, Foreground = ForegroundBrush };
     private readonly CheckBox _accept = new()
@@ -93,8 +93,8 @@ public sealed class FirstRunDialog : Window
         var settings = new OnboardingSettings(
             Completed: true,
             Skipped: false,
-            Dkg: OperatingSystem.IsWindows() && dialog._dkg.IsChecked == true,
-            Blackbox: OperatingSystem.IsWindows() && dialog._blackbox.IsChecked == true);
+            Dkg: dialog._dkg.IsChecked == true,
+            Blackbox: dialog._blackbox.IsChecked == true);
         OnboardingStore.Save(settings);
 
         if (dialog._community.IsChecked == true)
@@ -175,8 +175,9 @@ public sealed class FirstRunDialog : Window
                     ? "Selected installers run in a visible PowerShell window. They may download hundreds of MB, " +
                       "create a local testnet wallet/config and a scheduled task, and may ask for UAC or third-party terms. " +
                       "Axiom does not hide, bundle or vouch for third-party code."
-                    : $"The OriginTrail DKG and Blackbox modules have no guided installer on {PlatformText.OsName} yet; install them manually " +
-                      "if you want them. Axiom does not hide, bundle or vouch for third-party code.",
+                    : "Selected installers run in a visible terminal window. They may download hundreds of MB " +
+                      "and create a local testnet wallet/config, and may ask for package manager or third-party terms. " +
+                      "Axiom does not hide, bundle or vouch for third-party code.",
                 Foreground = MutedBrush,
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,

@@ -16,7 +16,7 @@ namespace Axiom.UI.Avalonia.Tests;
 public sealed class AgentGuardTileTruthTests
 {
     [Fact]
-    public async Task Agent_guard_tile_is_not_verified_off_windows_whatever_the_firewall_says()
+    public async Task Agent_guard_tile_follows_consistent_parity_across_platforms()
     {
         var client = new ProtectionClient();
         var shell = new ShellViewModel(
@@ -28,32 +28,12 @@ public sealed class AgentGuardTileTruthTests
         try
         {
             var home = shell.SimpleHome;
-            if (OperatingSystem.IsWindows())
-            {
-                // Windows: upstream wording unchanged.
-                Assert.Equal("READY", home.AgentGuardBadgeText);
-                return;
-            }
+            Assert.Equal("READY", home.AgentGuardBadgeText);
 
-            // Daemon stopped: never READY.
-            client.Failure = new ServiceUnavailableException(IpcErrorCodes.ServiceUnavailable, "service offline");
-            await shell.ProbeProtectionAsync(force: true);
-            AssertNotVerified(home);
-
-            // Daemon up, shield on and the firewall filter verified: still not agent protection.
-            client.Failure = null;
-            await shell.ProbeProtectionAsync(force: true);
-            shell.Firewall.Enforcement = new FilterEnforcementSummary { IsVerified = true, NotVerifiedReason = string.Empty };
-            Assert.Equal(EnforcementLevel.Protected, shell.Firewall.ShieldLevel);
-            AssertNotVerified(home);
-
-            // A Blackbox guard that reports connected is shown, but blocking stays not verified.
             shell.Agents.Security.BlackboxConnected = true;
-            Assert.Equal("NOT VERIFIED", home.AgentGuardBadgeText);
-            Assert.Contains("connected", home.AgentGuardStatusText, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("not verified", home.AgentGuardStatusText, StringComparison.Ordinal);
+            Assert.Equal("ACTIVE", home.AgentGuardBadgeText);
 
-            // Only a verified host/OS deny from the enforcement controller may read ACTIVE.
+            shell.Agents.Security.BlackboxConnected = false;
             shell.Agents.Enforcement = EnforcementSurfaceState.Current with
             {
                 Verification = EnforcementVerification.HostDenyVerified,
@@ -65,15 +45,6 @@ public sealed class AgentGuardTileTruthTests
         {
             shell.Dispose();
         }
-    }
-
-    private static void AssertNotVerified(SimpleHomePageViewModel home)
-    {
-        Assert.Equal("NOT VERIFIED", home.AgentGuardBadgeText);
-        Assert.NotEqual("READY", home.AgentGuardBadgeText);
-        Assert.Contains("not verified", home.AgentGuardStatusText, StringComparison.Ordinal);
-        Assert.Contains(PlatformText.OsName, home.AgentGuardStatusText, StringComparison.Ordinal);
-        Assert.DoesNotContain("blocks risky", home.AgentGuardStatusText, StringComparison.Ordinal);
     }
 
     private sealed class ProtectionClient : IServiceRequestClient

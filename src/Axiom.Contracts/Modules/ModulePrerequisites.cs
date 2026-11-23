@@ -85,12 +85,27 @@ public sealed class ModulePrerequisiteReport
         return $"$env:PATH = '{joined};' + $env:PATH";
     }
 
+    /// <summary>
+    /// A POSIX shell snippet that makes the found tools visible to the installer script.
+    /// </summary>
+    public string BuildUnixPathPreamble()
+    {
+        var directories = SearchDirectories;
+        if (directories.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var joined = string.Join(":", directories.Select(static value => value.Replace("\"", "\\\"", StringComparison.Ordinal)));
+        return $"export PATH=\"{joined}:$PATH\"";
+    }
+
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 }
 
 /// <summary>
 /// Finds the tools the optional Blackbox and DKG installers need, and builds the bootstrap scripts
-/// that install missing prerequisites through winget.
+/// that install missing prerequisites on Windows (winget), Linux (apt), and macOS (Homebrew).
 /// </summary>
 public static class ModulePrerequisites
 {
@@ -105,13 +120,24 @@ public static class ModulePrerequisites
 
     public const string PythonDisplayName = "Python 3.11-3.13";
 
-    private static readonly (ModuleTool Tool, string DisplayName, string[] FileNames)[] Definitions =
+    private static readonly (ModuleTool Tool, string DisplayName, string[] FileNames)[] WindowsDefinitions =
     [
         (ModuleTool.Node, "Node.js", ["node.exe"]),
         (ModuleTool.Npm, "npm", ["npm.cmd"]),
         (ModuleTool.Python, PythonDisplayName, ["python.exe"]),
         (ModuleTool.Git, "Git", ["git.exe"]),
     ];
+
+    private static readonly (ModuleTool Tool, string DisplayName, string[] FileNames)[] UnixDefinitions =
+    [
+        (ModuleTool.Node, "Node.js", ["node", "node.exe"]),
+        (ModuleTool.Npm, "npm", ["npm", "npm.cmd"]),
+        (ModuleTool.Python, PythonDisplayName, ["python3.12", "python3.13", "python3.11", "python3", "python", "python.exe"]),
+        (ModuleTool.Git, "Git", ["git", "git.exe"]),
+    ];
+
+    private static (ModuleTool Tool, string DisplayName, string[] FileNames)[] Definitions =>
+        OperatingSystem.IsWindows() ? WindowsDefinitions : UnixDefinitions;
 
     /// <summary>Winget package ids used by the bootstrap, in installation order.</summary>
     internal static readonly (ModuleTool Tool, string PackageId, string[] ExtraArguments)[] Bootstrap =
@@ -257,32 +283,58 @@ public static class ModulePrerequisites
                 .Where(entry => entry.Length > 0));
         }
 
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        if (OperatingSystem.IsWindows())
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
+            foreach (var candidate in new[]
+                     {
+                         Path.Combine(programFiles, "nodejs"),
+                         Path.Combine(programFilesX86, "nodejs"),
+                         Path.Combine(localAppData, "Programs", "nodejs"),
+                         Path.Combine(programFiles, "Git", "cmd"),
+                         Path.Combine(localAppData, "Programs", "Git", "cmd"),
+                         Path.Combine(localAppData, "Programs", "Python", "Python313"),
+                         Path.Combine(localAppData, "Programs", "Python", "Python312"),
+                         Path.Combine(localAppData, "Programs", "Python", "Python311"),
+                         Path.Combine(localAppData, "Programs", "Python", "Python310"),
+                         Path.Combine(programFiles, "Python313"),
+                         Path.Combine(programFiles, "Python312"),
+                         Path.Combine(programFiles, "Python311"),
+                     })
+            {
+                directories.Add(candidate);
+            }
+
+            return directories
+                .Where(directory => !IsStoreAliasDirectory(directory))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         foreach (var candidate in new[]
                  {
-                     Path.Combine(programFiles, "nodejs"),
-                     Path.Combine(programFilesX86, "nodejs"),
-                     Path.Combine(localAppData, "Programs", "nodejs"),
-                     Path.Combine(programFiles, "Git", "cmd"),
-                     Path.Combine(localAppData, "Programs", "Git", "cmd"),
-                     Path.Combine(localAppData, "Programs", "Python", "Python313"),
-                     Path.Combine(localAppData, "Programs", "Python", "Python312"),
-                     Path.Combine(localAppData, "Programs", "Python", "Python311"),
-                     Path.Combine(localAppData, "Programs", "Python", "Python310"),
-                     Path.Combine(programFiles, "Python313"),
-                     Path.Combine(programFiles, "Python312"),
-                     Path.Combine(programFiles, "Python311"),
+                     "/opt/homebrew/bin",
+                     "/usr/local/bin",
+                     "/usr/bin",
+                     "/bin",
+                     Path.Combine(home, ".local", "bin"),
+                     Path.Combine(home, ".npm-global", "bin"),
+                     Path.Combine(home, ".bun", "bin"),
+                     Path.Combine(home, "bin"),
                  })
         {
-            directories.Add(candidate);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                directories.Add(candidate);
+            }
         }
 
         return directories
-            .Where(directory => !IsStoreAliasDirectory(directory))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -376,4 +428,57 @@ public static class ModulePrerequisites
         ModuleTool.Git => "Git",
         _ => tool.ToString(),
     };
+
+    /// <summary>
+    /// Builds a shell script that installs missing prerequisites on Linux (apt) or macOS (Homebrew).
+    /// </summary>
+    public static string BuildUnixBootstrapScript(ModulePrerequisiteReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        var missing = report.Missing.Select(tool => tool.Tool).ToHashSet();
+        var aptPackages = new List<string>();
+        var brewPackages = new List<string>();
+
+        if (missing.Contains(ModuleTool.Git))
+        {
+            aptPackages.Add("git");
+            brewPackages.Add("git");
+        }
+
+        if (missing.Contains(ModuleTool.Node) || missing.Contains(ModuleTool.Npm))
+        {
+            aptPackages.Add("nodejs");
+            aptPackages.Add("npm");
+            brewPackages.Add("node");
+        }
+
+        if (missing.Contains(ModuleTool.Python))
+        {
+            aptPackages.Add("python3");
+            aptPackages.Add("python3-venv");
+            aptPackages.Add("python3-pip");
+            brewPackages.Add("python@3.12");
+        }
+
+        var aptLine = aptPackages.Count == 0 ? "true" : $"sudo apt-get update && sudo apt-get install -y {string.Join(' ', aptPackages)}";
+        var brewLine = brewPackages.Count == 0 ? "true" : $"brew install {string.Join(' ', brewPackages)}";
+        return $$"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+            if [ "$(uname -s)" = "Darwin" ]; then
+              if ! command -v brew >/dev/null 2>&1; then
+                echo "Homebrew is required to auto-install prerequisites on macOS: https://brew.sh"
+                exit 2
+              fi
+              {{brewLine}}
+            else
+              if ! command -v apt-get >/dev/null 2>&1; then
+                echo "apt-get not found; install Git, Node.js/npm and Python 3.11-3.13 manually."
+                exit 2
+              fi
+              {{aptLine}}
+            fi
+            echo "Prerequisite installation finished. Return to Axiom and click Check again."
+            """;
+    }
 }

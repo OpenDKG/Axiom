@@ -84,10 +84,10 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
     public bool IsAutostartSupported { get; }
 
     public string MilestoneText => OperatingSystem.IsMacOS()
-        ? $"{Axiom.Contracts.ProductMilestone.Current} · macOS port"
+        ? $"{Axiom.Contracts.ProductMilestone.Current} · macOS"
         : OperatingSystem.IsLinux()
-            ? $"{Axiom.Contracts.ProductMilestone.Current} · Linux port"
-            : $"{Axiom.Contracts.ProductMilestone.Current} · Windows-first";
+            ? $"{Axiom.Contracts.ProductMilestone.Current} · Linux"
+            : $"{Axiom.Contracts.ProductMilestone.Current} · Windows";
 
     public string ProtocolText { get; }
 

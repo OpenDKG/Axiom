@@ -81,6 +81,8 @@ public sealed class MacThemeService : IThemeService
         UiTheme.Light => ThemeVariant.Light,
         UiTheme.DarkMidnight => AxiomThemeVariants.DarkMidnight,
         UiTheme.LightWarm => AxiomThemeVariants.LightWarm,
+        UiTheme.GlassDark => AxiomThemeVariants.GlassDark,
+        UiTheme.GlassLight => AxiomThemeVariants.GlassLight,
         _ => ThemeVariant.Dark,
     };
 

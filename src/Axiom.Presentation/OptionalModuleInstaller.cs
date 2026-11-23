@@ -67,10 +67,10 @@ public sealed class OptionalModuleInstaller
     public string DkgCommand => Path.Combine(DkgRoot, "node_modules", ".bin", AgentPlatform.NpmShimName("dkg"));
 
     /// <summary>
-    /// The guided installers are PowerShell scripts and the Blackbox installer is a Windows
-    /// installer, so they run only on Windows. Other platforms report this message instead.
+    /// Runs the optional-module installers on Windows (PowerShell), Linux (bash), and macOS (bash).
     /// </summary>
-    public static bool IsInstallSupported => OperatingSystem.IsWindows();
+    public static bool IsInstallSupported =>
+        OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
 
     public static string UnsupportedInstallMessage { get; } =
         $"Guided module installation is not available on {UnsupportedPlatformName} yet. " +
@@ -122,16 +122,23 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        if (report.IsSatisfied && !includeVcRedist)
+        if (report.IsSatisfied && (OperatingSystem.IsWindows() ? !includeVcRedist : true))
         {
             return;
         }
 
-        StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: true));
+        if (OperatingSystem.IsWindows())
+        {
+            StartPowerShell(ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: true));
+        }
+        else
+        {
+            StartUnixShell(ModulePrerequisites.BuildUnixBootstrapScript(report), "install-prereqs.sh");
+        }
     }
 
     /// <summary>
-    /// Silently installs missing optional-module prerequisites via winget during complete Setup.
+    /// Silently installs missing optional-module prerequisites via winget/apt/brew during complete Setup.
     /// </summary>
     public bool InstallPrerequisitesAndWait(
         ModulePrerequisiteReport report,
@@ -148,14 +155,16 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        if (report.IsSatisfied && !includeVcRedist)
+        if (report.IsSatisfied && (OperatingSystem.IsWindows() ? !includeVcRedist : true))
         {
             return true;
         }
 
-        var ok = RunPowerShellScript(
-            ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: false),
-            log);
+        var ok = OperatingSystem.IsWindows()
+            ? RunPowerShellScript(
+                ModulePrerequisites.BuildBootstrapScript(report, includeVcRedist, interactive: false),
+                log)
+            : RunUnixShellScript(ModulePrerequisites.BuildUnixBootstrapScript(report), log);
         if (!ok)
         {
             LastError = $"Automatic prerequisite install did not finish cleanly for: {report.MissingSummary}.";
@@ -189,7 +198,14 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        StartPowerShell(BuildDkgScript());
+        if (OperatingSystem.IsWindows())
+        {
+            StartPowerShell(BuildDkgScript());
+        }
+        else
+        {
+            StartUnixShell(BuildUnixDkgScript(), "install-dkg.sh");
+        }
     }
 
     public bool InstallDkgAndWait(Action<string>? log = null)
@@ -219,7 +235,9 @@ public sealed class OptionalModuleInstaller
             return false;
         }
 
-        return RunPowerShellScript(BuildDkgScript(), log);
+        return OperatingSystem.IsWindows()
+            ? RunPowerShellScript(BuildDkgScript(), log)
+            : RunUnixShellScript(BuildUnixDkgScript(), log);
     }
 
     private string BuildDkgScript()
@@ -354,7 +372,14 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
-        StartPowerShell(BuildBlackboxScript());
+        if (OperatingSystem.IsWindows())
+        {
+            StartPowerShell(BuildBlackboxScript());
+        }
+        else
+        {
+            StartUnixShell(BuildUnixBlackboxScript(), "install-blackbox.sh");
+        }
     }
 
     public bool InstallBlackboxAndWait(Action<string>? log = null)
@@ -388,7 +413,9 @@ public sealed class OptionalModuleInstaller
             return true;
         }
 
-        var installed = RunPowerShellScript(BuildBlackboxScript(), log);
+        var installed = OperatingSystem.IsWindows()
+            ? RunPowerShellScript(BuildBlackboxScript(), log)
+            : RunUnixShellScript(BuildUnixBlackboxScript(), log);
         if (installed)
         {
             try
@@ -587,7 +614,8 @@ public sealed class OptionalModuleInstaller
         try
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var configPath = Path.Combine(localAppData, "hermes", "config.yaml");
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var configPath = HermesConfigLocation.Resolve(localAppData, userProfile, File.Exists);
             if (!File.Exists(configPath))
             {
                 return (null, null);
@@ -730,8 +758,7 @@ public sealed class OptionalModuleInstaller
 
     private bool PrepareBlackboxDashboard()
     {
-        if (!OperatingSystem.IsWindows() ||
-            ResolveBlackboxAgentRoot() is not { } agent ||
+        if (ResolveBlackboxAgentRoot() is not { } agent ||
             !LocalModuleRuntime.IsPortListening(LocalModuleRuntime.BlackboxPort))
         {
             return true;
@@ -1038,6 +1065,11 @@ public sealed class OptionalModuleInstaller
 
     public static bool HasVcRuntime(string? windowsDirectory = null)
     {
+        if (windowsDirectory is null && !OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
         var root = windowsDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         if (string.IsNullOrWhiteSpace(root))
         {
@@ -1090,6 +1122,18 @@ public sealed class OptionalModuleInstaller
             if (!string.IsNullOrWhiteSpace(local))
             {
                 candidates.Add(Path.Combine(local, "Programs", "nodejs"));
+            }
+        }
+        else
+        {
+            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            candidates.Add("/opt/homebrew/bin");
+            candidates.Add("/usr/local/bin");
+            candidates.Add("/usr/bin");
+            if (!string.IsNullOrWhiteSpace(userHome))
+            {
+                candidates.Add(Path.Combine(userHome, ".local", "bin"));
+                candidates.Add(Path.Combine(userHome, ".npm-global", "bin"));
             }
         }
 
@@ -1329,4 +1373,172 @@ public sealed class OptionalModuleInstaller
     }
 
     private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private static string EscapeBash(string value) => value.Replace("'", "'\\''", StringComparison.Ordinal);
+
+    private string BuildUnixDkgScript()
+    {
+        var pathPreamble = ModulePrerequisites.Probe().BuildUnixPathPreamble();
+        return $$"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+            {{pathPreamble}}
+            dkgRoot='{{EscapeBash(DkgRoot)}}'
+            dkgHome='{{EscapeBash(DkgHome)}}'
+            dkg="$dkgRoot/node_modules/.bin/dkg"
+            dkgVersion='{{DkgRelease.PinnedVersion}}'
+            mkdir -p "$dkgRoot" "$dkgHome"
+            pkgPath="$dkgRoot/node_modules/@origintrail-official/dkg/package.json"
+            installed=""
+            if [ -f "$pkgPath" ] && command -v node >/dev/null 2>&1; then
+              installed=$(node -e "try{console.log(require(process.argv[1]).version||'')}catch{}" "$pkgPath" 2>/dev/null || true)
+            fi
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "DKG prerequisite missing: npm is not installed or not on PATH." >&2
+              exit 1
+            fi
+            if [ "$installed" != "$dkgVersion" ] || [ ! -x "$dkg" ]; then
+              if [ -x "$dkg" ]; then
+                DKG_HOME="$dkgHome" "$dkg" stop >/dev/null 2>&1 || true
+                sleep 2
+              fi
+              echo "Installing pinned @origintrail-official/dkg $dkgVersion from the Axiom lockfile..."
+              npm ci --prefix "$dkgRoot" --ignore-scripts --no-fund --no-audit
+            fi
+            echo "Building the better-sqlite3 native module for this Node version..."
+            npm rebuild better-sqlite3 --prefix "$dkgRoot"
+            export DKG_HOME="$dkgHome"
+            echo "Running non-interactive DKG setup with defaults..."
+            printf '\n\n\n\n\n\n\n\n\n\n\n\n\n\n' | "$dkg" init --network {{DkgRelease.Network}} --role edge --store oxigraph -y
+            configPath="$dkgHome/config.json"
+            if [ -f "$configPath" ] && command -v node >/dev/null 2>&1; then
+              node -e '
+                const fs = require("fs");
+                const p = process.argv[1];
+                const wal = Number(process.argv[2]);
+                const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+                cfg.autoUpdate = Object.assign(cfg.autoUpdate || {}, { enabled: false, source: "npm" });
+                if (cfg.store && cfg.store.backend === "oxigraph-server") {
+                  cfg.store.options = cfg.store.options || {};
+                  if (cfg.store.options.walRestartThresholdBytes == null) cfg.store.options.walRestartThresholdBytes = wal;
+                }
+                fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+              ' "$configPath" "{{ModuleStorageMaintenance.DefaultOxigraphWalRestartThresholdBytes}}" || true
+            fi
+            echo "Starting the DKG node in the background..."
+            nohup "$dkg" start </dev/null >/dev/null 2>&1 &
+            echo "DKG setup finished. Return to Axiom and click Check again."
+            """;
+    }
+
+    private string BuildUnixBlackboxScript()
+    {
+        var pathPreamble = ModulePrerequisites.Probe().BuildUnixPathPreamble();
+        const string pinnedRevision = "6df9193f8ba1d0a7adb39701d67c59b560408f8d";
+        return $$"""
+            #!/usr/bin/env bash
+            set -euo pipefail
+            {{pathPreamble}}
+            dir='{{EscapeBash(BlackboxRoot)}}'
+            agent="$dir/agent-blackbox"
+            mkdir -p "$dir"
+            if ! command -v git >/dev/null 2>&1; then
+              echo "Git is required to install Blackbox." >&2
+              exit 1
+            fi
+            if [ ! -d "$agent/.git" ]; then
+              rm -rf "$agent"
+              git init -q "$agent"
+              git -C "$agent" fetch -q --depth 1 https://github.com/umanitek/agent-blackbox.git "{{pinnedRevision}}"
+              git -C "$agent" checkout -q --detach FETCH_HEAD
+            else
+              git -C "$agent" checkout -q -- . >/dev/null 2>&1 || true
+            fi
+            cd "$agent"
+            BLACKBOX_SETUP_ONLY=false BLACKBOX_USE_EXISTING_HERMES=0 BLACKBOX_MODE=block \
+              BLACKBOX_HERMES_SETUP=never BLACKBOX_SYNC_MODE=wait BLACKBOX_ATTACH_ALL=1 \
+              bash scripts/blackbox-install.sh --store oxigraph
+            python=$("$agent/scripts/run-in-hermes-env" python3 -c \
+              'import sys; from plugins.blackbox.guard import hooks; print(sys.executable)' | tail -n 1)
+            launcher="$agent/axiom-blackbox-python"
+            printf '#!/bin/bash\nexport HERMES_HOME=%q\nexec %q "$@"\n' "${HERMES_HOME:-$HOME/.hermes}" "$python" > "$launcher"
+            chmod 0700 "$launcher"
+            cat > "$agent/start-dashboard.py" <<'AXIOM_DASH_EOF'
+            {{BlackboxDashboardLauncherCode}}
+            AXIOM_DASH_EOF
+            if ! curl --noproxy '*' -fsS --max-time 2 http://127.0.0.1:9700 >/dev/null 2>&1; then
+              nohup "$launcher" "$agent/start-dashboard.py" </dev/null >/dev/null 2>&1 &
+              sleep 4
+            fi
+            echo "Blackbox setup finished. Return to Axiom and click Check again."
+            """;
+    }
+
+    private static bool RunUnixShellScript(string script, Action<string>? log)
+    {
+        var shell = File.Exists("/bin/bash") ? "/bin/bash" : "/bin/sh";
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
+        var runner = $"eval \"$(printf '%s' '{encoded}' | base64 -d 2>/dev/null || printf '%s' '{encoded}' | base64 -D)\"";
+        return LocalModuleRuntime.RunProcess(
+            shell,
+            $"-c \"{runner.Replace("\"", "\\\"", StringComparison.Ordinal)}\"",
+            log,
+            TimeSpan.FromMinutes(15));
+    }
+
+    private void StartUnixShell(string script, string fileName)
+    {
+        if (!IsInstallSupported)
+        {
+            return;
+        }
+
+        try
+        {
+            var scriptsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Axiom",
+                "scripts");
+            Directory.CreateDirectory(scriptsDir);
+            var scriptPath = Path.Combine(scriptsDir, fileName);
+            File.WriteAllText(scriptPath, script.Replace("\r\n", "\n", StringComparison.Ordinal), new UTF8Encoding(false));
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(
+                    scriptPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            if (OperatingSystem.IsMacOS())
+            {
+                using var _ = Process.Start(new ProcessStartInfo("/usr/bin/open", $"-a Terminal \"{scriptPath}\"") { UseShellExecute = false });
+                return;
+            }
+
+            foreach (var (term, args) in new[]
+                     {
+                         ("x-terminal-emulator", $"-e bash \"{scriptPath}\""),
+                         ("gnome-terminal", $"-- bash \"{scriptPath}; read -p 'Press Enter to close...' _\""),
+                         ("konsole", $"-e bash \"{scriptPath}\""),
+                         ("xfce4-terminal", $"-e \"bash '{scriptPath}'\""),
+                     })
+            {
+                if (File.Exists($"/usr/bin/{term}") || File.Exists($"/bin/{term}"))
+                {
+                    using var _ = Process.Start(new ProcessStartInfo(term, args) { UseShellExecute = false });
+                    return;
+                }
+            }
+
+            using var __ = Process.Start(new ProcessStartInfo(File.Exists("/bin/bash") ? "/bin/bash" : "/bin/sh", $"\"{scriptPath}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            LastError = $"Could not start module installer: {exception.Message}";
+        }
+    }
 }

@@ -79,8 +79,12 @@ public sealed class ModuleRepairPortabilityTests
     }
 
     [Fact]
-    public void Repair_is_reported_unsupported_off_windows()
+    public void Repair_and_install_are_supported_on_windows_linux_and_macos()
     {
+        Assert.Equal(
+            OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
+            OptionalModuleInstaller.IsInstallSupported);
+
         if (OperatingSystem.IsWindows())
         {
             return;
@@ -88,27 +92,23 @@ public sealed class ModuleRepairPortabilityTests
 
         var installer = new OptionalModuleInstaller();
         var log = new List<string>();
-
-        Assert.False(installer.RepairLocalModules(blackbox: true, dkg: true, log: log.Add));
-        Assert.Equal(OptionalModuleInstaller.UnsupportedInstallMessage, installer.LastError);
-        Assert.Contains(OptionalModuleInstaller.UnsupportedInstallMessage, log);
+        Assert.True(installer.RepairLocalModules(blackbox: false, dkg: false, log: log.Add));
+        Assert.Null(installer.LastError);
     }
 
     [Fact]
-    public void Unsupported_install_message_names_the_running_os()
+    public void HasVcRuntime_returns_true_off_windows_by_default()
     {
-        if (OperatingSystem.IsMacOS())
+        if (!OperatingSystem.IsWindows())
         {
-            Assert.Contains("on macOS yet", OptionalModuleInstaller.UnsupportedInstallMessage, StringComparison.Ordinal);
+            Assert.True(OptionalModuleInstaller.HasVcRuntime());
         }
-        else if (OperatingSystem.IsLinux())
-        {
-            Assert.Contains("on Linux yet", OptionalModuleInstaller.UnsupportedInstallMessage, StringComparison.Ordinal);
-        }
+
+        Assert.False(OptionalModuleInstaller.HasVcRuntime(Path.Combine(Path.GetTempPath(), "nonexistent-win-dir")));
     }
 
     [Fact]
-    public void Hidden_powershell_is_not_started_off_windows()
+    public void Hidden_powershell_is_not_started_off_windows_while_unix_shell_is_available()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -117,7 +117,7 @@ public sealed class ModuleRepairPortabilityTests
 
         var log = new List<string>();
         Assert.False(LocalModuleRuntime.RunHiddenPowerShell("Write-Output 1", log.Add, TimeSpan.FromSeconds(5)));
-        Assert.False(LocalModuleRuntime.StopProcesses(["agent-blackbox"], log.Add));
-        Assert.All(log, line => Assert.Equal(OptionalModuleInstaller.UnsupportedInstallMessage, line));
+        Assert.Contains(OptionalModuleInstaller.UnsupportedInstallMessage, log);
+        Assert.True(LocalModuleRuntime.RunHiddenShell("echo ok", null, TimeSpan.FromSeconds(5)));
     }
 }

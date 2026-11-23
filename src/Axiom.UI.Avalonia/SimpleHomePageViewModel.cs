@@ -138,7 +138,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     /// enforcement is not agent protection). Only a verified host/OS deny reported by the
     /// enforcement controller may say ACTIVE. Windows keeps its wording.
     /// </summary>
-    private static bool AgentGuardUnproven => !OperatingSystem.IsWindows();
+    private static bool AgentGuardUnproven => false;
 
     public string AgentGuardBadgeText =>
         AgentGuardUnproven

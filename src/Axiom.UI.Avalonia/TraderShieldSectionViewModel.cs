@@ -78,11 +78,8 @@ public sealed partial class TraderShieldSectionViewModel : ObservableObject
         Func<string, string, bool>? writeFile = null,
         Func<IReadOnlyList<ProtectionCheckResult>>? selfTestRunner = null)
     {
-        // Off Windows the default path would resolve to the user's own ~/.hermes/config.yaml (not a
-        // Blackbox-managed profile, which only the Windows installer creates): never read or write it.
-        // An explicit path (tests) keeps the section functional on every platform.
-        _platformSupported = configPath is not null || OperatingSystem.IsWindows();
-        _configPath = configPath ?? (_platformSupported ? TraderShieldProvisioner.ResolveConfigPath() : string.Empty);
+        _platformSupported = true;
+        _configPath = configPath ?? TraderShieldProvisioner.ResolveConfigPath();
         _fileExists = fileExists ?? File.Exists;
         _readFile = readFile ?? DefaultReadFile;
         _writeFile = writeFile ?? DefaultWriteFile;

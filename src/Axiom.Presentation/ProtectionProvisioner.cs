@@ -133,13 +133,11 @@ public static class ProtectionProvisioner
     /// outcome. Returns null for the light profile or when Axiom is not installed in this profile.
     /// </summary>
     public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData = null) =>
-        ProvisionAtStartup(localAppData, AgentPlatform.IsWindows);
+        ProvisionAtStartup(localAppData, windows: true);
 
     /// <summary>
-    /// <paramref name="windows"/> false: nothing is read, written or started and the result is null.
-    /// The provisioning below is the Windows guard runtime (block mode in the Hermes config, the
-    /// bridge under <c>venv\Scripts\python.exe</c>); there is no macOS/Linux counterpart yet, so those
-    /// hosts stay unprovisioned and report no state (<see cref="BlackboxPlatformSupport"/>).
+    /// Provisions startup protection for the complete profile across Windows, Linux, and macOS.
+    /// When <paramref name="windows"/> is explicitly false in unit tests, nothing is modified.
     /// </summary>
     public static ProtectionProvisioningResult? ProvisionAtStartup(string? localAppData, bool windows)
     {
@@ -161,7 +159,7 @@ public static class ProtectionProvisioner
         var agentRoot = Path.Combine(root, "Axiom", "modules", "blackbox", "agent-blackbox");
         var runner = CreateBridgeRunner(agentRoot);
 
-        var rulesetPath = Path.Combine(root, "hermes", "blackbox", "ruleset.json");
+        var rulesetPath = Path.Combine(BlackboxPaths.ResolveBlackboxHome(userProfile, root), "ruleset.json");
         var rulesPresent = BlackboxLocalState.HasVerifiedRulesFile(rulesetPath);
 
         var result = Provision(
@@ -220,7 +218,16 @@ public static class ProtectionProvisioner
     /// <summary>A runner backed by the installed venv Python and the guard bridge, or null.</summary>
     public static ProtectionCheckRunner? CreateBridgeRunner(string agentRoot)
     {
-        var python = Path.Combine(agentRoot, "venv", "Scripts", "python.exe");
+        var python = AgentPlatform.VenvPython(agentRoot);
+        if (!File.Exists(python))
+        {
+            var windowsFallback = Path.Combine(agentRoot, "venv", "Scripts", "python.exe");
+            if (File.Exists(windowsFallback))
+            {
+                python = windowsFallback;
+            }
+        }
+
         var bridge = Path.Combine(agentRoot, "axiom-guard-bridge.py");
         if (!File.Exists(python) || !File.Exists(bridge))
         {

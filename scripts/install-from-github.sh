@@ -110,12 +110,12 @@ download_package() {
         entry=${entry%$'\r'}
         entry=${entry#\*}
         if [[ $checksum =~ ^[[:xdigit:]]{64}$ && $entry =~ $pattern ]]; then
-            [[ -z $name ]] || fail 'Multiple preview packages match this platform.'
+            [[ -z $name ]] || fail 'Multiple release packages match this platform.'
             name=$entry
             expected=$(printf '%s' "$checksum" | tr '[:upper:]' '[:lower:]')
         fi
     done < "$scratch/SHA256SUMS.txt"
-    [[ -n $name ]] || fail 'The latest release has no verified preview for this platform.'
+    [[ -n $name ]] || fail 'The latest release has no verified package for this platform.'
     package="$scratch/$name"
     curl -fsSL "$release_url/$name" -o "$package"
     if [[ $sha_command == shasum ]]; then
@@ -127,13 +127,13 @@ download_package() {
 }
 
 install_linux() {
-    [[ -r /etc/os-release ]] || fail 'The Linux preview requires Ubuntu 24.04 amd64.'
+    [[ -r /etc/os-release ]] || fail 'The Linux package requires Ubuntu 24.04 amd64.'
     # This file describes the installed OS.
     source /etc/os-release
     [[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 24.04 && $(uname -m) == x86_64 ]] ||
-        fail 'The Linux preview requires Ubuntu 24.04 amd64.'
+        fail 'The Linux package requires Ubuntu 24.04 amd64.'
     [[ $EUID -ne 0 ]] || fail 'Run this as your desktop user. The installer calls sudo for APT.'
-    download_package '^axiom-firewall_[0-9]+\.[0-9]+\.[0-9]+\+linux\.preview[0-9]+_amd64\.deb$' sha256sum
+    download_package '^axiom-firewall_[0-9]+\.[0-9]+\.[0-9]+(\+linux\.preview[0-9]+)?_amd64\.deb$' sha256sum
     chmod a+rx "$scratch"
     chmod a+r "$package"
     sudo apt-get install -y "$package"
@@ -146,7 +146,7 @@ install_linux() {
 }
 
 install_macos() {
-    [[ $(uname -m) == x86_64 ]] || fail 'The published macOS preview is for Intel x64.'
+    [[ $(uname -m) == x86_64 ]] || fail 'The published macOS package is for Intel x64.'
     # The system extension only activates from /Applications (see macos/README.md).
     local applications_dir='/Applications'
     local application="$applications_dir/Axiom.app"

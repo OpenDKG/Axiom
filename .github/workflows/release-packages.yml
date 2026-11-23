@@ -83,9 +83,9 @@ jobs:
         run: |
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
           test -n "$version"
-          bash scripts/linux/package.sh deb --arch x64 --local linux.preview1
-          package="build/linux/axiom-firewall_${version}+linux.preview1_amd64.deb"
-          test "$(dpkg-deb -f "$package" Version)" = "$version+linux.preview1"
+          bash scripts/linux/package.sh deb --arch x64
+          package="build/linux/axiom-firewall_${version}_amd64.deb"
+          test "$(dpkg-deb -f "$package" Version)" = "$version"
           test "$(dpkg-deb -f "$package" Architecture)" = amd64
           dpkg-deb -c "$package" > package-contents.txt
           grep -F './usr/lib/axiom-firewall/axiomd/bpf/axiom_connect.bpf.o' package-contents.txt

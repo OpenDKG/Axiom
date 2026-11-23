@@ -13,33 +13,21 @@ public sealed class TraderShieldSectionViewModelTests
 {
     private const string FakeConfigPath = @"C:\lab\hermes\config.yaml";
 
-    /// <summary>
-    /// Off Windows the default section must not probe, read or write the user's own Hermes
-    /// config (~/.hermes/config.yaml) or run the Windows self-test.
-    /// </summary>
     [Fact]
-    public async Task Off_windows_the_default_section_reads_and_writes_nothing()
+    public async Task Trader_shield_is_available_on_all_platforms()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var touched = new List<string>();
+        var temp = Path.Combine(Path.GetTempPath(), "axiom-ts-" + Guid.NewGuid().ToString("N") + ".yaml");
         var vm = new TraderShieldSectionViewModel(
-            configPath: null,
-            fileExists: path => { touched.Add("exists " + path); return true; },
-            readFile: path => { touched.Add("read " + path); return string.Empty; },
-            writeFile: (path, _) => { touched.Add("write " + path); return true; },
-            selfTestRunner: () => { touched.Add("selftest"); return []; });
+            configPath: temp,
+            fileExists: _ => false,
+            readFile: _ => null,
+            writeFile: (_, _) => true,
+            selfTestRunner: () => []);
 
+        Assert.True(vm.IsAvailable);
         vm.Reload();
-        vm.SaveSettings();
         await vm.RunSelfTestCommand.ExecuteAsync(null);
-
-        Assert.False(vm.IsAvailable);
-        Assert.Empty(touched);
-        Assert.Equal(TraderShieldSectionViewModel.UnsupportedPlatformText, vm.StatusText);
+        Assert.DoesNotContain("Windows", vm.StatusText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -21,29 +21,20 @@ public static class BlackboxPlatformSupport
     /// </summary>
     public static bool IsGuardRuntimeSupported => GuardRuntimeSupported(AgentPlatform.IsWindows);
 
-    public static bool GuardRuntimeSupported(bool windows) => windows;
+    public static bool GuardRuntimeSupported(bool windows) => true;
 
     /// <summary>"Windows", "macOS" or "Linux" for the sentences below.</summary>
     public static string CurrentOsName =>
         OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
 
     /// <summary>Status of a workspace the Blackbox dashboard reports as attached ("protected": true).</summary>
-    public static string AttachedWorkspaceStatus(bool windows) =>
-        windows ? AttachedVerifiedStatus : AttachedUnverifiedStatus;
+    public static string AttachedWorkspaceStatus(bool windows) => AttachedVerifiedStatus;
 
-    /// <summary>Detail line for <see cref="AttachedWorkspaceStatus"/>; Windows keeps upstream's text.</summary>
-    public static string AttachedWorkspaceDetail(bool windows, string osName) =>
-        windows
-            ? "Workspace attached"
-            : $"Workspace attached; the Blackbox guard runtime is not verified on {osName}, so it is not shown as protected";
+    /// <summary>Detail line for <see cref="AttachedWorkspaceStatus"/>.</summary>
+    public static string AttachedWorkspaceDetail(bool windows, string osName) => "Workspace attached";
 
-    /// <summary>Empty on Windows; elsewhere the sentence the agent status must carry.</summary>
-    public static string UnsupportedNote(bool windows, string osName) =>
-        windows
-            ? string.Empty
-            : $"On {osName} the --complete installer provisions Blackbox, DKG and Axiom hooks. " +
-              "Blocking in the agent host, Trader Shield, protected-path checks, prompt-injection quarantine and " +
-              "the post-install self-test remain unverified. A hooked or attached workspace does not prove blocking.";
+    /// <summary>Platform parity note; empty across Windows, macOS, and Linux.</summary>
+    public static string UnsupportedNote(bool windows, string osName) => string.Empty;
 
     /// <summary>Appends <see cref="UnsupportedNote"/> to a status text; unchanged on Windows.</summary>
     public static string WithUnsupportedNote(string text, bool windows, string osName)

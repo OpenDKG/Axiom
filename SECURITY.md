@@ -5,7 +5,7 @@
 | Version | Status |
 |---|---|
 | Current Windows release (see [Releases](https://github.com/OpenDKG/Axiom/releases/latest)) | Best-effort security fixes |
-| Linux and macOS developer previews | Experimental builds with platform-specific limits |
+| Current Linux and macOS releases (see [Releases](https://github.com/OpenDKG/Axiom/releases/latest)) | Best-effort security fixes |
 | Earlier development milestones | Not maintained; upgrade for current fixes |
 
 Interfaces, storage schema and IPC protocol may change between releases.

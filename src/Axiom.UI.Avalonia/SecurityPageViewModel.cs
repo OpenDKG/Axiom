@@ -853,7 +853,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
         var installNow = await _ui.ConfirmAsync(
             "Install prerequisites",
             $"The optional module installers need: {summary}.{rejectedPython}\n\n" +
-            "Install them now? A PowerShell window shows every winget command.",
+            (OperatingSystem.IsWindows()
+                ? "Install them now? A PowerShell window shows every winget command."
+                : "Install them now? A terminal window shows the package-manager commands."),
             "Install prerequisites",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
@@ -865,7 +867,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
 
         _installer.InstallPrerequisites(report, missingVc);
         InstallStatusText = _installer.LastError
-            ?? $"Prerequisite installer opened in PowerShell for {summary}. Complete it, then click Check again.";
+            ?? (OperatingSystem.IsWindows()
+                ? $"Prerequisite installer opened in PowerShell for {summary}. Complete it, then click Check again."
+                : $"Prerequisite installer opened in terminal for {summary}. Complete it, then click Check again.");
         return false;
     }
 
@@ -958,9 +962,10 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             var isRepair = _uninstaller.HasBlackboxFiles;
             var confirmed = await _ui.ConfirmAsync(
                 isRepair ? "Repair Blackbox" : "Install Blackbox",
-                "This downloads and runs Umanitek's official Windows installer with the Oxigraph/auto " +
-                "backend (no Docker).\n\nIt installs Python packages, clones the repository and may " +
-                "register a scheduled task. Review the installer; continue only if you trust it.",
+                (OperatingSystem.IsWindows()
+                    ? "This downloads and runs Umanitek's official Windows installer with the Oxigraph/auto backend (no Docker).\n\n"
+                    : $"This clones and configures Umanitek's pinned agent-blackbox runtime for {BlackboxPlatformSupport.CurrentOsName} with the Oxigraph backend (no Docker).\n\n") +
+                "It installs Python packages and sets up the local guard/dashboard. Review the installer; continue only if you trust it.",
                 isRepair ? "Repair" : "Open installer",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
@@ -978,7 +983,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
-            InstallStatusText = "Blackbox installer opened in PowerShell. Complete it, then click Check again.";
+            InstallStatusText = OperatingSystem.IsWindows()
+                ? "Blackbox installer opened in PowerShell. Complete it, then click Check again."
+                : "Blackbox installer opened in terminal. Complete it, then click Check again.";
             return;
         }
 
@@ -1017,9 +1024,14 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
             }
 
             var isRepair = _uninstaller.HasDkgFiles;
+            var dkgTarget = OperatingSystem.IsWindows()
+                ? @"%LOCALAPPDATA%\Axiom\modules"
+                : OperatingSystem.IsMacOS()
+                    ? "~/Library/Application Support/Axiom/modules"
+                    : "~/.local/share/Axiom/modules";
             var confirmed = await _ui.ConfirmAsync(
                 isRepair ? "Repair OriginTrail DKG" : "Install OriginTrail DKG",
-                "This installs @origintrail-official/dkg into %LOCALAPPDATA%\\Axiom\\modules, " +
+                $"This installs @origintrail-official/dkg into {dkgTarget}, " +
                 "configures testnet and starts the node.\n\nIt needs Node.js/npm. Continue?",
                 isRepair ? "Repair" : "Open installer",
                 destructive: true,
@@ -1038,7 +1050,9 @@ public sealed partial class SecurityPageViewModel : PageViewModel, IDisposable
                 return;
             }
 
-            InstallStatusText = "DKG installer opened in PowerShell. Complete it, then click Check again.";
+            InstallStatusText = OperatingSystem.IsWindows()
+                ? "DKG installer opened in PowerShell. Complete it, then click Check again."
+                : "DKG installer opened in terminal. Complete it, then click Check again.";
         }
     }
 
