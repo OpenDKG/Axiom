@@ -91,6 +91,8 @@ install_agent_modules() (
     fi
 
     if $install_hooks; then
+        [[ -x $runtime/axiom-blackbox-python ]] ||
+            fail 'Agent hooks require the Axiom-managed Blackbox runtime. Rerun with --with-blackbox (or --complete).'
         "$desktop" --axiom-unix-agent-setup refresh ||
             fail 'Agent setup finished, but Axiom could not refresh its agent hooks.'
     fi
@@ -145,25 +147,67 @@ install_linux() {
     nohup /usr/bin/axiom-firewall </dev/null >/dev/null 2>&1 &
 }
 
+version_lt() {
+    local a=${1%%[-+]*} b=${2%%[-+]*}
+    local -a pa pb
+    local IFS=.
+    read -ra pa <<< "$a"
+    read -ra pb <<< "$b"
+    local max=${#pa[@]}
+    if (( ${#pb[@]} > max )); then
+        max=${#pb[@]}
+    fi
+    local i va vb
+    for ((i = 0; i < max; i++)); do
+        va=${pa[i]:-0}
+        vb=${pb[i]:-0}
+        [[ $va =~ ^[0-9]+$ && $vb =~ ^[0-9]+$ ]] || return 1
+        if ((10#$va < 10#$vb)); then
+            return 0
+        elif ((10#$va > 10#$vb)); then
+            return 1
+        fi
+    done
+    return 1
+}
+
 install_macos() {
     [[ $(uname -m) == x86_64 ]] || fail 'The published macOS package is for Intel x64.'
     # The system extension only activates from /Applications (see macos/README.md).
     local applications_dir='/Applications'
     local application="$applications_dir/Axiom.app"
+    [[ -w $applications_dir ]] ||
+        fail 'This account cannot write to /Applications. Run the installer as an administrator account.'
+    download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum "$applications_dir"
+    ditto -x -k "$package" "$scratch/unpacked"
+    local bundle="$scratch/unpacked/Axiom.app"
+    [[ -x $bundle/Contents/MacOS/Axiom ]] || fail 'The downloaded app bundle is incomplete.'
+    codesign --verify --deep --strict "$bundle"
+
     if [[ -d $application ]]; then
-        printf 'Opening the existing Axiom installation in /Applications.\n'
+        local installed_ver='' new_ver='' backup="$scratch/Axiom.app.backup"
+        installed_ver=$(plutil -extract CFBundleShortVersionString raw "$application/Contents/Info.plist" 2>/dev/null) || installed_ver=''
+        new_ver=$(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist" 2>/dev/null) || new_ver=''
+        if [[ -n $installed_ver && -n $new_ver && $installed_ver != "$new_ver" ]]; then
+            if version_lt "$new_ver" "$installed_ver"; then
+                fail "Cannot downgrade installed Axiom $installed_ver to older $new_ver."
+            fi
+        fi
+        printf 'Updating Axiom in /Applications (v%s -> v%s)...\n' "${installed_ver:-unknown}" "${new_ver:-latest}"
+        osascript -e 'tell application "Axiom" to quit' >/dev/null 2>&1 || true
+        sleep 1
+        pkill -x Axiom 2>/dev/null || true
+        mv "$application" "$backup" || fail 'Could not stage existing /Applications/Axiom.app for update.'
+        if ! mv "$bundle" "$application"; then
+            mv "$backup" "$application" >/dev/null 2>&1 || true
+            fail 'Could not replace /Applications/Axiom.app; previous version restored.'
+        fi
     else
-        [[ -w $applications_dir ]] ||
-            fail 'This account cannot write to /Applications. Run the installer as an administrator account.'
-        download_package '^Axiom-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-osx-x64-adhoc\.zip$' shasum "$applications_dir"
-        ditto -x -k "$package" "$scratch/unpacked"
-        local bundle="$scratch/unpacked/Axiom.app"
-        [[ -x $bundle/Contents/MacOS/Axiom ]] || fail 'The downloaded app bundle is incomplete.'
-        codesign --verify --deep --strict "$bundle"
         # Unpacking on the destination filesystem makes the final move an atomic rename.
         mv -n "$bundle" "$applications_dir/"
         [[ ! -e $bundle ]] || fail 'The destination already exists.'
     fi
+
     "$application/Contents/MacOS/Axiom" --axiom-unix-agent-setup profile "$mode" >/dev/null 2>&1 || true
     if $install_blackbox || $install_dkg || $install_hooks; then
         install_agent_modules "$application/Contents/MacOS/Axiom" "$application/Contents/Resources/axiom-unix-agent-setup"
@@ -223,6 +267,21 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if $install_hooks && ! $install_blackbox && ! $install_dkg; then
+    has_blackbox_runtime=false
+    if [[ $(uname -s) == Darwin ]]; then
+        if [[ -x "$HOME/Library/Application Support/Axiom/modules/blackbox/agent-blackbox/axiom-blackbox-python" || \
+              -x "$HOME/.local/share/Axiom/modules/blackbox/agent-blackbox/axiom-blackbox-python" ]]; then
+            has_blackbox_runtime=true
+        fi
+    elif [[ -x "${XDG_DATA_HOME:-$HOME/.local/share}/Axiom/modules/blackbox/agent-blackbox/axiom-blackbox-python" ]]; then
+        has_blackbox_runtime=true
+    fi
+    if ! $has_blackbox_runtime; then
+        fail 'Agent hooks require the Axiom-managed Blackbox runtime. Pass --with-blackbox (or --complete) on a clean host.'
+    fi
+fi
 
 case "$(uname -s)" in
     Linux) install_linux ;;
