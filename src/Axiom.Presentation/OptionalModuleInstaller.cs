@@ -10,14 +10,14 @@ using Axiom.Contracts.Modules;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// The DKG release Axiom installs. It must match the network the installer initialises: npm's
-/// <c>latest</c> tag is the mainnet build, while testnet uses a different version.
+/// The DKG release Axiom installs. It must match the network the installer initialises: Axiom
+/// pins a reviewed release in <c>Resources/dkg/package-lock.json</c> and passes <c>--network testnet</c>.
 /// </summary>
 public static class DkgRelease
 {
     public const string PackageName = "@origintrail-official/dkg";
 
-    public const string PinnedVersion = "10.1.0";
+    public const string PinnedVersion = "10.1.2";
 
     public const string Network = "testnet";
 
