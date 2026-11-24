@@ -10,6 +10,19 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+        {
+            if (eventArgs.ExceptionObject is Exception exception)
+            {
+                StartupLog.Write("fatal", exception);
+            }
+        };
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            StartupLog.Write("fatal", eventArgs.Exception);
+            eventArgs.SetObserved();
+        };
+
         DistributionContext.ConfigureForProcess(false);
         try
         {
