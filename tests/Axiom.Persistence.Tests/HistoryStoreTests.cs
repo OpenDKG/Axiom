@@ -408,6 +408,20 @@ public sealed class HistoryStoreTests : IDisposable
         Assert.Equal(8, page.TotalCount);
     }
 
+    [Fact]
+    public async Task Uninitialized_store_lazily_initializes_on_concurrent_operations()
+    {
+        var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+
+        await Task.WhenAll(
+            store.UpsertAsync(Snapshot(now, ("app1.exe", @"C:\app1.exe", 101, "203.0.113.1:443"))),
+            store.RecordThroughputAsync(now, 100, 200, 60));
+
+        var page = await Query(store, now, string.Empty);
+        Assert.Equal(1, page.TotalCount);
+    }
+
     private static ConnectionSnapshot SnapshotWithLocal(DateTimeOffset capturedUtc, string local) =>
         new()
         {

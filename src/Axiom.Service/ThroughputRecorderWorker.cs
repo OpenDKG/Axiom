@@ -18,6 +18,7 @@ public sealed partial class ThroughputRecorderWorker(
 {
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan FlushInterval = TimeSpan.FromMinutes(5);
+    private const int MaxPendingBuckets = 1440;
 
     private readonly List<ThroughputBucket> _pendingBuckets = [];
 
@@ -69,6 +70,10 @@ public sealed partial class ThroughputRecorderWorker(
                             _uploadBytes,
                             _downloadBytes,
                             _measuredSeconds));
+                        while (_pendingBuckets.Count > MaxPendingBuckets)
+                        {
+                            _pendingBuckets.RemoveAt(0);
+                        }
                     }
 
                     _bucketStart = FloorToMinute(now);
@@ -76,7 +81,7 @@ public sealed partial class ThroughputRecorderWorker(
                     _downloadBytes = 0;
                     _measuredSeconds = 0;
 
-                    if (_pendingBuckets.Count >= 12)
+                    if (_pendingBuckets.Count >= 12 || now - _lastFlush >= FlushInterval)
                     {
                         await FlushAsync(stoppingToken).ConfigureAwait(false);
                     }
