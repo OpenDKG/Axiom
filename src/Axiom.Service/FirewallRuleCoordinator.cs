@@ -95,6 +95,24 @@ public sealed partial class FirewallRuleCoordinator(
                     .ConfigureAwait(false);
                 return result;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                var canceled = pending with
+                {
+                    State = RuleState.Failed,
+                    LastErrorCode = "rule.apply_canceled",
+                };
+
+                await store.SaveFirewallRuleAsync(
+                        canceled,
+                        actorSid,
+                        "rule.apply",
+                        "canceled",
+                        "Rule apply was canceled.",
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+                throw;
+            }
 #pragma warning disable CA1031 // The adapter boundary must turn any failure into an audited result.
             catch (Exception exception)
 #pragma warning restore CA1031
@@ -107,7 +125,13 @@ public sealed partial class FirewallRuleCoordinator(
                     LastErrorCode = "rule.apply_exception",
                 };
 
-                await store.SaveFirewallRuleAsync(failed, actorSid, "rule.apply", "failed", exception.Message, cancellationToken)
+                await store.SaveFirewallRuleAsync(
+                        failed,
+                        actorSid,
+                        "rule.apply",
+                        "failed",
+                        exception.Message,
+                        CancellationToken.None)
                     .ConfigureAwait(false);
                 return Failed(spec.ManagedRuleId, "rule.apply_exception", exception.Message);
             }
@@ -152,6 +176,16 @@ public sealed partial class FirewallRuleCoordinator(
                     cancellationToken).ConfigureAwait(false);
                 return result;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await store.RecordFirewallRuleRemovalFailureAsync(
+                    managedRuleId,
+                    actorSid,
+                    "rule.remove_canceled",
+                    "Rule removal was canceled.",
+                    CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
 #pragma warning disable CA1031 // The adapter boundary must turn any failure into an audited result.
             catch (Exception exception)
 #pragma warning restore CA1031
@@ -162,7 +196,7 @@ public sealed partial class FirewallRuleCoordinator(
                     actorSid,
                     "rule.remove_exception",
                     exception.Message,
-                    cancellationToken).ConfigureAwait(false);
+                    CancellationToken.None).ConfigureAwait(false);
                 return Failed(managedRuleId, "rule.remove_exception", exception.Message);
             }
         }
