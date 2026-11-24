@@ -72,6 +72,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private long _upstreamFailureStreak;
 
+    private volatile Dictionary<string, IPAddress> _bootstrapByHost =
+        new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyDictionary<string, IPAddress> CurrentDohBootstrapAddresses => _bootstrapByHost;
+
     public DnsProxyServer(
         PrivacyShieldPolicy policy,
         IReadOnlyList<IPEndPoint> upstreams,
@@ -195,6 +200,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
     {
         ValidateTargets(targets);
         var copy = targets.ToArray();
+        _bootstrapByHost = BuildBootstrapMap(copy);
         EnsureDohClient(copy);
         _targets = copy;
         Interlocked.Exchange(ref _upstreamFailureStreak, 0);
@@ -215,11 +221,12 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private void EnsureDohClient(IReadOnlyList<DnsUpstreamTarget> targets)
     {
+        _bootstrapByHost = BuildBootstrapMap(targets);
         if (_httpClient is null && targets.Any(target => target.IsDoh))
         {
             _httpClient = _dohHandler is not null
                 ? new HttpClient(_dohHandler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan }
-                : CreateDohHttpClient(targets);
+                : CreateDohHttpClient();
         }
     }
 
@@ -599,7 +606,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
         return null;
     }
 
-    private static HttpClient CreateDohHttpClient(IReadOnlyList<DnsUpstreamTarget> targets)
+    private static Dictionary<string, IPAddress> BuildBootstrapMap(IReadOnlyList<DnsUpstreamTarget> targets)
     {
         var bootstrapByHost = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
         foreach (var target in targets)
@@ -609,7 +616,11 @@ public sealed class DnsProxyServer : IAsyncDisposable
                 bootstrapByHost.TryAdd(target.DohUri.DnsSafeHost, target.BootstrapAddress);
             }
         }
+        return bootstrapByHost;
+    }
 
+    private HttpClient CreateDohHttpClient()
+    {
         var handler = new SocketsHttpHandler
         {
             UseProxy = false,
@@ -621,7 +632,7 @@ public sealed class DnsProxyServer : IAsyncDisposable
             ConnectCallback = async (context, cancellationToken) =>
             {
                 var host = context.DnsEndPoint.Host;
-                if (!bootstrapByHost.TryGetValue(host, out var bootstrapIp) &&
+                if (!_bootstrapByHost.TryGetValue(host, out var bootstrapIp) &&
                     !DnsUpstream.TryResolveBootstrapAddress(host, out bootstrapIp))
                 {
                     var addresses = await System.Net.Dns

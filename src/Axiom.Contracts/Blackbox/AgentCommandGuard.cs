@@ -9,9 +9,12 @@ namespace Axiom.Contracts.Blackbox;
 public static class AgentCommandGuard
 {
     public const string PythonHelpers = """
-        def _split_shell_segments(command: str) -> list:
+        _MAX_SHELL_UNWRAP_DEPTH = 8
+
+
+        def _split_shell_segments(command: str, _depth: int = 0) -> list:
             # Split compound shell commands on unquoted operators (;, &&, ||, |, newline)
-            # and unwrap one level of `cmd /c "..."` or `bash/sh/powershell/pwsh -c "..."`.
+            # and unwrap nested `cmd /c "..."` or `bash/sh/powershell/pwsh -c "..."` up to _MAX_SHELL_UNWRAP_DEPTH.
             raw = command or ""
             if not raw.strip():
                 return []
@@ -63,6 +66,8 @@ public static class AgentCommandGuard
             expanded = []
             for seg in segments:
                 expanded.append(seg)
+                if _depth >= _MAX_SHELL_UNWRAP_DEPTH:
+                    continue
                 tokens = _tokenize_segment(seg)
                 if len(tokens) >= 3:
                     head = os.path.basename(tokens[0][0].lower()).removesuffix(".exe")
@@ -72,7 +77,7 @@ public static class AgentCommandGuard
                             if flag in ("/c", "-c", "-command") and not tokens[idx][1]:
                                 inner = tokens[idx + 1][0]
                                 if inner:
-                                    expanded.extend(_split_shell_segments(inner))
+                                    expanded.extend(_split_shell_segments(inner, _depth + 1))
                                 break
             return expanded
 
@@ -652,20 +657,41 @@ public static class AgentCommandGuard
         )
 
 
+        def _local_axiom_dirs() -> list:
+            dirs = []
+            if os.name == "nt":
+                local = os.environ.get("LOCALAPPDATA")
+                if local:
+                    dirs.append(Path(local) / "Axiom")
+            else:
+                xdg = os.environ.get("XDG_DATA_HOME")
+                if xdg:
+                    dirs.append(Path(xdg) / "Axiom")
+                dirs.append(Path.home() / ".local" / "share" / "Axiom")
+                dirs.append(Path.home() / "Library" / "Application Support" / "Axiom")
+            legacy = Path.home() / "Axiom"
+            if legacy not in dirs:
+                dirs.append(legacy)
+            return dirs
+
+
         def _is_fail_closed() -> bool:
             env_flag = (os.environ.get("AXIOM_GUARD_FAIL_CLOSED") or "").strip().lower()
             if env_flag in ("1", "true", "yes", "fail-closed", "strict"):
                 return True
+            for axiom_dir in _local_axiom_dirs():
+                policy_file = axiom_dir / "guard-failure-policy.txt"
+                try:
+                    if policy_file.is_file():
+                        value = policy_file.read_text(encoding="utf-8-sig").strip().lower()
+                        if value in ("fail-closed", "fail_closed", "strict", "true", "1"):
+                            return True
+                        if value in ("fail-open", "fail_open", "false", "0"):
+                            return False
+                except Exception:
+                    pass
             if env_flag in ("0", "false", "no", "fail-open"):
                 return False
-            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
-            policy_file = Path(local) / "Axiom" / "guard-failure-policy.txt"
-            try:
-                if policy_file.is_file():
-                    value = policy_file.read_text(encoding="utf-8").strip().lower()
-                    return value in ("fail-closed", "fail_closed", "strict", "true", "1")
-            except Exception:
-                pass
             return False
 
 
@@ -689,8 +715,7 @@ public static class AgentCommandGuard
             except Exception as exc:
                 os.environ["AXIOM_BLACKBOX_CONFIG_ERROR"] = str(exc)
 
-            local = os.environ.get("LOCALAPPDATA") or str(Path.home())
-            candidates = [Path(local) / "Axiom" / "enforcement-policy.json"]
+            candidates = [axiom_dir / "enforcement-policy.json" for axiom_dir in _local_axiom_dirs()]
             program_data = os.environ.get("ProgramData") or os.environ.get("PROGRAMDATA")
             if program_data:
                 candidates.append(Path(program_data) / "Axiom" / "enforcement-policy.json")
@@ -702,7 +727,7 @@ public static class AgentCommandGuard
                     if not policy_path.is_file():
                         continue
                     import json as _json
-                    data = _json.loads(policy_path.read_text(encoding="utf-8"))
+                    data = _json.loads(policy_path.read_text(encoding="utf-8-sig"))
                     if not isinstance(data, dict):
                         continue
                     for item in (data.get("protectedPaths") or ()):

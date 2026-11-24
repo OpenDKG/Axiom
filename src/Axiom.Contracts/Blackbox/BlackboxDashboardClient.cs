@@ -251,6 +251,8 @@ public sealed class BlackboxDashboardClient : IDisposable
 
     private readonly HttpClient _http;
 
+    private readonly Uri _baseUri;
+
     private readonly bool _ownsHttpClient;
 
     public BlackboxDashboardClient(HttpClient? httpClient = null, Uri? baseUri = null)
@@ -261,6 +263,7 @@ public sealed class BlackboxDashboardClient : IDisposable
             throw new ArgumentException("Blackbox dashboard must be a loopback address.", nameof(baseUri));
         }
 
+        _baseUri = uri;
         if (httpClient is null)
         {
             _http = new HttpClient { BaseAddress = uri, Timeout = TimeSpan.FromSeconds(15) };
@@ -269,10 +272,10 @@ public sealed class BlackboxDashboardClient : IDisposable
         else
         {
             _http = httpClient;
-            _http.BaseAddress ??= uri;
-            _http.Timeout = TimeSpan.FromSeconds(15);
         }
     }
+
+    private Uri ResolveUri(string relativePath) => new(_baseUri, relativePath);
 
     public Task<JsonObject> GetSettingsAsync(CancellationToken cancellationToken) =>
         GetObjectAsync("api/settings", cancellationToken);
@@ -295,7 +298,7 @@ public sealed class BlackboxDashboardClient : IDisposable
         CancellationToken cancellationToken)
     {
         var token = await GetSessionTokenAsync(cancellationToken).ConfigureAwait(false);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/settings")
+        using var request = new HttpRequestMessage(HttpMethod.Post, ResolveUri("api/settings"))
         {
             Content = new StringContent(
                 patch.ToJsonString(),
@@ -458,7 +461,7 @@ public sealed class BlackboxDashboardClient : IDisposable
     public async Task<BlackboxSyncResult> RequestSyncAsync(CancellationToken cancellationToken)
     {
         var token = await GetSessionTokenAsync(cancellationToken).ConfigureAwait(false);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/sync")
+        using var request = new HttpRequestMessage(HttpMethod.Post, ResolveUri("api/sync"))
         {
             Content = new StringContent("{}", Encoding.UTF8, "application/json"),
         };
@@ -496,7 +499,7 @@ public sealed class BlackboxDashboardClient : IDisposable
 
     private async Task<JsonObject> GetObjectAsync(string path, CancellationToken cancellationToken)
     {
-        using var response = await _http.GetAsync(path, cancellationToken).ConfigureAwait(false);
+        using var response = await _http.GetAsync(ResolveUri(path), cancellationToken).ConfigureAwait(false);
         var body = await ReadBoundedAsync(response, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -517,7 +520,7 @@ public sealed class BlackboxDashboardClient : IDisposable
 
     private async Task<JsonDocument> GetJsonAsync(string path, CancellationToken cancellationToken)
     {
-        using var response = await _http.GetAsync(path, cancellationToken).ConfigureAwait(false);
+        using var response = await _http.GetAsync(ResolveUri(path), cancellationToken).ConfigureAwait(false);
         var body = await ReadBoundedAsync(response, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {

@@ -23,6 +23,7 @@ public sealed class EnforcementPolicyEvaluator
     private const string InvalidRuleId = "policy:invalid-request";
     private const string GuardRuleId = "blackbox:guard";
 
+    private readonly Lock _gate = new();
     private readonly EnforcementPolicy _policy;
     private readonly Dictionary<string, AgentActionVerdict> _verdicts = new(StringComparer.Ordinal);
     private readonly Queue<string> _remembered = new();
@@ -65,9 +66,12 @@ public sealed class EnforcementPolicyEvaluator
                 boundary: EnforcementStrength.Observation);
         }
 
-        if (_verdicts.TryGetValue(request.RequestId, out var cached))
+        lock (_gate)
         {
-            return cached;
+            if (_verdicts.TryGetValue(request.RequestId, out var cached))
+            {
+                return cached;
+            }
         }
 
         var boundary = BoundaryStrength(capabilities);
@@ -75,7 +79,15 @@ public sealed class EnforcementPolicyEvaluator
         var mode = agent?.Mode ?? EnforcementMode.Monitor;
 
         var verdict = Decide(request, boundary, agent, mode, guard);
-        Remember(request.RequestId, verdict);
+        lock (_gate)
+        {
+            if (_verdicts.TryGetValue(request.RequestId, out var existing))
+            {
+                return existing;
+            }
+
+            Remember(request.RequestId, verdict);
+        }
         return verdict;
     }
 
