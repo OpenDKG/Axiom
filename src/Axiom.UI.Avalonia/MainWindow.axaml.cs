@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Axiom.Presentation;
 
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
     private ShellViewModel? _shell;
     private bool _applyingBackdrop;
     private bool _isMiniWindowLayout;
+    private string? _autoShownUpdateVersion;
     private Size _expandedWindowSize = new(1460, 900);
 
     public MainWindow()
@@ -127,6 +129,7 @@ public partial class MainWindow : Window
         }
 
         ApplyBackdrop();
+        SyncUpdatePopupAutoDisplay();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -153,10 +156,56 @@ public partial class MainWindow : Window
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_shell is not null && (e.PropertyName is null or nameof(ShellViewModel.IsMiniMode)))
+        if (_shell is null)
+        {
+            return;
+        }
+
+        if (e.PropertyName is null or nameof(ShellViewModel.IsMiniMode))
         {
             ApplyWindowLayoutForMode(_shell.IsMiniMode);
         }
+
+        if (e.PropertyName is null or nameof(ShellViewModel.UpdateAvailable) or nameof(ShellViewModel.LatestVersion))
+        {
+            SyncUpdatePopupAutoDisplay();
+        }
+    }
+
+    private void SyncUpdatePopupAutoDisplay()
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        if (!_shell.UpdateAvailable)
+        {
+            UpdatePopup.IsOpen = false;
+            return;
+        }
+
+        if (!IsVisible || WindowState == WindowState.Minimized || string.IsNullOrWhiteSpace(_shell.LatestVersion))
+        {
+            return;
+        }
+
+        if (string.Equals(_autoShownUpdateVersion, _shell.LatestVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _autoShownUpdateVersion = _shell.LatestVersion;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_shell is { UpdateAvailable: true } &&
+                IsVisible &&
+                WindowState != WindowState.Minimized &&
+                !AlertsPopup.IsOpen)
+            {
+                UpdatePopup.IsOpen = true;
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private void ApplyWindowLayoutForMode(bool mini)
@@ -327,6 +376,14 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             UpdateCaptionGlyph();
+            if (change.NewValue is WindowState state && state != WindowState.Minimized)
+            {
+                SyncUpdatePopupAutoDisplay();
+            }
+        }
+        else if (change.Property == IsVisibleProperty && change.NewValue is true)
+        {
+            SyncUpdatePopupAutoDisplay();
         }
 
         if (change.Property == ActualTransparencyLevelProperty && !_applyingBackdrop)

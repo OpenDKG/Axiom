@@ -198,50 +198,59 @@
            Placement="BottomEdgeAlignedRight"
            IsLightDismissEnabled="True"
            HorizontalOffset="0" VerticalOffset="4">
-      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="420" Padding="14">
-        <StackPanel Spacing="8">
+      <Border Classes="card" Background="{DynamicResource Axiom.PopupSurface}" Width="440" Padding="18,16">
+        <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="Update available" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Grid.Column="0" Text="New version available" FontSize="14" FontWeight="SemiBold"
                        Foreground="{DynamicResource Axiom.TextPrimary}" VerticalAlignment="Center" />
-            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="4" Padding="6,2">
-              <TextBlock Text="{Binding LatestVersion, StringFormat=v{0}}" FontSize="10" FontWeight="SemiBold"
+            <Border Grid.Column="1" Background="{DynamicResource Axiom.AccentSoft}" CornerRadius="6" Padding="8,3">
+              <TextBlock Text="{Binding LatestVersion, StringFormat=v{0}}" FontSize="11" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.Accent}" />
             </Border>
           </Grid>
-          <TextBlock Text="{Binding UpdateReleaseDateText, StringFormat=Released {0}}"
-                     IsVisible="{Binding HasUpdateReleaseDate}"
-                     FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" />
+          <StackPanel Spacing="3">
+            <TextBlock Text="A newer version of Axiom is ready to install. Your firewall rules, settings, and history are preserved."
+                       FontSize="11.5" LineHeight="17" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding UpdateReleaseDateText, StringFormat=Published {0}}"
+                       IsVisible="{Binding HasUpdateReleaseDate}"
+                       FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" />
+          </StackPanel>
           <Border IsVisible="{Binding HasUpdateReleaseNotes}"
                   Background="{DynamicResource Axiom.SurfaceAlt}"
                   BorderBrush="{DynamicResource Axiom.Border}"
-                  BorderThickness="1" CornerRadius="6" Padding="10,8">
-            <StackPanel Spacing="4">
-              <TextBlock Text="WHAT'S NEW" FontSize="9.5" FontWeight="SemiBold"
+                  BorderThickness="1" CornerRadius="8" Padding="12,10">
+            <StackPanel Spacing="6">
+              <TextBlock Text="HIGHLIGHTS" FontSize="10" FontWeight="SemiBold"
                          Foreground="{DynamicResource Axiom.TextMuted}" />
-              <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+              <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
                 <controls:AxiomSelectableTextBlock Text="{Binding UpdateReleaseNotesText}"
-                                                   FontSize="11" Foreground="{DynamicResource Axiom.TextSecondary}"
+                                                   FontSize="11.5" LineHeight="18"
+                                                   Foreground="{DynamicResource Axiom.TextSecondary}"
                                                    TextWrapping="Wrap" />
               </ScrollViewer>
             </StackPanel>
           </Border>
-          <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
-            <Button Content="{Binding UpdateActionText}" Classes="primary" Command="{Binding OpenUpdateCommand}"
-                    Padding="12,5" FontSize="11" Margin="0,0,8,0" />
-            <Button Content="View on GitHub" Command="{Binding OpenReleasePageCommand}"
-                    Padding="10,5" FontSize="11" Margin="0,0,8,0" />
-            <Button Content="Dismiss" Command="{Binding DismissUpdateCommand}"
-                    Click="OnUpdateDismissClicked" Padding="10,5" FontSize="11" />
-          </WrapPanel>
+          <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2,0,0">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+              <Button Content="Release notes" Command="{Binding OpenReleasePageCommand}"
+                      Padding="10,6" FontSize="11" />
+              <Button Content="Later" Command="{Binding DismissUpdateCommand}"
+                      Click="OnUpdateDismissClicked" Padding="10,6" FontSize="11" />
+            </StackPanel>
+            <Button Grid.Column="2" Content="{Binding UpdateActionText}" Classes="primary"
+                    Command="{Binding OpenUpdateCommand}"
+                    IsEnabled="{Binding !IsDownloadingUpdate}"
+                    Padding="16,6" FontSize="11.5" />
+          </Grid>
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsDownloadingUpdate}">
             <ProgressBar Minimum="0" Maximum="100" Height="5" VerticalAlignment="Center"
                          Value="{Binding UpdateDownloadProgress}" IsIndeterminate="{Binding IsUpdateDownloadIndeterminate}"
                          AutomationProperties.Name="Installer download progress" />
             <TextBlock Grid.Column="1" Text="{Binding UpdateDownloadProgress, StringFormat={}{0}%}"
-                       FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
+                       FontSize="10.5" Foreground="{DynamicResource Axiom.TextSecondary}" VerticalAlignment="Center" />
           </Grid>
           <TextBlock Text="{Binding UpdateDownloadStatus}" IsVisible="{Binding HasUpdateDownloadStatus}"
-                     FontSize="10" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
+                     FontSize="10.5" Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
     </Popup>
