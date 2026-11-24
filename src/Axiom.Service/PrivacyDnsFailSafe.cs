@@ -152,13 +152,22 @@ public static class PrivacyDnsFailSafe
         var script = $$"""
             $ErrorActionPreference = 'Stop'
             $backup = '{{backup}}'
-            $targets = @(Get-DnsClientServerAddress -AddressFamily IPv4 |
-              Where-Object { @($_.ServerAddresses) -contains '127.0.0.1' })
+            $targets = @(
+              @(Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { @($_.ServerAddresses) -contains '127.0.0.1' }) +
+              @(Get-DnsClientServerAddress -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+                Where-Object { @($_.ServerAddresses) -contains '::1' })
+            )
             if ($targets.Count -eq 0) { exit 0 }
             $usable = $false
             if (Test-Path -LiteralPath $backup) {
               $item = Get-Item -LiteralPath $backup -Force
-              $ownerSid = (New-Object System.Security.Principal.NTAccount((Get-Acl -LiteralPath $backup).Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+              $ownerSid = $null
+              try {
+                $acl = Get-Acl -LiteralPath $backup
+                $sidObj = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+                if ($sidObj) { $ownerSid = $sidObj.Value }
+              } catch { }
               if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
                   $ownerSid -in @('S-1-5-18', 'S-1-5-32-544')) {
                 $snapshot = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
@@ -173,18 +182,27 @@ public static class PrivacyDnsFailSafe
                   $usable = $true
                   $covered = @()
                   foreach ($entry in @($snapshot.interfaces)) {
-                    if ($targets.InterfaceAlias -contains $entry.interfaceAlias) {
-                      $covered += [string]$entry.interfaceAlias
-                      if (@($entry.serverAddresses).Count -eq 0) {
-                        Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ResetServerAddresses
-                      } else {
-                        Set-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -ServerAddresses @($entry.serverAddresses)
+                    $familyInt = [int]$entry.addressFamily
+                    $matching = @($targets | Where-Object {
+                      $_.InterfaceAlias -eq $entry.interfaceAlias -and [int]$_.AddressFamily -eq $familyInt
+                    })
+                    if ($matching.Count -gt 0) {
+                      $covered += "$($entry.interfaceAlias)|$familyInt"
+                      $familyName = if ($familyInt -eq 23) { 'IPv6' } else { 'IPv4' }
+                      $familyTargets = @(Get-DnsClientServerAddress -InterfaceAlias $entry.interfaceAlias -AddressFamily $familyName -ErrorAction SilentlyContinue)
+                      if ($familyTargets.Count -gt 0) {
+                        if (@($entry.serverAddresses).Count -eq 0) {
+                          Set-DnsClientServerAddress -InputObject $familyTargets -ResetServerAddresses
+                        } else {
+                          Set-DnsClientServerAddress -InputObject $familyTargets -ServerAddresses @($entry.serverAddresses)
+                        }
                       }
                     }
                   }
                   foreach ($target in $targets) {
-                    if ($covered -notcontains [string]$target.InterfaceAlias) {
-                      Set-DnsClientServerAddress -InterfaceAlias $target.InterfaceAlias -ResetServerAddresses
+                    $key = "$($target.InterfaceAlias)|$([int]$target.AddressFamily)"
+                    if ($covered -notcontains $key) {
+                      Set-DnsClientServerAddress -InputObject $target -ResetServerAddresses
                     }
                   }
                 }
@@ -193,7 +211,7 @@ public static class PrivacyDnsFailSafe
             if (-not $usable) {
               # No trustworthy snapshot: fall back to DHCP instead of applying attacker input.
               foreach ($target in $targets) {
-                Set-DnsClientServerAddress -InterfaceAlias $target.InterfaceAlias -ResetServerAddresses
+                Set-DnsClientServerAddress -InputObject $target -ResetServerAddresses
               }
             }
             ipconfig /flushdns | Out-Null

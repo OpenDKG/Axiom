@@ -41,6 +41,12 @@ public sealed class DnsProxyServer : IAsyncDisposable
     // Created when the first DoH target appears (constructor or a later swap).
     private volatile HttpClient? _httpClient;
 
+    private volatile Dictionary<string, IPAddress> _bootstrapByHost =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly ConcurrentDictionary<string, byte> _resolvingHosts =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly HttpMessageHandler? _dohHandler;
 
     private readonly Action<PrivacyShieldBlockedEvent>? _onBlocked;
@@ -215,12 +221,29 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private void EnsureDohClient(IReadOnlyList<DnsUpstreamTarget> targets)
     {
+        _bootstrapByHost = BuildBootstrapMap(targets);
         if (_httpClient is null && targets.Any(target => target.IsDoh))
         {
             _httpClient = _dohHandler is not null
                 ? new HttpClient(_dohHandler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan }
-                : CreateDohHttpClient(targets);
+                : CreateDohHttpClient();
         }
+    }
+
+    private static Dictionary<string, IPAddress> BuildBootstrapMap(IReadOnlyList<DnsUpstreamTarget> targets)
+    {
+        var bootstrapByHost = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
+        foreach (var target in targets)
+        {
+            if (target.DohUri is not null &&
+                target.BootstrapAddress is not null &&
+                !IPAddress.IsLoopback(target.BootstrapAddress))
+            {
+                bootstrapByHost.TryAdd(target.DohUri.DnsSafeHost, target.BootstrapAddress);
+            }
+        }
+
+        return bootstrapByHost;
     }
 
     private void NoteForwardResult(bool answered)
@@ -599,17 +622,8 @@ public sealed class DnsProxyServer : IAsyncDisposable
         return null;
     }
 
-    private static HttpClient CreateDohHttpClient(IReadOnlyList<DnsUpstreamTarget> targets)
+    private HttpClient CreateDohHttpClient()
     {
-        var bootstrapByHost = new Dictionary<string, IPAddress>(StringComparer.OrdinalIgnoreCase);
-        foreach (var target in targets)
-        {
-            if (target.DohUri is not null && target.BootstrapAddress is not null)
-            {
-                bootstrapByHost.TryAdd(target.DohUri.DnsSafeHost, target.BootstrapAddress);
-            }
-        }
-
         var handler = new SocketsHttpHandler
         {
             UseProxy = false,
@@ -621,16 +635,29 @@ public sealed class DnsProxyServer : IAsyncDisposable
             ConnectCallback = async (context, cancellationToken) =>
             {
                 var host = context.DnsEndPoint.Host;
-                if (!bootstrapByHost.TryGetValue(host, out var bootstrapIp) &&
-                    !DnsUpstream.TryResolveBootstrapAddress(host, out bootstrapIp))
+                if ((!_bootstrapByHost.TryGetValue(host, out var bootstrapIp) || IPAddress.IsLoopback(bootstrapIp)) &&
+                    (!DnsUpstream.TryResolveBootstrapAddress(host, out bootstrapIp) ||
+                     bootstrapIp is null ||
+                     IPAddress.IsLoopback(bootstrapIp)))
                 {
-                    var addresses = await System.Net.Dns
-                        .GetHostAddressesAsync(host, cancellationToken)
-                        .ConfigureAwait(false);
-                    bootstrapIp = addresses.FirstOrDefault(address => !IPAddress.IsLoopback(address));
+                    bootstrapIp = null;
+                    if (_resolvingHosts.TryAdd(host, 0))
+                    {
+                        try
+                        {
+                            var addresses = await System.Net.Dns
+                                .GetHostAddressesAsync(host, cancellationToken)
+                                .ConfigureAwait(false);
+                            bootstrapIp = addresses.FirstOrDefault(address => !IPAddress.IsLoopback(address));
+                        }
+                        finally
+                        {
+                            _resolvingHosts.TryRemove(host, out _);
+                        }
+                    }
                 }
 
-                if (bootstrapIp is null)
+                if (bootstrapIp is null || IPAddress.IsLoopback(bootstrapIp))
                 {
                     throw new SocketException((int)SocketError.HostNotFound);
                 }
