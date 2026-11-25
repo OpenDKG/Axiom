@@ -123,6 +123,10 @@ public static class OpenCodeAnalystLaunch
         start.Environment.Remove("OPENCODE_CONFIG_DIR");
         start.Environment.Remove("OPENCODE_CLI_CONFIG_CONTENT");
         start.Environment.Remove("OPENCODE_PERMISSION");
+        start.Environment.Remove("CLAUDE_CODE_OAUTH_TOKEN");
+        start.Environment.Remove("ANTHROPIC_AUTH_TOKEN");
+        start.Environment.Remove("GOOGLE_CLOUD_ACCESS_TOKEN");
+        start.Environment.Remove("GEMINI_CLI_OAUTH_TOKEN");
         start.Environment["OPENCODE_CONFIG_CONTENT"] = AnalystConfiguration;
         start.Environment["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true";
         start.Environment["OPENCODE_DISABLE_CLAUDE_CODE"] = "true";
