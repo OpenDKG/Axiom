@@ -13,6 +13,8 @@ public enum AiProviderKind
     Zai = 5,
     OpenCodeZen = 6,
     OpenChamberLocal = 7,
+    GoogleGemini = 8,
+    OpenRouter = 9,
 }
 
 public sealed record AiAnalystSettings
