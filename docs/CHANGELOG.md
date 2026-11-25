@@ -1,3 +1,8 @@
+## What's in 1.5.2
+
+- **Provider Terms of Service compliance policy & OAuth protection:** Added `AiProviderCompliancePolicy` across Contracts, Presentation, and WPF/Avalonia AI Analyst clients to block consumer web and private OAuth endpoints (`claude.ai`, `*cloudcode-pa.googleapis.com`, `chatgpt.com`, `chat.openai.com`, `api.githubcopilot.com`, `copilot-proxy.githubusercontent.com`), reject consumer OAuth token prefixes (`sk-ant-oat*`, `ya29.*`), and restrict `OpenChamberLocal` (`opencode://local`) to authorized OpenCode/local models while scrubbing leaked OAuth env vars in `OpenCodeAnalystLaunch`.
+- **Official Google Gemini & OpenRouter presets + safe MCP UI guidance:** Added `AiProviderKind.GoogleGemini` (`generativelanguage.googleapis.com`) and `AiProviderKind.OpenRouter` (`openrouter.ai` with `HTTP-Referer` and `X-Title` headers), ordered Local Ollama/LM Studio and official API key providers ahead of OpenCode CLI, surfaced live `ProviderComplianceText` notes in both Avalonia and WPF UI, replaced legacy local-login setup prompts with read-only MCP guidance (`Axiom.McpServer`), and documented the full compliance matrix and hook audit in `docs/PROVIDER_TOS_COMPLIANCE.md`.
+
 ## What's in 1.5.1
 
 - **Reliable cross-platform in-app updates & polished UpdatePopup:** Added `SetupProcessCloser` fallback when Setup is launched from inside `Axiom.Desktop`, auto-shutdown on Windows after launching the installer, verified `.deb`/`.zip` package downloads for Linux and macOS, redesigned `UpdatePopup` formatting (`FormatReleaseNotes`), 15-minute ETag (`304 NotModified`) update checks, tray-restore checks, and once-per-version automatic popup open.
