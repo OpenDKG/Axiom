@@ -28,17 +28,6 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     private readonly AiAnalystSettingsStore _settingsStore;
     private readonly IUserInteraction _ui;
     private readonly IServiceRequestClient? _serviceClient;
-
-    private static readonly Dictionary<AiProviderKind, (string Endpoint, string Model)> ProviderPresets =
-        new Dictionary<AiProviderKind, (string Endpoint, string Model)>
-        {
-            [AiProviderKind.OpenChamberLocal] = ("opencode://local", "opencode-go/deepseek-v4.1-flash"),
-            [AiProviderKind.OpenAi] = ("https://api.openai.com/v1/chat/completions", "gpt-5.1"),
-            [AiProviderKind.Anthropic] = ("https://api.anthropic.com/v1/messages", "claude-sonnet-4-5"),
-            [AiProviderKind.DeepSeek] = ("https://api.deepseek.com/chat/completions", "deepseek-chat"),
-            [AiProviderKind.Zai] = ("https://api.z.ai/api/paas/v4/chat/completions", "glm-5.3"),
-            [AiProviderKind.OpenCodeZen] = ("https://opencode.ai/zen/v1/chat/completions", "deepseek-v4.1-flash"),
-        };
     private readonly AiFindingStore _findingStore = new();
     private readonly IUiTimer _autoTimer;
     private readonly IUiTimer _busyTimer;
@@ -69,14 +58,8 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
         Providers =
         [
-            new(AiProviderKind.OpenChamberLocal, "OpenChamber / OpenCode (no install, uses your login)"),
-            new(AiProviderKind.OpenAiCompatible, "OpenAI-compatible / cloud (custom)"),
-            new(AiProviderKind.LocalOpenAiCompatible, "OpenAI-compatible / local (Ollama, LM Studio)"),
-            new(AiProviderKind.OpenAi, "OpenAI (api.openai.com)"),
-            new(AiProviderKind.Anthropic, "Anthropic Claude"),
-            new(AiProviderKind.DeepSeek, "DeepSeek"),
-            new(AiProviderKind.Zai, "Z.ai (GLM)"),
-            new(AiProviderKind.OpenCodeZen, "OpenCode Zen (cloud)"),
+            .. AiProviderCompliancePolicy.GetPresets()
+                .Select(preset => new AiProviderOption(preset.Kind, preset.Label)),
         ];
 
         _autoTimer = timers.Create(TimeSpan.FromSeconds(60));
@@ -90,11 +73,12 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         Endpoint = settings.Endpoint;
         Model = settings.Model;
         if (settings.Provider == AiProviderKind.OpenChamberLocal &&
-            !Endpoint.StartsWith("opencode://", StringComparison.OrdinalIgnoreCase))
+            !Endpoint.StartsWith("opencode://", StringComparison.OrdinalIgnoreCase) &&
+            AiProviderCompliancePolicy.TryGetPreset(AiProviderKind.OpenChamberLocal, out var openCodePreset))
         {
-            Endpoint = ProviderPresets[AiProviderKind.OpenChamberLocal].Endpoint;
+            Endpoint = openCodePreset.Endpoint;
             Model = string.IsNullOrWhiteSpace(Model)
-                ? ProviderPresets[AiProviderKind.OpenChamberLocal].Model
+                ? openCodePreset.DefaultModel
                 : Model;
         }
         RedactPaths = settings.RedactPaths;
@@ -141,10 +125,14 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         : string.Empty;
 
     public string CredentialsText => IsOpenCodeProvider
-        ? "Uses the OpenChamber/OpenCode CLI already signed in on this PC; no separate API key is needed."
+        ? "Uses your authorized OpenCode CLI setup. Third-party consumer logins (Claude Pro/Max, Antigravity, Gemini CLI, Copilot) are blocked to protect your accounts."
         : string.IsNullOrWhiteSpace(_apiKey)
             ? "No API key stored. A local endpoint may not require one."
             : $"API key is stored with {PlatformText.SecretStore}; it is never shown or logged.";
+
+    public string ProviderComplianceText => Provider is { } selected
+        ? AiProviderCompliancePolicy.GetComplianceNote(selected.Value)
+        : string.Empty;
 
     public string PrivacyText =>
         "Evidence is bounded and contains process names, PIDs, parent process chains, executable " +
@@ -164,6 +152,8 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOpenCodeProvider))]
     [NotifyPropertyChangedFor(nameof(IsConfigured))]
+    [NotifyPropertyChangedFor(nameof(CredentialsText))]
+    [NotifyPropertyChangedFor(nameof(ProviderComplianceText))]
     private AiProviderOption _provider;
 
     [ObservableProperty]
@@ -229,13 +219,12 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
 
     partial void OnProviderChanged(AiProviderOption value)
     {
-        if (ProviderPresets.TryGetValue(value.Value, out var preset))
+        if (value is not null && AiProviderCompliancePolicy.TryGetPreset(value.Value, out var preset))
         {
             Endpoint = preset.Endpoint;
-            Model = preset.Model;
+            Model = preset.DefaultModel;
         }
 
-        UpdateCredentialsText();
         UpdateStatus();
     }
 
@@ -320,8 +309,12 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
         {
             _suppressApiKeyInputChanged = false;
         }
-        SettingsStatus = $"Settings saved locally. The API key is protected with {PlatformText.SecretStore}.";
+        SettingsStatus = settings.Enabled &&
+                         !AiProviderCompliancePolicy.ValidateRequest(settings, _apiKey, out var complianceError)
+            ? $"Settings saved locally. Compliance check: {complianceError}"
+            : $"Settings saved locally. The API key is protected with {PlatformText.SecretStore}.";
         UpdateCredentialsText();
+        OnPropertyChanged(nameof(ProviderComplianceText));
         UpdateStatus();
         StartAutomaticTimer();
     }
@@ -339,14 +332,15 @@ public sealed partial class AiAnalystPageViewModel : PageViewModel, IActivatable
     }
 
     /// <summary>
-    /// Prompt the user can send to an agent that is already signed in, so that agent can configure
-    /// Axiom's AI Analyst for monitoring without a second API key (issue #366).
+    /// Prompt the user can send to an already signed-in official agent client so it connects
+    /// safely to Axiom's read-only MCP server or configures a compliant API key / local model.
     /// </summary>
     public string AgentSetupPrompt =>
-        "Configure Axiom's AI Analyst to use this agent's own local login instead of a separate API key: " +
-        "open Axiom > AI Analyst, set Provider to OpenChamber Local, keep the local endpoint " +
-        "(opencode://local), choose this session's model, save the settings, then run one test analysis " +
-        "and report the exact settings you changed. Do not paste an API key into this prompt.";
+        "Connect this official client (Claude Code, Antigravity, Codex, or Gemini CLI) to Axiom safely: " +
+        "register Axiom's read-only local stdio MCP server (Axiom.McpServer, see docs/MCP.md) so this session " +
+        "can inspect Axiom observations directly, OR in Axiom > AI Analyst configure an official API key " +
+        "provider (Anthropic Console, Google AI Studio, OpenAI Platform, or OpenRouter) or a local Ollama " +
+        "endpoint. Do not reuse any consumer OAuth login or paste API keys into chat.";
 
     [RelayCommand]
     private Task CopyAgentSetupPromptAsync() =>
