@@ -120,28 +120,6 @@ jobs:
             throw "Strict test gate failed: executed=$totalExecuted passed=$totalPassed failed=$totalFailed skipped=$totalSkipped"
           }
 
-      - name: Name failed tests (temporary diagnostic)
-        if: failure()
-        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
-        run: |
-          $files = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'test-results') -Filter *.trx -Recurse
-          $counts = foreach ($file in $files) {
-            [xml]$doc = Get-Content -LiteralPath $file.FullName
-            $c = $doc.TestRun.ResultSummary.Counters
-            "$($file.Name) $($doc.TestRun.ResultSummary.outcome) total=$($c.total) passed=$($c.passed) failed=$($c.failed)"
-          }
-          Write-Host ('::error::' + ($counts -join '; '))
-          $files | ForEach-Object {
-            [xml]$doc = Get-Content -LiteralPath $_.FullName
-            $doc.TestRun.Results.UnitTestResult | Where-Object { $_ -and $_.outcome -ne 'Passed' }
-            $doc.TestRun.ResultSummary.RunInfos.RunInfo | Where-Object { $_ } | ForEach-Object {
-              [pscustomobject]@{ testName = 'run info'; outcome = $_.outcome; Output = [pscustomobject]@{ ErrorInfo = [pscustomobject]@{ Message = $_.Text; StackTrace = '' } } }
-            }
-          } | Select-Object -First 8 | ForEach-Object {
-            $text = "$($_.testName) | $($_.outcome) | $($_.Output.ErrorInfo.Message) | $($_.Output.ErrorInfo.StackTrace)" -replace '\r?\n', ' '
-            Write-Host ('::error::' + $text.Substring(0, [Math]::Min(900, $text.Length)))
-          }
-
       - name: Check for vulnerable NuGet packages
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
