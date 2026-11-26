@@ -42,6 +42,10 @@ commands, script files and interpreters fed from files are out of scope. The che
 by what its text names, including for changes made through a pipe, so it does not follow every
 effect that a command can have when it runs.
 
+Values on a command line that name a command to run on this computer are checked too, such as options of
+`rsync` and `ssh`, and git settings and variables. `GIT_SSH` and the `-S` option of `scp` and `sftp` name
+only a program to run, and their values are not checked this way.
+
 Some less common ways of editing files in place, and of stopping or reconfiguring Axiom's processes
 and services, are not detected.
 
