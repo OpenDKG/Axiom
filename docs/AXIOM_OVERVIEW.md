@@ -37,18 +37,13 @@ File protection for an agent that runs as the signed-in user is enforced at the 
 (`HOST_DENY_VERIFIED`); the network boundary is enforced by the OS (`OS_DENY_VERIFIED`). The UI names
 the difference instead of claiming a boundary that does not exist.
 
-**Scope of the command check:** the guard inspects local shell text; it is not a sandbox; remote
-commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
-files are out of scope. A delete whose command names no protected path, such as
-`find / -name id_rsa -execdir rm {} \;`, is not detected.
-Permission changes through a pipe are judged the same way, by what the earlier command names:
-`find ~/.ssh | xargs chmod` is blocked, while `find . | xargs chmod` on project files is allowed by
-design, even though a search that starts in a parent folder could reach protected files.
+**Scope of the command check:** the guard inspects local shell text; it is not a sandbox. Remote
+commands, script files and interpreters fed from files are out of scope. The check judges a command
+by what its text names, including for changes made through a pipe, so it does not follow every
+effect that a command can have when it runs.
 
-Also not detected: in-place edits with `awk -i inplace`, `ruby -pi` or `ex`; stopping Axiom's process
-by a numeric ID, or after finding it with a pattern written to avoid its name (`grep [a]xiomd`);
-changing the service start type with `reg add …\Services\Axiom … Start=4`; CIM or WMI `Terminate`
-calls and `.Kill()`; and `systemctl edit` or `systemctl isolate`.
+Some less common ways of editing files in place, and of stopping or reconfiguring Axiom's processes
+and services, are not detected.
 
 ## Why Blackbox and DKG are part of Axiom
 
