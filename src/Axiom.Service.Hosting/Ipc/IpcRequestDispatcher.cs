@@ -25,6 +25,8 @@ public sealed class IpcRequestDispatcher
 
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
 
+    private readonly ClientActivity? _clientActivity;
+
     private readonly Func<ConnectionSnapshot?> _snapshotProvider;
 
     private readonly Func<ServiceHealth> _healthProvider;
@@ -95,6 +97,7 @@ public sealed class IpcRequestDispatcher
     {
         ArgumentNullException.ThrowIfNull(handlers);
 
+        _clientActivity = handlers.ClientActivity;
         _snapshotProvider = handlers.SnapshotProvider ?? throw new ArgumentException("SnapshotProvider is required.", nameof(handlers));
         _healthProvider = handlers.HealthProvider ?? throw new ArgumentException("HealthProvider is required.", nameof(handlers));
         _historyQuery = handlers.HistoryQuery;
@@ -180,6 +183,8 @@ public sealed class IpcRequestDispatcher
             {
                 return;
             }
+
+            _clientActivity?.Touch();
 
             var now = DateTime.UtcNow;
             if (now - windowStart >= TimeSpan.FromSeconds(1))

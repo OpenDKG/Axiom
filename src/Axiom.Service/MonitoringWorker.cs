@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Axiom.Contracts.Firewall;
 using Axiom.Contracts.Monitoring;
+using Axiom.Core.Protection;
+using Axiom.Service.Hosting.Ipc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -14,8 +16,16 @@ public sealed partial class MonitoringWorker(
     IConnectionSnapshotSource source,
     ConnectionSnapshotCache cache,
     FirewallRuleCoordinator firewall,
-    ILogger<MonitoringWorker> logger) : BackgroundService
+    ILogger<MonitoringWorker> logger,
+    ClientActivity clients,
+    ProtectionSettingsStore protection,
+    TimeProvider? time = null) : BackgroundService
 {
+    private static readonly TimeSpan IdleAfter = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(10);
+
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
     private static readonly TimeSpan RuleCacheLifetime = TimeSpan.FromSeconds(10);
 
     private IReadOnlyList<ManagedRule> _rules = [];
@@ -40,9 +50,7 @@ public sealed partial class MonitoringWorker(
 
         LogSource(logger, source.Name, source.PollInterval);
 
-        using var timer = new PeriodicTimer(source.PollInterval);
-
-        do
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
@@ -62,8 +70,29 @@ public sealed partial class MonitoringWorker(
                 cache.Fail(exception.Message);
                 LogCaptureFailure(logger, exception);
             }
+
+            await WaitForNextPollAsync(stoppingToken).ConfigureAwait(false);
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// One poll interval, or ten seconds when no client has asked for anything for thirty seconds.
+    /// Never slowed while Axiom Shield is on: it finds new applications in these snapshots. A
+    /// request ends the long wait at once.
+    /// </summary>
+    private async Task WaitForNextPollAsync(CancellationToken cancellationToken)
+    {
+        var nextRequest = clients.NextRequest;
+        if (clients.IsIdle(IdleAfter) && !protection.Load().Enabled && IdleInterval > source.PollInterval)
+        {
+            using var wake = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            await Task.WhenAny(Task.Delay(IdleInterval, _time, wake.Token), nextRequest).ConfigureAwait(false);
+            await wake.CancelAsync().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return;
+        }
+
+        await Task.Delay(source.PollInterval, _time, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ConnectionSnapshot> ApplyOwnedRulesAsync(

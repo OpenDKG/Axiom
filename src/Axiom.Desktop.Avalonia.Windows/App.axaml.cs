@@ -53,21 +53,15 @@ public partial class App : Application
                 }
             }
 
-            // Provision Axiom-managed hooks for detected harnesses without a second setup dialog.
-            // Existing user-authored hooks are preserved; host-owned trust stays host-owned.
-            try
-            {
-                AgentHookMaintenance.ProvisionDetectedHooks();
-            }
-            catch
-            {
-                // Hook maintenance is best-effort and must not block startup.
-            }
-
             // A complete install must end protected: persist block mode where the guard reads it
             // and prove it with the self-test. Runs off the UI thread so startup stays responsive.
             _ = Task.Run(() =>
             {
+                // Axiom-managed hooks for detected harnesses, off the UI thread so the window is not held
+                // back. User-authored hooks are preserved. It still finishes before protection is provisioned.
+                AgentHookMaintenance.RunInBackground(
+                    AgentHookMaintenance.ProvisionDetectedHooks).GetAwaiter().GetResult();
+
                 try
                 {
                     var protection = ProtectionProvisioner.ProvisionAtStartup();
