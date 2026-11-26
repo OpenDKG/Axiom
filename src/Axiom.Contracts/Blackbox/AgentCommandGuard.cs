@@ -2407,18 +2407,29 @@ public static class AgentCommandGuard
             # in with, so that option is set aside; commands that ssh itself would run are judged too.
             import re as _re
             tokens = _tokenize_segment(value)
-            if not tokens or _command_name(tokens[0][0]) != "ssh":
+            word = r'(?:"[^"]*"|' + "'[^']*'" + r'|[^\s"' + "'" + r'])+'
+            words = list(_re.finditer(word, value))
+            # NAME='a b' is still an assignment: only a quoted name makes the word a command.
+            if len(words) == len(tokens):
+                tokens = [(text, quoted and not _re.match(r"[A-Za-z_][A-Za-z0-9_]*\+?=", found.group()))
+                          for (text, quoted), found in zip(tokens, words)]
+            # ssh may be named by a path, or sit behind assignments and commands such as env or sudo.
+            start = _strip_prefixes(tokens)[0]
+            if start >= len(tokens) or _command_name(tokens[start][0]) != "ssh":
                 return [value]
-            end = _plain_command_end(value)
+            # The key option is set aside only after the ssh word, so that sudo -i or env -i stay as they
+            # are, and only in the first simple command.
+            named = words[start].end() if start < len(words) else len(value)
+            end = max(named, _plain_command_end(value))
             double = r'"(?:[^"`$]|\$(?!\())*"'
             single = r"'[^']*'"
             bare = r'(?:[^\s"\'`$();|&<>]|\$(?!\())+'
             path = "(?:" + double + "|" + single + "|" + bare + ")"
             identity = (r"(?<=\s)(?:-i\s*" + path + r"|-o\s*(?:IdentityFile=" + path
                         + "|" + r'"IdentityFile=[^"`$]*"' + "|" + r"'IdentityFile=[^']*'" + r"))(?=\s|$)")
-            checks = [_re.sub(identity, "", value[:end]).strip() + value[end:]]
+            checks = [(value[:named] + _re.sub(identity, "", value[named:end]) + value[end:]).strip()]
             # ssh takes these as Name=value, "Name value", or Name followed by the value as its own word.
-            for index, (word, _) in enumerate(tokens):
+            for index, (word, _) in enumerate(tokens[start + 1:], start + 1):
                 option = _re.fullmatch(
                     r"(?:-o)?\s*(?:proxycommand|localcommand|knownhostscommand)\b\s*=?\s*(.*)",
                     word, _re.IGNORECASE | _re.DOTALL)
