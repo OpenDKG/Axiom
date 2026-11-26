@@ -73,3 +73,8 @@ DEEPSEEK.md
 *handoff*.md
 *Handoff*.md
 *HANDOFF*.md
+
+# Environment files (never commit real secrets; examples stay tracked)
+.env
+.env.*
+!.env.example
