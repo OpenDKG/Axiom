@@ -63,58 +63,225 @@ public static class AgentCommandGuard
                        "process-slot-var", "replace"), 0),
         }
 
-        # Further programs that run the command given after their options. An option that is not listed here
-        # is read as a flag, so a newer one does not make an ordinary call uninspectable.
-        _LAUNCHER_PREFIXES = {
-            "setsid": ("cfwhV", "", (), (), 0),
-            "sshpass": ("hvV", "fdpP", (), (), 0),
-            "ssh-agent": ("cdDksTUx", "aEOPt", (), (), 0),
-            "unshare": ("cCfhimnprTuUV", "GRSw", (),
-                        ("boottime", "map-group", "map-groups", "map-user", "map-users", "monotonic",
-                         "propagation", "root", "setgid", "setgroups", "setuid", "wd"), 0),
-            "nsenter": ("aCeFhimnprTuUVwZGS", "tW", (), ("target", "wdns"), 0),
-            "chroot": ("", "", (), ("groups", "userspec"), 1),
-            "xvfb-run": ("ahl", "efnpsw", (),
-                         ("auth-file", "auth-protocol", "error-file", "server-args", "server-num", "wait",
-                          "xauth-protocol"), 0),
-            "dbus-run-session": ("", "", (), ("config-file", "dbus-daemon"), 0),
-            "systemd-run": ("dGhPqrSt", "EHMpu", (),
-                            ("description", "gid", "host", "machine", "nice", "on-active", "on-boot",
-                             "on-calendar", "on-startup", "on-unit-active", "on-unit-inactive", "path-property",
-                             "property", "service-type", "setenv", "slice", "socket-property", "timer-property",
-                             "uid", "unit", "working-directory"), 0),
-            "pkexec": ("", "u", (), ("user",), 0),
-            "strace": ("ACcdDfFhiknqrtTvVwxyYzZ", "abeEIoOpPsSuUX", (),
-                       ("abbrev", "attach", "columns", "detach-on", "env", "fault", "inject", "output", "raw",
-                        "read", "signal", "status", "string-limit", "summary-columns", "summary-sort-by",
-                        "trace", "trace-path", "user", "write"), 0),
-            "ltrace": ("bcCfhiLrStTV", "aADeFlnopsuwx", (),
-                       ("align", "config", "debug", "indent", "library", "output", "where"), 0),
-            "valgrind": ("dhqv", "", (), (), 0),
-            "faketime": ("fhm", "p", (), ("date-prog",), 1),
-            "fakeroot": ("huv", "bils", (), ("faked", "fd-base", "lib"), 0),
-            "proot": ("0hHV", "bikmqrRSvw", (),
-                      ("bind", "change-id", "cwd", "kernel-release", "mount", "pwd", "qemu", "rootfs", "verbose"), 0),
-            "firejail": ("", "", (), (), 0),
-            "catchsegv": ("", "", (), (), 0),
-            "eatmydata": ("", "", (), (), 0),
-            "torsocks": ("dhiq", "aPpu", (), ("address", "pass", "port", "user"), 0),
-            "proxychains": ("q", "f", (), (), 0),
-            "proxychains4": ("q", "f", (), (), 0),
-            "tsocks": ("", "", (), (), 0),
-            "daemonize": ("av", "ceElopu", (), (), 0),
-        }
+        # Further programs that run the command given after their options, in the layout of the table above,
+        # with the long names as text. The lists follow each program's option parser or manual page. Any other
+        # option leaves the command uninspectable: a value it takes could not be told apart from the command.
+        _LAUNCHER_PREFIXES = {name: (flags, valued, frozenset(long_flags.split()),
+                                     frozenset(long_valued.split()), operands)
+                              for name, (flags, valued, long_flags, long_valued, operands) in {
+            "setsid": ("cfhVw", "",
+                "ctty fork help version wait",
+                "", 0),
+            "sshpass": ("ehvV", "dfpP",
+                "",
+                "", 0),
+            "ssh-agent": ("cdDksTuUV", "aEOPt",
+                "",
+                "", 0),
+            "unshare": ("cCfhimnprTuUV", "GlRSw",
+                ("cgroup clear-env fork forward-signals help ipc keep-caps kill-child map-auto "
+                 "map-current-user map-root-user map-subids mount mount-binfmt mount-proc net pid time "
+                 "unchanged user uts version"),
+                ("boottime load-interp map-group map-groups map-user map-users monotonic owner propagation "
+                 "root setgid setgroups setuid wd whitelist-env"), 0),
+            "nsenter": ("acCeFhimnprTuUVwWZ", "GNSt",
+                ("all cgroup env follow-context help ipc join-cgroup keep-caps mount net no-fork pid "
+                 "preserve-credentials root time user user-parent uts version wd wdns"),
+                "net-socket setgid setuid target", 0),
+            "chroot": ("", "",
+                "help skip-chdir version",
+                "groups userspec", 1),
+            "xvfb-run": ("ahl", "efnpsw",
+                "auto-servernum help listen-tcp",
+                "auth-file error-file server-args server-num wait xauth-protocol", 0),
+            "dbus-run-session": ("", "",
+                "help version",
+                "config-file dbus-daemon", 0),
+            "systemd-run": ("dGhPqrRStTv", "CEHMpu",
+                ("collect help ignore-failure no-ask-password no-block no-pager on-clock-change "
+                 "on-timezone-change pipe pty pty-late quiet remain-after-exit same-dir same-root-dir scope "
+                 "send-sighup shell slice-inherit system user verbose version wait"),
+                ("background capsule description expand-environment gid host job-mode json machine nice "
+                 "on-active on-boot on-calendar on-startup on-unit-active on-unit-inactive output "
+                 "path-property property root-directory service-type setenv slice socket-property "
+                 "timer-property uid unit working-directory"), 0),
+            "pkexec": ("", "u",
+                "disable-internal-agent help keep-cwd version",
+                "user", 0),
+            "strace": ("AcCdDfFhiknNqrtTvVwxyYzZ", "abeEIoOpPsSuUX",
+                ("absolute-timestamps always-show-pid arg-names daemonised daemonize daemonized debug "
+                 "decode-fds failed-only failing-only follow-forks help hyperlink instruction-pointer "
+                 "kill-on-exit namespace no-abbrev output-append-mode output-separately pidns-translation "
+                 "quiet relative-timestamps seccomp-bpf secontext silence silent stack-trace stack-traces "
+                 "strings-in-hex successful-only summary summary-only summary-wall-clock syscall-number "
+                 "syscall-times timestamps tips version"),
+                ("abbrev argv0 attach color columns const-print-style decode-pids detach-on env fault inject "
+                 "interruptible kvm output raw read signal signals stack-trace-frame-limit status string-limit "
+                 "summary-columns summary-sort-by summary-syscall-overhead syscall-limit trace trace-fds "
+                 "trace-path user verbose write"), 0),
+            "ltrace": ("bcCfhiLrStTV", "aADeFlnopsuwx",
+                "demangle help no-signals version",
+                "align config debug indent library max-depth output where", 0),
+            "valgrind": ("dhqsv", "",
+                ("D1 I1 LL alignment alloc-fn allow-mismatched-debuginfo aspace-minaddr "
+                 "avg-transtab-entry-size basic-counts bb-out-file branch-sim cache-sim cachegrind-out-file "
+                 "callgrind-out-file check-stack-refs check-stack-var child-silent-after-fork collect-atstart "
+                 "collect-bus collect-jumps collect-state collect-systime combine-dumps compress-pos "
+                 "compress-strings conflict-cache-size debuginfo-server delta-stacktrace demangle depth "
+                 "detailed-counts detailed-freq dsymutil dump-after dump-before dump-every-bb dump-instr "
+                 "dump-line error-exitcode error-limit error-markers errors-for-leak-kinds exclusive-threshold "
+                 "exit-on-first-error expensive-definedness-checks extra-debuginfo-path fair-sched "
+                 "first-race-only fnname free-fill free-is-write freelist-big-blocks freelist-vol "
+                 "fullpath-after gen-suppressions heap heap-admin help-debug history-level ignore-fn "
+                 "ignore-range-below-sp ignore-ranges ignore-thread-creation input-fd instr-atstart "
+                 "instr-count-only interval-size join-list-vol keep-debuginfo keep-stacktraces kernel-variant "
+                 "leak-check leak-check-heuristics leak-resolution log-fd log-file log-socket main-stacksize "
+                 "malloc-fill massif-out-file max-snapshots max-stackframe max-threads merge-recursive-frames "
+                 "num-callers num-transtab-sectors pages-as-heap partial-loads-ok pc-out-file peak-inaccuracy "
+                 "progress-interval ptrace-addr quiet read-inline-info read-var-info redzone-size "
+                 "report-signal-unlocked require-text-symbol run-cxx-freeres run-libc-freeres segment-merging "
+                 "segment-merging-interval shared-threshold show-below-main show-confl-seg show-emwarns "
+                 "show-error-list show-leak-kinds show-mismatched-frees show-possibly-lost show-reachable "
+                 "show-stack-usage sigill-diagnostics sim-hints smc-check soname-synonyms stacks suppressions "
+                 "threshold time-stamp time-unit toggle-collect tool trace-addr trace-alloc trace-barrier "
+                 "trace-children trace-children-skip trace-children-skip-by-arg trace-cond trace-fork-join "
+                 "trace-hb trace-mem trace-mutex trace-rwlock trace-semaphore trace-superblocks track-fds "
+                 "track-lockorders track-origins undef-value-errors unw-stack-scan-frames "
+                 "unw-stack-scan-thresh valgrind-stacksize verbose version vgdb vgdb-error vgdb-poll "
+                 "vgdb-prefix vgdb-shadow-registers vgdb-stop-at workaround-gcc296-bugs xml xml-fd xml-file "
+                 "xml-socket xml-user-comment xtree-leak xtree-leak-file xtree-memory xtree-memory-file "
+                 "zero-before"),
+                "", 0),
+            "faketime": ("fhmv?", "p",
+                "disable-shm exclude-monotonic freeze help version",
+                "date-prog", 1),
+            "fakeroot": ("huv", "bfils",
+                "help unknown-is-real version",
+                "faked fd-base lib", 0),
+            "proot": ("0hlnV", "bikmpPqrRSvw",
+                "about help kill-on-exit link2symlink mixed-mode netcoop root-id usage version",
+                "bind change-id cwd kernel-release mount port pwd qemu rootfs verbose", 0),
+            "firejail": ("c?", "",
+                ("allow-debuggers allusers apparmor apparmor.print appimage bandwidth bind blacklist build "
+                 "caps caps.drop caps.keep caps.print cat chroot cpu cpu.print dbus-log dbus-system "
+                 "dbus-system.broadcast dbus-system.call dbus-system.log dbus-system.own dbus-system.see "
+                 "dbus-system.talk dbus-user dbus-user.broadcast dbus-user.call dbus-user.log dbus-user.own "
+                 "dbus-user.see dbus-user.talk debug debug-blacklists debug-caps debug-errnos "
+                 "debug-private-lib debug-protocols debug-syscalls debug-syscalls32 debug-whitelists defaultgw "
+                 "deterministic-exit-code deterministic-shutdown disable-mnt dns dns.print dnstrace env "
+                 "fs.print get help hostname hosts-file icmptrace ids-check ids-init ignore include interface "
+                 "ip ip6 ipc-namespace iprange join join-filesystem join-network join-or-start "
+                 "keep-config-pulse keep-dev-shm keep-fd keep-var-tmp list ls mac machine-id "
+                 "memory-deny-write-execute mkdir mkfile mtu name net net.print netfilter netfilter.print "
+                 "netfilter6 netfilter6.print netlock netmask netns netstats nettrace nice no-remote no3d "
+                 "noautopulse noblacklist nodbus nodvd noexec nogroups noinput nonewprivs noprinters noprofile "
+                 "noroot nosound notv nou2f novideo nowhitelist oom output output-stderr overlay private "
+                 "private-bin private-cache private-cwd private-dev private-etc private-home private-lib "
+                 "private-opt private-srv private-tmp profile profile.print protocol protocol.print put quiet "
+                 "read-only read-write restrict-namespaces rlimit-as rlimit-cpu rlimit-fsize rlimit-nofile "
+                 "rlimit-nproc rlimit-sigpending rmenv scan seccomp seccomp-error-action "
+                 "seccomp.block-secondary seccomp.drop seccomp.keep seccomp.print shutdown snitrace tab "
+                 "timeout tmpfs top trace tracelog tree version veth-name whitelist writable-etc "
+                 "writable-run-user writable-var writable-var-log x11 xephyr-screen"),
+                "", 0),
+            "catchsegv": ("", "",
+                "help version",
+                "", 0),
+            "eatmydata": ("", "",
+                "",
+                "", 0),
+            "torsocks": ("dhiq", "aPpu",
+                "debug help isolate quiet shell version",
+                "address pass port user", 0),
+            "proxychains": ("qv", "f",
+                "help",
+                "", 0),
+            "proxychains4": ("q", "f",
+                "help",
+                "", 0),
+            "tsocks": ("?fhnosw", "",
+                "",
+                "", 0),
+            "daemonize": ("av", "ceElopu",
+                "",
+                "", 0),
+            "flock": ("eFhnosuVx?", "cEw",
+                "close exclusive help nb no-fork nonblock nonblocking shared unlock verbose version",
+                "command conflict-exit-code timeout wait", 0),
+            "entr": ("acdnprsxz", "",
+                "",
+                "", 0),
+            "script": ("adefFhkpqrtV", "BcEImoOT",
+                "append flush force help quiet return timing version",
+                "command echo log-in log-io log-out log-timing logging-format output-limit", 0),
+            "start-stop-daemon": ("bCHKmoqStTvV", "acdgIkNnOPprRsux",
+                ("background help make-pidfile no-close notify-await oknodo quiet remove-pidfile start status "
+                 "stop test verbose version"),
+                ("chdir chroot chuid exec group iosched name nicelevel notify-timeout output pid pidfile ppid "
+                 "procsched retry signal startas umask user"), 0),
+            "parallel": ("0MTVXYghkmopqrtuvx", "BCDEHIJLNPSUWadjns",
+                ("bar bg bibtex cat cf citation cleanup color color-fail color-failed colorfail colorfailed "
+                 "colour colour-fail colour-failed colourfail colourfailed compress controlmaster csv ctag "
+                 "ctrl-c ctrlc dr dry-run dryrun embed eta exit fast fg fifo files files0 filter-host "
+                 "filter-hosts filterhosts gnu group hashbang help hgrp hostgroup hostgroups hostgrp "
+                 "interactive keep-order keeporder latest-line latestline lb line-buffer line-buffered "
+                 "linebuffer linebuffered link ll max-line-length-allowed maxlinelengthallowed nn no-ctrl-c "
+                 "no-ctrlc no-k no-keep-order no-notice no-run-if-empty noctrlc nok nokeeporder nonall "
+                 "nonotice norunifempty noswap null number-of-cores number-of-cpus number-of-sockets "
+                 "number-of-threads numberofcores numberofcpus numberofsockets numberofthreads onall open-tty "
+                 "output-as-files output-as-files0 outputasfiles outputasfiles0 pipe pipe-part pipepart plain "
+                 "plus progress quote record-env recordenv regex regexp remove-rec-sep removerecsep resume "
+                 "resume-failed resumefailed retry-failed retryfailed round round-robin roundrobin rrs "
+                 "semaphore session shebang shell-quote shell_quote shellquote show-limits showlimits shuf "
+                 "silent skip-first-line skipfirstline spreadstdin tag tee tmux tmux-pane tmuxpane tollef "
+                 "transfer tty ungroup unsafe use-cores-instead-of-threads use-cpus-instead-of-cores "
+                 "use-sockets-instead-of-threads usecoresinsteadofthreads usecpusinsteadofcores "
+                 "usesocketsinsteadofthreads verbose version wait will-cite willcite xapply xargs"),
+                ("arg-file arg-file-sep arg-sep argfile argfilesep argsep basefile basenameextensionreplace "
+                 "basenamereplace bf bin block block-size block-timeout blocksize blocktimeout bner bnr bt "
+                 "col-sep colsep combine-exec combine-executable combineexec combineexecutable "
+                 "compress-program compressprogram ctag-string ctagstring debug decompress-program "
+                 "decompressprogram delay delimiter dirnamereplace dnr env er extensionreplace filter group-by "
+                 "groupby halt halt-on-error haltonerror header id jl joblog jobs limit linkinputsource load "
+                 "match max-args max-chars max-procs max-replace-args maxargs maxchars maxprocs maxreplaceargs "
+                 "memfree memsuspend milestone min-version minversion ms nice parens process-slot-var "
+                 "processslotvar profile recend recstart res result results retries return rpl rsync-opts "
+                 "rsyncopts semaphore-name semaphore-timeout semaphorename semaphoretimeout seqreplace shard "
+                 "shell-completion shellcompletion slf slotreplace sql sql-and-worker sql-master sql-worker "
+                 "sqlandworker sqlmaster sqlworker ssh ssh-delay sshdelay sshlogin sshloginfile st tag-string "
+                 "tagstring tempdir template term-seq termseq tf timeout tmpdir tmpl total total-jobs "
+                 "totaljobs transfer-file transfer-files transferfile transferfiles trc trim "
+                 "use-compress-program use-decompress-program usecompressprogram usedecompressprogram wd "
+                 "work-dir workdir xapplyinputsource"), 0),
+        }.items()}
         # Short options whose value, when there is one, is attached to them.
-        _ATTACHED_VALUES = {"xargs": "eil", "nsenter": "CGimnprSTuUw", "unshare": "CimnpTuU", "sshpass": "e"}
-        # bwrap options take a fixed number of values; those not listed take none.
+        _ATTACHED_VALUES = {"nsenter": "CimnprTuUwW", "sshpass": "e", "script": "t"}
+        # Options whose value is a user or group number; any other word there is not read.
+        _NUMBER_VALUES = {"nsenter": ("G", "S", "setgid", "setuid")}
+        # Options of these programs whose value is only read as a word of its own.
+        _SEPARATE_VALUES = {"proxychains": "f", "proxychains4": "f"}
+        # parallel options with an optional value.
+        _PARALLEL_OPTIONAL = frozenset("e i l eof max-lines maxlines replace".split())
+        # bwrap options and how many values each takes.
         _BWRAP_VALUES = {name: count for count, names in (
+            (0, "as-pid-1 assert-userns-disabled clearenv die-with-parent disable-userns help level-prefix new-session "
+                "not-a-security-boundary share-net unshare-all unshare-cgroup unshare-cgroup-try unshare-ipc "
+                "unshare-net unshare-pid unshare-user unshare-user-try unshare-uts version"),
             (1, "add-seccomp-fd args argv0 block-fd cap-add cap-drop chdir dev dir exec-label file-label gid "
-                "hostname info-fd json-status-fd lock-file mqueue perms pidns proc remount-ro seccomp size sync-fd "
-                "tmpfs uid unsetenv userns userns-block-fd userns2 overlay-src tmp-overlay ro-overlay"),
+                "hostname info-fd json-status-fd lock-file mqueue overlay-src perms pidns proc remount-ro ro-overlay "
+                "seccomp size sync-fd tmp-overlay tmpfs uid umask unsetenv userns userns-block-fd userns2"),
             (2, "bind bind-data bind-fd bind-try chmod dev-bind dev-bind-try file ro-bind ro-bind-data "
                 "ro-bind-fd ro-bind-try setenv symlink"),
             (3, "overlay"),
         ) for name in names.split()}
+        # gdb accepts each of these with one or two dashes. Only the options before --args matter.
+        _GDB_FLAGS = frozenset(("batch batch-silent binary-output configuration enable-external-editor f fullname "
+                                "help n nh no-escape-args nowindows nw nx q quiet r readnever readnow "
+                                "return-child-result silent statistics tui version w windows write").split())
+        _GDB_VALUED = frozenset(("D annotate b baud c cd command core d data-directory directory e "
+                                 "early-init-command early-init-eval-command editor-command eiex eix eval-command ex "
+                                 "exec i iex init-command init-eval-command interpreter ix l p pid s se symbols "
+                                 "tclcommand tty ui x").split())
         # Programs whose own command does not simply follow their options.
         _SPECIAL_LAUNCHERS = ("bwrap", "entr", "flock", "gdb", "parallel", "script", "start-stop-daemon")
         # These read the pipe as a list of arguments or files, not as input to the command they run.
@@ -146,116 +313,152 @@ public static class AgentCommandGuard
             return name.removesuffix(".exe")
 
 
-        def _launcher_options(words: list, idx: int, flags: str, valued: str, long_valued) -> tuple:
-            # Reads options from idx. Returns the index of the first operand and the (name, value) pairs of
-            # the options that take a value. An unknown option is read as a flag.
+        def _launcher_options(name: str, words: list, idx: int) -> tuple:
+            # Reads the options of a launcher from idx. Returns the index of the first other word, the
+            # (name, value) pairs of the options that take a value, and False for an option that is not in the
+            # launcher's table or whose value cannot be told apart from the command.
+            flags, valued, long_flags, long_valued, _ = _LAUNCHER_PREFIXES[name]
             taken = []
             count = len(words)
             while idx < count:
                 option = words[idx]
                 if option == "--":
-                    return idx + 1, taken
+                    return idx + 1, taken, True
                 if len(option) < 2 or not option.startswith("-"):
                     break
                 idx += 1
+                alone = ""  # an option with an optional value, written without it
                 if option.startswith("--"):
                     key, equals, value = option[2:].partition("=")
                     if key in long_valued:
                         if not equals:
                             value = words[idx] if idx < count else ""
                             idx += 1
+                        if key in _NUMBER_VALUES.get(name, ()) and not (value.isdigit() or value == "follow"):
+                            return idx, taken, False
                         taken.append((key, value))
-                    continue
-                for position in range(1, len(option)):
-                    if option[position] in valued:
-                        value = option[position + 1:]
-                        if not value:
-                            value = words[idx] if idx < count else ""
-                            idx += 1
-                        taken.append((option[position], value))
-                        break
-            return idx, taken
+                    elif key in long_flags or (name == "parallel" and key in _PARALLEL_OPTIONAL):
+                        alone = "" if equals else key
+                    else:
+                        return idx, taken, False
+                else:
+                    for position in range(1, len(option)):
+                        char = option[position]
+                        if char in valued:
+                            value = option[position + 1:]
+                            if value and char in _SEPARATE_VALUES.get(name, ""):
+                                return idx, taken, False
+                            if not value:
+                                value = words[idx] if idx < count else ""
+                                idx += 1
+                            if char in _NUMBER_VALUES.get(name, ()) and not (value.isdigit() or value == "follow"):
+                                return idx, taken, False
+                            taken.append((char, value))
+                            break
+                        optional = name == "parallel" and char in _PARALLEL_OPTIONAL
+                        if optional or char in _ATTACHED_VALUES.get(name, ""):
+                            alone = char if position == len(option) - 1 else ""
+                            break
+                        if char not in flags:
+                            return idx, taken, False
+                following = words[idx] if idx < count else "-"
+                if name == "script" and alone in ("t", "timing") and following.replace(".", "", 1).isdigit():
+                    idx += 1  # the BSD script takes a flush time here
+                elif name == "parallel" and alone in _PARALLEL_OPTIONAL and not following.startswith("-"):
+                    if alone not in ("l", "max-lines", "maxlines") or not following.isdigit():
+                        return idx, taken, False
+                    idx += 1
+            return idx, taken, True
 
 
         def _special_launch(name: str, words: list, idx: int):
             # For a launcher whose options are not enough: (index of the command it runs, command texts it
-            # hands to a shell), or None when this call runs no command of its own.
+            # hands to a shell, False when an option is unknown), or None when this call runs no command.
             count = len(words)
             if name == "gdb":
-                try:
-                    return words.index("--args", idx) + 1, []
-                except ValueError:
+                end = next((position for position in range(idx, count) if words[position] in ("--args", "-args")), None)
+                if end is None:
                     return None
+                position = idx
+                while position < end:
+                    option, equals, _ = words[position].lstrip("-").partition("=")
+                    if not words[position].startswith("-") or option not in _GDB_FLAGS | _GDB_VALUED:
+                        return end + 1, [], False
+                    position += 2 if option in _GDB_VALUED and not equals else 1
+                return end + 1, [], position == end
             if name == "bwrap":
-                while idx < count and words[idx].startswith("--"):
+                while idx < count and words[idx].startswith("-"):
                     if words[idx] == "--":
-                        return idx + 1, []
-                    idx += 1 + _BWRAP_VALUES.get(words[idx][2:], 0)
-                return min(idx, count), []
-            if name == "flock":
-                idx, taken = _launcher_options(words, idx, "", "cEw", ("command", "conflict-exit-code", "timeout"))
-                scripts = [value for key, value in taken if key in ("c", "command")]
-                idx += 1  # the lock file or descriptor
-                rest, taken = _launcher_options(words, idx, "", "c", ("command",))
-                scripts += [value for _, value in taken]
-                return (count, scripts) if scripts else (min(rest, count), [])
-            if name == "entr":
-                start, _ = _launcher_options(words, idx, "", "", ())
-                shell = any(word.startswith("-") and "s" in word for word in words[idx:start])
-                if shell and start < count:
-                    return count, [words[start]]
-                return start, []
-            if name == "parallel":
-                idx, _ = _launcher_options(words, idx, "", "aCdEIjLnNPSsW",
-                                           ("arg-file", "colsep", "delay", "delimiter", "halt", "jobs", "joblog",
-                                            "load", "max-args", "memfree", "nice", "results", "retries", "sshlogin",
-                                            "sshloginfile", "tagstring", "timeout", "tmpdir", "wd", "workdir"))
-                if idx < count and words[idx] == ":::":
-                    # With no command of its own, each argument is a command.
-                    return count, [word for word in words[idx + 1:] if word not in (":::", "::::")]
-                if idx < count and any(char.isspace() for char in words[idx]):
-                    return count, [words[idx]]
-                return idx, []
+                        return idx + 1, [], True
+                    option = words[idx][2:] if words[idx].startswith("--") else ""
+                    if option not in _BWRAP_VALUES:
+                        return idx + 1, [], False
+                    idx += 1 + _BWRAP_VALUES[option]
+                return min(idx, count), [], True
+            if name == "start-stop-daemon":
+                # It names the program with --exec or --startas; its arguments follow --.
+                try:
+                    end = words.index("--", idx)
+                except ValueError:
+                    end = count
+                own = words[idx:end]
+                if any(word in ("--stop", "--status", "-K", "-T") for word in own):
+                    return None
+                programs = {}
+                position = 0
+                while position < len(own):
+                    following, taken, known = _launcher_options(name, own, position)
+                    if not known:
+                        return idx + following, [], False
+                    programs.update(taken)
+                    position = max(following, position + 1)
+                # --startas wins over --exec, which then only identifies a running copy.
+                program = next((programs[key] for key in ("a", "startas", "x", "exec") if programs.get(key)), "")
+                if not program:
+                    return None
+                return count, [_join_words([program] + words[end + 1:])], True
             if name == "script":
                 # Options may follow the file name. -c gives the command; in the BSD form it follows the file.
                 scripts = []
                 operands = []
-                while idx < count:
-                    idx, taken = _launcher_options(words, idx, "", "BcEImOoT",
-                                                   ("command", "echo", "log-in", "log-io", "log-out", "log-timing",
-                                                    "logging-format", "output-limit"))
+                while idx < count and len(operands) < 2:
+                    idx, taken, known = _launcher_options(name, words, idx)
+                    if not known:
+                        return idx, scripts, False
                     scripts += [value for key, value in taken if key in ("c", "command")]
                     if idx < count:
                         if "<" not in words[idx] and ">" not in words[idx]:
                             operands.append(idx)
                         idx += 1
                 if scripts:
-                    return count, scripts
-                return (operands[1] if len(operands) > 1 else count), []
-            # start-stop-daemon names the program with --exec or --startas; its arguments follow --.
-            try:
-                end = words.index("--", idx)
-            except ValueError:
-                end = count
-            own = words[idx:end]
-            if any(word in ("--stop", "--status", "-K", "-T") for word in own):
-                return None
-            programs = {}
-            position = 0
-            while position < len(own):
-                following, taken = _launcher_options(own, position, "", "acdgIkNnOPprRsux",
-                                                     ("chdir", "chroot", "chuid", "exec", "group", "name", "nicelevel",
-                                                      "output", "pid", "pidfile", "ppid", "retry", "signal", "startas",
-                                                      "umask", "user"))
-                programs.update(taken)
-                position = max(following, position + 1)
-            # --startas wins over --exec, which then only identifies a running copy.
-            program = next((programs[key] for key in ("a", "startas", "x", "exec") if programs.get(key)), "")
-            if not program:
-                return None
-            return count, [_join_words([program] + words[end + 1:])]
-
-
+                    return count, scripts, True
+                return (operands[1] if len(operands) > 1 else count), [], True
+            start = idx
+            idx, taken, known = _launcher_options(name, words, idx)
+            if not known:
+                return idx, [], False
+            if name == "flock":
+                scripts = [value for key, value in taken if key in ("c", "command")]
+                idx += 1  # the lock file or descriptor; after it only -c is an option
+                if words[idx:idx + 1] in (["-c"], ["--command"]):
+                    return count, scripts + words[idx + 1:idx + 2], True
+                if idx < count and words[idx].startswith("--command="):
+                    return count, scripts + [words[idx][10:]], True
+                # flock reads no other option here, so one that stands in its place is not understood.
+                known = not (idx < count and words[idx].startswith("-"))
+                return (count if scripts else min(idx, count)), scripts, known
+            if name == "entr":
+                shell = any(word.startswith("-") and word != "--" and "s" in word for word in words[start:idx])
+                if shell and idx < count:
+                    return count, [words[idx]], True
+                return idx, [], True
+            # parallel
+            if idx < count and words[idx] == ":::":
+                # With no command of its own, each argument is a command.
+                return count, [word for word in words[idx + 1:] if word not in (":::", "::::")], True
+            if idx < count and any(char.isspace() for char in words[idx]):
+                return count, [words[idx]], True
+            return idx, [], True
         def _strip_prefixes(tokens):
             # Skips assignments and commands such as sudo or timeout, with their options. Returns the
             # index of the real command, False for an option it does not know, and any command string
@@ -276,14 +479,21 @@ public static class AgentCommandGuard
                     launched = _special_launch(name, spoken, idx + 1)
                     if launched is None:
                         break
-                    idx = launched[0]
-                    carried.extend(launched[1])
+                    idx, scripts, known = launched
+                    carried.extend(scripts)
+                    if not known:
+                        return min(idx, count), False, carried
                     continue
-                known_only = name in _COMMAND_PREFIXES
-                if not known_only and name not in _LAUNCHER_PREFIXES:
+                if name in _LAUNCHER_PREFIXES:
+                    spoken = spoken or [token for token, _ in tokens]
+                    idx, _, known = _launcher_options(name, spoken, idx + 1)
+                    if not known:
+                        return min(idx, count), False, carried
+                    idx += _LAUNCHER_PREFIXES[name][4]
+                    continue
+                if name not in _COMMAND_PREFIXES:
                     break
-                flags, valued, long_flags, long_valued, operands = (
-                    _COMMAND_PREFIXES[name] if known_only else _LAUNCHER_PREFIXES[name])
+                flags, valued, long_flags, long_valued, operands = _COMMAND_PREFIXES[name]
                 idx += 1
                 while idx < count:
                     option = tokens[idx][0]
@@ -304,7 +514,7 @@ public static class AgentCommandGuard
                                 idx += 1
                             if key == "split-string":
                                 carried.append(value)
-                        elif known_only and key not in long_flags:
+                        elif key not in long_flags:
                             return idx, False, carried
                         continue
                     for position in range(1, len(option)):
@@ -317,9 +527,9 @@ public static class AgentCommandGuard
                             if name == "env" and char == "S":
                                 carried.append(value)
                             break
-                        if char in _ATTACHED_VALUES.get(name, ""):
+                        if name == "xargs" and char in "eil":
                             break
-                        if known_only and char not in flags:
+                        if char not in flags:
                             return idx, False, carried
                 idx += operands
             return min(idx, count), True, carried
@@ -2813,8 +3023,8 @@ public static class AgentCommandGuard
 
 
         def _ssh_option_commands(words: list) -> list:
-            # words start at ssh, scp or sftp. Returns the commands its -o options name. ssh also reads
-            # options after the host, up to the remote command, which does not run on this computer.
+            # words start at ssh, scp or sftp. Returns the commands its -o options name; ssh also reads
+            # options after the host.
             name = _command_name(words[0])
             valued = {"ssh": "BbcDEeFIiJLlmOoPpQRSWw", "scp": "cDFiJloPSX", "sftp": "BbcDFiJloPRSsX"}[name]
             found = []
