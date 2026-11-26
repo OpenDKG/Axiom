@@ -51,6 +51,8 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
 
     private readonly string _passwdPath;
 
+    private readonly TimeSpan? _sanitiserTimeout;
+
     private volatile Tuple<IReadOnlyDictionary<string, string>, DateTimeOffset>? _homes;
 
     private readonly ConcurrentDictionary<int, (LinuxProcessIdentity Identity, DateTimeOffset ResolvedUtc)> _cache = new();
@@ -60,8 +62,13 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
     {
     }
 
-    public ProcProcessIdentityResolver(string procRoot, TimeProvider time, string passwdPath = "/etc/passwd")
+    /// <param name="sanitiserTimeout">
+    /// Match timeout for the command-line sanitiser; its default when null.
+    /// </param>
+    public ProcProcessIdentityResolver(
+        string procRoot, TimeProvider time, string passwdPath = "/etc/passwd", TimeSpan? sanitiserTimeout = null)
     {
+        _sanitiserTimeout = sanitiserTimeout;
         ArgumentException.ThrowIfNullOrWhiteSpace(passwdPath);
         _passwdPath = passwdPath;
         ArgumentException.ThrowIfNullOrWhiteSpace(procRoot);
@@ -99,9 +106,11 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
         var comm = ReadText(System.IO.Path.Combine(directory, "comm")).Trim();
         var (parent, _) = ReadStat(directory);
         var uid = ReadUid(directory);
-        var commandLine = CommandLineSanitizer.Sanitize(
-            JoinArguments(ReadText(System.IO.Path.Combine(directory, "cmdline"))),
-            uid is { } owner ? ReadHomeDirectory(owner) : null);
+        var written = JoinArguments(ReadText(System.IO.Path.Combine(directory, "cmdline")));
+        var home = uid is { } owner ? ReadHomeDirectory(owner) : null;
+        var commandLine = _sanitiserTimeout is { } timeout
+            ? CommandLineSanitizer.Sanitize(written, home, timeout)
+            : CommandLineSanitizer.Sanitize(written, home);
 
         var chain = new List<string>();
         var parentName = string.Empty;
