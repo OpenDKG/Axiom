@@ -31,11 +31,29 @@ internal static class ServiceInstaller
         MachineStateSecurity.HardenProgramData();
 
         var store = new ProtectionSettingsStore();
-        var sid = allowedSid?.Trim();
-        if (string.IsNullOrWhiteSpace(sid))
+        string? elevatedSid;
+        using (var identity = WindowsIdentity.GetCurrent())
         {
-            using var identity = WindowsIdentity.GetCurrent();
-            sid = identity.User?.Value;
+            elevatedSid = identity.User?.Value;
+        }
+
+        var decision = ResolveAllowedSid(
+            allowedSid,
+            elevatedSid,
+            string.IsNullOrWhiteSpace(allowedSid) ? InteractiveConsoleUserSid() : null);
+        if (decision.Error is not null)
+        {
+            Console.Error.WriteLine(decision.Error);
+            ServiceInstallLog.Write($"install failed: {decision.Error}");
+            return 2;
+        }
+
+        var sid = decision.Sid;
+        ServiceInstallLog.Write($"install: pipe client bound to sid={sid ?? "(none)"} source={decision.Source}");
+        if (decision.Warning is not null)
+        {
+            Console.Error.WriteLine(decision.Warning);
+            ServiceInstallLog.Write($"install warning: {decision.Warning}");
         }
 
         if (!string.IsNullOrWhiteSpace(sid) &&
@@ -213,6 +231,82 @@ internal static class ServiceInstaller
         }
 
         return cleanupFailed ? 9 : 0;
+    }
+
+    /// <summary>
+    /// Chooses the one SID the service pipe accepts. The non-elevated caller passes its own SID with
+    /// <c>--allowed-sid</c>, because with over-the-shoulder UAC the elevated token belongs to the
+    /// approving administrator, not to the desktop user. Without it, the elevated identity is used
+    /// as before, but never silently when it differs from the interactive console user.
+    /// </summary>
+    internal static AllowedSidDecision ResolveAllowedSid(string? requestedSid, string? elevatedSid, string? interactiveSid)
+    {
+        var requested = requestedSid?.Trim();
+        if (!string.IsNullOrEmpty(requested))
+        {
+            return IsWellFormedSid(requested)
+                ? new AllowedSidDecision(requested, "caller", null, null)
+                : new AllowedSidDecision(null, "caller", null, $"--allowed-sid '{requested}' is not a valid SID.");
+        }
+
+        var interactive = interactiveSid?.Trim();
+        var warning = !string.IsNullOrEmpty(elevatedSid) && !string.IsNullOrEmpty(interactive) &&
+                      !string.Equals(elevatedSid, interactive, StringComparison.OrdinalIgnoreCase)
+            ? $"No --allowed-sid was passed, so the service pipe is bound to the elevated account {elevatedSid}, " +
+              $"not the interactive user {interactive}. That user's desktop app cannot connect until setup is " +
+              "re-run from their account or with --allowed-sid."
+            : null;
+        return new AllowedSidDecision(elevatedSid, "elevated-fallback", warning, null);
+    }
+
+    internal static bool IsWellFormedSid(string value) =>
+        System.Text.RegularExpressions.Regex.IsMatch(
+            value,
+            "^S-1-[0-9]{1,14}(-[0-9]{1,10}){1,15}$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1));
+
+    private static string? InteractiveConsoleUserSid()
+    {
+        var session = WTSGetActiveConsoleSessionId();
+        if (session == uint.MaxValue)
+        {
+            return null;
+        }
+
+        var user = QuerySessionString(session, WtsUserName);
+        if (string.IsNullOrEmpty(user))
+        {
+            return null;
+        }
+
+        try
+        {
+            var domain = QuerySessionString(session, WtsDomainName);
+            var account = string.IsNullOrEmpty(domain) ? new NTAccount(user) : new NTAccount(domain, user);
+            return account.Translate(typeof(SecurityIdentifier)).Value;
+        }
+        catch (Exception exception) when (exception is IdentityNotMappedException or SystemException)
+        {
+            return null;
+        }
+    }
+
+    private static string? QuerySessionString(uint session, int infoClass)
+    {
+        if (!WTSQuerySessionInformationW(IntPtr.Zero, session, infoClass, out var buffer, out _))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Marshal.PtrToStringUni(buffer);
+        }
+        finally
+        {
+            WTSFreeMemory(buffer);
+        }
     }
 
     public static bool IsAdministrator()
@@ -472,9 +566,32 @@ internal static class ServiceInstaller
     }
 
     private const uint MoveFileDelayUntilReboot = 0x4;
+    private const int WtsUserName = 5;
+    private const int WtsDomainName = 7;
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("kernel32.dll")]
+    private static extern uint WTSGetActiveConsoleSessionId();
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WTSQuerySessionInformationW(
+        IntPtr hServer,
+        uint sessionId,
+        int infoClass,
+        out IntPtr buffer,
+        out uint bytesReturned);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wtsapi32.dll")]
+    private static extern void WTSFreeMemory(IntPtr memory);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool MoveFileEx(string lpExistingFileName, string? lpNewFileName, uint dwFlags);
 }
+
+/// <summary>Which SID the service pipe is bound to, where it came from, and any warning or error.</summary>
+internal sealed record AllowedSidDecision(string? Sid, string Source, string? Warning, string? Error);
