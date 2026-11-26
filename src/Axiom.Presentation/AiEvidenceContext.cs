@@ -15,7 +15,9 @@ namespace Axiom.Presentation;
 /// <summary>
 /// Best-effort local context for the AI evidence package: parent process, signer, product and
 /// observed duration. It reads only metadata that the Windows process table and image files expose;
-/// it never reads command lines, file contents, packet payloads or credentials.
+/// it does not read file contents, packet payloads or credential stores. The command line comes with
+/// the connection from the platform monitor and is passed through <see cref="CommandLineSanitizer"/>
+/// again here.
 /// </summary>
 public static class AiEvidenceContext
 {
@@ -46,7 +48,8 @@ public static class AiEvidenceContext
             ParentChain = FirstNonEmpty(source.ParentChain, info.ParentChain),
             SignerName = FirstNonEmpty(source.SignerName, info.SignerName),
             SignatureStatus = signatureStatus,
-            CommandLine = source.CommandLine,
+            CommandLine = CommandLineSanitizer.Sanitize(
+                source.CommandLine, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
             HostedServices = source.HostedServices,
             ParentHostedServices = source.ParentHostedServices,
             Ownership = source.ProcessId == 0

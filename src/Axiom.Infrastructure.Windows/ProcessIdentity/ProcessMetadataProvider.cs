@@ -7,7 +7,7 @@ using System.Management;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.RegularExpressions;
+using Axiom.Contracts.Monitoring;
 
 namespace Axiom.Infrastructure.Windows.ProcessIdentity;
 
@@ -21,14 +21,6 @@ public sealed partial class ProcessMetadataProvider
     private static readonly TimeSpan MetadataLifetime = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan WmiLifetime = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ParentLifetime = TimeSpan.FromSeconds(2);
-    private static readonly Regex SecretArgument = new(
-        @"(?i)(--?(?:password|passwd|pwd|token|secret|api[_-]?key|authorization|bearer)\s+)([^\s""']+)",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly Regex SecretAssignment = new(
-        @"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key|authorization|bearer)(\s*[=:]\s*)([^\s""']+)",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     private readonly ConcurrentDictionary<string, CachedMetadata> _metadataCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -83,7 +75,8 @@ public sealed partial class ProcessMetadataProvider
         var parentChain = BuildParentChain(processId, parents, wmi.Services);
 
         var commandLine = wmi.CommandLines.TryGetValue(processId, out var rawCommandLine)
-            ? SanitizeCommandLine(rawCommandLine)
+            ? CommandLineSanitizer.Sanitize(
+                rawCommandLine, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))
             : string.Empty;
         var hostedServices = wmi.Services.TryGetValue(processId, out var services)
             ? string.Join(", ", services.Take(8))
@@ -189,25 +182,6 @@ public sealed partial class ProcessMetadataProvider
         }
 
         return string.Join(" <- ", parts);
-    }
-
-    private static string SanitizeCommandLine(string? commandLine)
-    {
-        if (string.IsNullOrWhiteSpace(commandLine))
-        {
-            return string.Empty;
-        }
-
-        var text = commandLine.Trim();
-        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(profile))
-        {
-            text = text.Replace(profile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
-        }
-
-        text = SecretArgument.Replace(text, "$1***");
-        text = SecretAssignment.Replace(text, "$1$2***");
-        return text.Length <= 512 ? text : text[..512] + "…";
     }
 
     private static (string Signer, string Status) VerifySignature(string path)

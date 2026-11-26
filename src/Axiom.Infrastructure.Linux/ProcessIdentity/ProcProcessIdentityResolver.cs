@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Collections.Concurrent;
 using System.Globalization;
+using Axiom.Contracts.Monitoring;
 
 namespace Axiom.Infrastructure.Linux.ProcessIdentity;
 
@@ -46,6 +47,8 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
 
     private readonly TimeProvider _time;
 
+    private readonly string _passwdPath;
+
     private readonly ConcurrentDictionary<int, (LinuxProcessIdentity Identity, DateTimeOffset ResolvedUtc)> _cache = new();
 
     public ProcProcessIdentityResolver()
@@ -53,8 +56,10 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
     {
     }
 
-    public ProcProcessIdentityResolver(string procRoot, TimeProvider time)
+    public ProcProcessIdentityResolver(string procRoot, TimeProvider time, string passwdPath = "/etc/passwd")
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwdPath);
+        _passwdPath = passwdPath;
         ArgumentException.ThrowIfNullOrWhiteSpace(procRoot);
         _procRoot = procRoot;
         _time = time ?? throw new ArgumentNullException(nameof(time));
@@ -88,9 +93,11 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
         }
 
         var comm = ReadText(System.IO.Path.Combine(directory, "comm")).Trim();
-        var commandLine = ReadText(System.IO.Path.Combine(directory, "cmdline")).Replace('\0', ' ').Trim();
         var (parent, _) = ReadStat(directory);
         var uid = ReadUid(directory);
+        var commandLine = CommandLineSanitizer.Sanitize(
+            JoinArguments(ReadText(System.IO.Path.Combine(directory, "cmdline"))),
+            uid is { } owner ? ReadHomeDirectory(owner) : null);
 
         var chain = new List<string>();
         var parentName = string.Empty;
@@ -162,6 +169,40 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
 
     private static (int? ParentProcessId, char State) ReadStat(string processDirectory) =>
         ParseStat(ReadText(System.IO.Path.Combine(processDirectory, "stat")));
+
+    /// <summary>
+    /// Joins the NUL-separated <c>cmdline</c> arguments. An argument with spaces is quoted (only its
+    /// value for <c>name=value</c>), so the sanitiser still sees where it ends.
+    /// </summary>
+    private static string JoinArguments(string cmdline) =>
+        string.Join(' ', cmdline.TrimEnd('\0').Split('\0').Select(QuoteArgument));
+
+    private static string QuoteArgument(string argument)
+    {
+        if (!argument.Any(char.IsWhiteSpace))
+        {
+            return argument;
+        }
+
+        var equals = argument.IndexOf('=', StringComparison.Ordinal);
+        var split = equals > 0 && !argument.AsSpan(0, equals).ContainsAny(' ', '\t') ? equals + 1 : 0;
+        return argument[..split] + "\"" + argument[split..].Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    }
+
+    private string? ReadHomeDirectory(uint uid)
+    {
+        var id = uid.ToString(CultureInfo.InvariantCulture);
+        foreach (var line in ReadText(_passwdPath).Split('\n'))
+        {
+            var fields = line.Split(':');
+            if (fields.Length >= 6 && fields[2] == id)
+            {
+                return fields[5];
+            }
+        }
+
+        return null;
+    }
 
     private static uint? ReadUid(string processDirectory)
     {
