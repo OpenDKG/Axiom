@@ -102,7 +102,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             timers);
         PrivacyOverview = new PrivacyOverviewPageViewModel(
             PrivacyShield,
-            openSettings: () => SelectedPage = PrivacyShield,
+            openSettings: () => NavigateContextual(PrivacyShield),
             traderShield: new TraderShieldSectionViewModel());
         Connections = new ConnectionsPageViewModel(
             _monitor,
@@ -192,38 +192,22 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Agents,
             openFirewall: () => SelectedPage = Firewall,
             openPrivacyOverview: () => SelectedPage = PrivacyOverview,
-            openNetworkAdvanced: () =>
-            {
-                _uiMode.Apply(UiMode.Advanced);
-                SelectedPage = Overview;
-            },
+            openNetworkAdvanced: () => NavigateContextual(Overview),
             switchToAdvanced: () => _uiMode.Apply(UiMode.Advanced),
-            openAgentsAdvanced: () =>
-            {
-                _uiMode.Apply(UiMode.Advanced);
-                SelectedPage = Agents;
-            });
+            openAgentsAdvanced: () => NavigateContextual(Agents));
         MiniHome = new MiniHomePageViewModel(
             Overview,
             Firewall,
             PrivacyShield,
             Agents,
             VersionText,
-            openFirewall: () =>
-            {
-                _uiMode.Apply(UiMode.Simple);
-                SelectedPage = Firewall;
-            },
+            openNetworkOverview: () => NavigateContextual(Overview),
             openPrivacy: () =>
             {
                 _uiMode.Apply(UiMode.Simple);
                 SelectedPage = PrivacyOverview;
             },
-            openAgents: () =>
-            {
-                _uiMode.Apply(UiMode.Advanced);
-                SelectedPage = Agents;
-            },
+            openAgents: () => NavigateContextual(Agents),
             openSettings: () =>
             {
                 _uiMode.Apply(UiMode.Simple);
@@ -579,6 +563,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         SimpleHome.GroupLabel = null;
         MiniHome.GroupLabel = null;
 
+        _contextualReturnPage = null;
         NavigationPages.Clear();
         if (mode == UiMode.Mini)
         {
@@ -611,6 +596,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             SelectedPage = NavigationPages[0];
         }
+
+        _lastNavigationPage = NavigationPages.Contains(SelectedPage) ? SelectedPage : NavigationPages[0];
+        RaiseNavigationStateChanged();
     }
 
     private void OnThemeChanged(object? sender, EventArgs e)
@@ -675,6 +663,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedPageChanged(PageViewModel value)
     {
+        if (NavigationPages.Contains(value))
+        {
+            _lastNavigationPage = value;
+            _contextualReturnPage = null;
+        }
+
+        OnPropertyChanged(nameof(SelectedNavigationPage));
+        OnPropertyChanged(nameof(HasContextualReturn));
+        OnPropertyChanged(nameof(ContextualReturnText));
+
         if (_presentationVisible)
         {
             (_activePage as IActivatablePage)?.Deactivate();
@@ -685,7 +683,69 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     }
 
     private PageViewModel? _activePage;
+    private PageViewModel? _contextualReturnPage;
+    private PageViewModel? _lastNavigationPage;
     private bool _presentationVisible = true;
+
+    /// <summary>True while a Simple/Mini surface shows a page outside its sidebar.</summary>
+    public bool HasContextualReturn => _contextualReturnPage is not null;
+
+    /// <summary>Label for the contextual back control.</summary>
+    public string ContextualReturnText =>
+        _contextualReturnPage is null ? string.Empty : $"Back to {_contextualReturnPage.Title}";
+
+    /// <summary>
+    /// Sidebar selection. A contextual sub-page keeps its parent section highlighted instead of
+    /// clearing the ListBox selection.
+    /// </summary>
+    public PageViewModel? SelectedNavigationPage
+    {
+        get => NavigationPages.Contains(SelectedPage) ? SelectedPage : _lastNavigationPage;
+        set
+        {
+            if (value is not null && !ReferenceEquals(value, SelectedPage))
+            {
+                SelectedPage = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Opens a page without persisting a different UI mode. When the page is not in the current
+    /// sidebar the previous page is offered as a direct return path.
+    /// </summary>
+    private void NavigateContextual(PageViewModel page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        if (NavigationPages.Contains(SelectedPage))
+        {
+            _lastNavigationPage = SelectedPage;
+        }
+
+        _contextualReturnPage = NavigationPages.Contains(page) ? null : _lastNavigationPage ?? SelectedPage;
+        SelectedPage = page;
+        RaiseNavigationStateChanged();
+    }
+
+    [RelayCommand]
+    private void GoBack()
+    {
+        var target = _contextualReturnPage;
+        _contextualReturnPage = null;
+        if (target is not null)
+        {
+            SelectedPage = target;
+        }
+
+        RaiseNavigationStateChanged();
+    }
+
+    private void RaiseNavigationStateChanged()
+    {
+        OnPropertyChanged(nameof(HasContextualReturn));
+        OnPropertyChanged(nameof(ContextualReturnText));
+        OnPropertyChanged(nameof(SelectedNavigationPage));
+    }
 
     public void SetPresentationVisible(bool visible)
     {

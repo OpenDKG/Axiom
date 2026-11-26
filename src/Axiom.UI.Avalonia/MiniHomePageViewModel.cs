@@ -21,7 +21,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 
     private const int MaxRecentAgentEntries = 4;
 
-    private readonly Action _openFirewall;
+    private readonly Action _openNetworkOverview;
     private readonly Action _openPrivacy;
     private readonly Action _openAgents;
     private readonly Action _openSettings;
@@ -36,7 +36,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         PrivacyShieldPageViewModel privacyShield,
         AgentsPageViewModel agents,
         string versionText,
-        Action openFirewall,
+        Action openNetworkOverview,
         Action openPrivacy,
         Action openAgents,
         Action openSettings,
@@ -51,7 +51,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         PrivacyShield = privacyShield ?? throw new ArgumentNullException(nameof(privacyShield));
         Agents = agents ?? throw new ArgumentNullException(nameof(agents));
         VersionText = versionText ?? string.Empty;
-        _openFirewall = openFirewall ?? throw new ArgumentNullException(nameof(openFirewall));
+        _openNetworkOverview = openNetworkOverview ?? throw new ArgumentNullException(nameof(openNetworkOverview));
         _openPrivacy = openPrivacy ?? throw new ArgumentNullException(nameof(openPrivacy));
         _openAgents = openAgents ?? throw new ArgumentNullException(nameof(openAgents));
         _openSettings = openSettings ?? throw new ArgumentNullException(nameof(openSettings));
@@ -188,7 +188,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
     }
 
     [RelayCommand]
-    private void OpenFirewall() => _openFirewall();
+    private void OpenNetworkOverview() => _openNetworkOverview();
 
     [RelayCommand]
     private void OpenPrivacy() => _openPrivacy();

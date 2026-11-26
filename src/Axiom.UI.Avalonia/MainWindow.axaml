@@ -320,7 +320,7 @@
           </Border>
         </StackPanel>
 
-        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding NavigationPages}" SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+        <ListBox Grid.Row="1" Classes="nav-list" ItemsSource="{Binding NavigationPages}" SelectedItem="{Binding SelectedNavigationPage, Mode=TwoWay}"
                  Background="Transparent" BorderThickness="0" Margin="10,0">
           <ListBox.ItemTemplate>
             <DataTemplate>
@@ -405,7 +405,12 @@
         </Grid>
       </Border>
 
-      <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
+      <Grid Grid.Row="1" RowDefinitions="Auto,*">
+        <Button Grid.Row="0" Content="{Binding ContextualReturnText}" Command="{Binding GoBackCommand}"
+                IsVisible="{Binding HasContextualReturn}" HorizontalAlignment="Left" Margin="24,8,0,0"
+                Padding="12,5" FontSize="11" />
+        <ContentControl Grid.Row="1" Content="{Binding SelectedPage}" />
+      </Grid>
 
       <Border Classes="glass-chrome" Grid.Row="2" IsVisible="{Binding !IsMiniMode}" MinHeight="34" Background="{DynamicResource Axiom.StatusBar}" BorderBrush="{DynamicResource Axiom.Border}" BorderThickness="0,1,0,0">
         <Grid Margin="28,0,22,0" ColumnDefinitions="*,Auto">

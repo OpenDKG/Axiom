@@ -104,8 +104,13 @@ public sealed class SimpleAndAdvancedModeTests : IDisposable
 
             shell.SimpleHome.OpenAgentsCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
-            Assert.True(shell.IsAdvancedMode);
+            // Opening a page from Simple must not persist Advanced mode (issue #61).
+            Assert.False(shell.IsAdvancedMode);
+            Assert.Equal(UiMode.Simple, modeService.Current);
             Assert.Same(shell.Agents, shell.SelectedPage);
+            Assert.True(shell.HasContextualReturn);
+            shell.GoBackCommand.Execute(null);
+            Assert.Same(shell.SimpleHome, shell.SelectedPage);
 
             // Switch to Mini mode -> compact window, collapses sidebar, renders MiniHomeView with blocked items
             shell.SwitchToMiniModeCommand.Execute(null);
