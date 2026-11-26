@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Diagnostics;
 using Axiom.Contracts.Firewall;
 using Axiom.Core.Enforcement;
 using Xunit;
@@ -110,6 +111,39 @@ public sealed class TrustedFileBrokerHandleTests : IDisposable
         Assert.Equal(BrokerAccessDecision.DeniedUnsafePath, forMissing.Decision);
         Assert.Null(forDirectory.ContentBytes);
         Assert.Null(forMissing.ContentBytes);
+    }
+
+    [Fact]
+    public async Task Fifo_is_refused_promptly_instead_of_blocking_the_open()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Windows has no filesystem FIFOs.
+        }
+
+        var fifo = Path.Combine(_root, "pipe.txt");
+        using (var mkfifo = Process.Start("mkfifo", [fifo]))
+        {
+            await mkfifo.WaitForExitAsync();
+            Assert.Equal(0, mkfifo.ExitCode);
+        }
+
+        var broker = new TrustedFileBroker(Evaluator(protectedScope: Final(Write("unrelated.env", "x"))), _ => false);
+        var work = Task.Run(() => (
+            Result: broker.OpenRead("opencode", "req-fifo", fifo, Observed),
+            Resolved: TrustedFileBroker.TryResolveFinalPath(fifo, out _)));
+
+        if (await Task.WhenAny(work, Task.Delay(TimeSpan.FromSeconds(10))) != work)
+        {
+            // Release the blocked reader so the test host can exit: opening read/write never blocks on a FIFO.
+            using var release = new FileStream(fifo, FileMode.Open, FileAccess.ReadWrite);
+            Assert.Fail("Opening a FIFO blocked the broker.");
+        }
+
+        var outcome = await work;
+        Assert.Equal(BrokerAccessDecision.DeniedUnsafePath, outcome.Result.Decision);
+        Assert.Null(outcome.Result.ContentBytes);
+        Assert.False(outcome.Resolved);
     }
 
     [Fact]

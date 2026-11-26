@@ -25,7 +25,8 @@ internal enum BrokerOpenFailure
 /// <summary>
 /// Opens files for <see cref="TrustedFileBroker"/> without following a link in the final path
 /// component (<c>FILE_FLAG_OPEN_REPARSE_POINT</c> on Windows, <c>O_NOFOLLOW</c> on Unix), and reads
-/// the file identity (volume + file index, or device + inode) and final path from that handle.
+/// the file identity (volume + file index, or device + inode) and final path from that handle. On
+/// Unix only regular files are returned, and the open itself never blocks on a FIFO.
 /// </summary>
 internal static class BrokerFileHandle
 {
@@ -52,11 +53,28 @@ internal static class BrokerFileHandle
             return null;
         }
 
-        var fd = UnixOpen(path, flags);
+        // O_NONBLOCK keeps open() from waiting for a writer when the path is a FIFO.
+        var nonBlock = OperatingSystem.IsMacOS() ? MacONonBlock : LinuxONonBlock;
+        var fd = UnixOpen(path, flags | nonBlock);
         if (fd >= 0)
         {
+            var opened = new SafeFileHandle(new IntPtr(fd), ownsHandle: true);
+            if (!TryGetIdentity(opened, out var identity) || !identity.IsRegularFile)
+            {
+                opened.Dispose();
+                failure = BrokerOpenFailure.Unsupported;
+                return null;
+            }
+
+            if (!TryClearNonBlocking(fd, nonBlock))
+            {
+                opened.Dispose();
+                failure = BrokerOpenFailure.Failed;
+                return null;
+            }
+
             failure = BrokerOpenFailure.None;
-            return new SafeFileHandle(new IntPtr(fd), ownsHandle: true);
+            return opened;
         }
 
         var errno = Marshal.GetLastPInvokeError();
@@ -172,6 +190,23 @@ internal static class BrokerFileHandle
         return content.ToArray();
     }
 
+    private static bool TryClearNonBlocking(int fd, int nonBlock)
+    {
+        var current = Fcntl(fd, FcntlGetFlags, 0);
+        if (current < 0)
+        {
+            return false;
+        }
+
+        var blocking = current & ~nonBlock;
+        // fcntl is variadic. Apple arm64 passes variadic arguments on the stack, so six unused
+        // register arguments push the flags there; every other supported ABI takes them as usual.
+        var result = OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+            ? FcntlAppleArm64(fd, FcntlSetFlags, 0, 0, 0, 0, 0, 0, blocking)
+            : Fcntl(fd, FcntlSetFlags, blocking);
+        return result == 0;
+    }
+
     private static bool TryUnixOpenFlags(out int flags)
     {
         flags = 0;
@@ -263,6 +298,10 @@ internal static class BrokerFileHandle
     private const int LinuxEloop = 40;
     private const int MacEloop = 62;
     private const int LinuxOCloexec = 0x80000;
+    private const int LinuxONonBlock = 0x800;
+    private const int MacONonBlock = 0x4;
+    private const int FcntlGetFlags = 3;
+    private const int FcntlSetFlags = 4;
     private const int MacONoFollow = 0x100;
     private const int MacOCloexec = 0x1000000;
     private const int AtEmptyPath = 0x1000;
@@ -315,6 +354,21 @@ internal static class BrokerFileHandle
 
     [DllImport("libc", EntryPoint = "open", SetLastError = true, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     private static extern int UnixOpen([MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags);
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int Fcntl(int fd, int command, int argument);
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int FcntlAppleArm64(
+        int fd,
+        int command,
+        nint unused2,
+        nint unused3,
+        nint unused4,
+        nint unused5,
+        nint unused6,
+        nint unused7,
+        int argument);
 
     [DllImport("libc", EntryPoint = "statx", SetLastError = true, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     private static extern int Statx(int dirfd, [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags, uint mask, byte[] statxbuf);

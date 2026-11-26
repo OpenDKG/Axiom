@@ -246,7 +246,11 @@ internal static class ServiceInstaller
         {
             return IsWellFormedSid(requested)
                 ? new AllowedSidDecision(requested, "caller", null, null)
-                : new AllowedSidDecision(null, "caller", null, $"--allowed-sid '{requested}' is not a valid SID.");
+                : new AllowedSidDecision(
+                    null,
+                    "caller",
+                    null,
+                    $"--allowed-sid '{requested}' is not a local or domain user account SID (S-1-5-21-...).");
         }
 
         var interactive = interactiveSid?.Trim();
@@ -259,12 +263,40 @@ internal static class ServiceInstaller
         return new AllowedSidDecision(elevatedSid, "elevated-fallback", warning, null);
     }
 
-    internal static bool IsWellFormedSid(string value) =>
-        System.Text.RegularExpressions.Regex.IsMatch(
+    /// <summary>
+    /// True only for a local or domain account SID (<c>S-1-5-21-a-b-c-RID</c>). The bound SID gets
+    /// ReadWrite on the service pipe, so Everyone, BUILTIN and other well-known SIDs are refused, as
+    /// are the well-known domain group RIDs. The check is on the SID's form only: it cannot tell a
+    /// custom group (RID 1000 and up) from a user.
+    /// </summary>
+    internal static bool IsWellFormedSid(string value)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
             value,
-            "^S-1-[0-9]{1,14}(-[0-9]{1,10}){1,15}$",
+            @"\AS-1-5-21-([0-9]{1,10})-([0-9]{1,10})-([0-9]{1,10})-([0-9]{1,10})\z",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(1));
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        uint rid = 0;
+        for (var group = 1; group < match.Groups.Count; group++)
+        {
+            if (!uint.TryParse(
+                    match.Groups[group].Value,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out rid))
+            {
+                return false;
+            }
+        }
+
+        // Domain and forest groups with fixed RIDs (Domain Users, Domain Admins, Enterprise Admins, ...).
+        return rid is not (498 or (>= 512 and <= 522) or (>= 525 and <= 527) or 553 or 571 or 572);
+    }
 
     private static string? InteractiveConsoleUserSid()
     {
