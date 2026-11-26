@@ -1151,6 +1151,8 @@ public static class AgentCommandGuard
 
 
         def _reads_protected(command: str, protected) -> bool:
+            if _rsync_copies_protected(command, protected, to_other_host=False):
+                return True
             verbs = ("cat", "type", "more", "head", "tail", "get-content", "readalltext",
                      "open(", ".read(", "copy", "cp", "get-item", "strings", "forfiles",
                      "findstr", "select-string", "grep", "rg", "tar", "compress-archive",
@@ -1259,9 +1261,8 @@ public static class AgentCommandGuard
             return operands if scripted else operands[1:]
 
 
-        def _copy_destination(name: str, arguments) -> list:
-            # The local destination of rsync or scp: the last operand, unless it names another host.
-            import re as _re
+        def _copy_operands(name: str, arguments) -> list:
+            # The sources and destination of rsync or scp, without options and their values.
             short_valued = "efBTM" if name == "rsync" else "cDFiJloPSX"
             long_valued = ("--rsh", "--filter", "--exclude", "--include", "--exclude-from", "--include-from",
                            "--files-from", "--block-size", "--temp-dir", "--log-file", "--log-file-format",
@@ -1283,11 +1284,37 @@ public static class AgentCommandGuard
                 else:
                     operands.append(word)
                 idx += 1
-            if len(operands) < 2:
+            return operands
+
+
+        def _names_other_host(spec: str) -> bool:
+            import re as _re
+            return _re.match(r"[^/\\]{2,}:|(?:rsync|scp|sftp)://", spec) is not None
+
+
+        def _copy_destination(name: str, arguments) -> list:
+            # The local destination of rsync or scp: the last operand, unless it names another host.
+            operands = _copy_operands(name, arguments)
+            if len(operands) < 2 or _names_other_host(operands[-1]):
                 return []
-            destination = operands[-1]
-            remote = _re.match(r"[^/\\]{2,}:|(?:rsync|scp|sftp)://", destination)
-            return [] if remote else [destination]
+            return [operands[-1]]
+
+
+        def _rsync_copies_protected(command: str, protected, to_other_host: bool) -> bool:
+            # An rsync whose source is a protected path, split by where the copy goes. Values of options
+            # such as -e or --exclude are not sources.
+            for segment in _split_shell_segments(command):
+                if segment == _UNINSPECTABLE_SEGMENT:
+                    continue
+                for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words or _command_name(words[0]) != "rsync":
+                        continue
+                    operands = _copy_operands("rsync", _split_redirections(words[1:])[0])
+                    if len(operands) > 1 and _names_other_host(operands[-1]) == to_other_host and any(
+                            _text_hits_protected(source, protected) for source in dict.fromkeys(operands[:-1])):
+                        return True
+            return False
 
 
         def _permission_targets(words) -> list:
@@ -1815,6 +1842,8 @@ public static class AgentCommandGuard
         def _exfiltrates_protected(command: str, protected) -> bool:
             # Uploading or encoding a protected file is exfiltration even when no file-access rule
             # matched the argument (curl -F file=@... was allowed in the lab).
+            if _rsync_copies_protected(command or "", protected, to_other_host=True):
+                return True
             text = " ".join((command or "").lower().split())
             if not _hits_protected(text, protected):
                 return False
