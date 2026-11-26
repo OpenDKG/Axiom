@@ -692,6 +692,160 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         Assert.StartsWith(blocked ? "BLOCKED" : "ALLOWED", stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Writes, permission changes and stopping the local guard, against the protected path ~/.ssh/*.
+    /// "blocked" accepts any category.
+    /// </summary>
+    private static readonly (string Command, string Expected)[] WritePermissionAndStopForms =
+    [
+        (@"sed -i s/a/b/ ~/.ssh/config", "write"),
+        (@"sed -i.bak s/a/b/ ~/.ssh/config", "write"),
+        (@"sed -i -e s/a/b/ ~/.ssh/authorized_keys", "write"),
+        (@"sed -Ei ""s/a+/b/"" ~/.ssh/config", "write"),
+        (@"sed --in-place=.orig s/a/b/ ~/.ssh/config", "write"),
+        (@"perl -i -pe s/a/b/ ~/.ssh/config", "write"),
+        (@"perl -pi -e ""s/a/b/"" ~/.ssh/config", "write"),
+        (@"perl -i.bak -pe ""s/a/b/"" ~/.ssh/config", "write"),
+        (@"rsync /tmp/k ~/.ssh/", "write"),
+        (@"rsync -a --exclude .git /tmp/keys/ ~/.ssh/", "write"),
+        (@"rsync /tmp/k ~/.ssh/ --delete-after", "blocked"),
+        (@"scp host:authorized_keys ~/.ssh/authorized_keys", "write"),
+        (@"scp -P 22 user@host:k ~/.ssh/", "write"),
+        (@"cp /tmp/k ~/.ssh/authorized_keys", "blocked"),
+        (@"mv -f /tmp/k ~/.ssh/config", "blocked"),
+        (@"install -m 600 /tmp/k ~/.ssh/id_rsa", "write"),
+        (@"chmod 777 ~/.ssh", "permissions"),
+        (@"chmod -R a+rwx ~/.ssh/", "permissions"),
+        (@"chmod -x ~/.ssh/id_rsa", "permissions"),
+        (@"chown nobody ~/.ssh/id_rsa", "permissions"),
+        (@"chown -R nobody:nogroup ~/.ssh", "permissions"),
+        (@"chgrp users ~/.ssh/config", "permissions"),
+        (@"chattr +i ~/.ssh/authorized_keys", "permissions"),
+        (@"chattr -i ~/.ssh/config", "permissions"),
+        (@"setfacl -m u:nobody:rwx ~/.ssh", "permissions"),
+        (@"setfacl -R -b ~/.ssh", "permissions"),
+        (@"chmod --reference=/tmp/x ~/.ssh/config", "permissions"),
+        (@"sudo chmod 644 ~/.ssh/id_rsa", "permissions"),
+        (@"find ~/.ssh -type f -exec chmod 666 {} +", "permissions"),
+        (@"pkill axiomd", "tamper"),
+        (@"pkill -9 -f Axiom.Service", "tamper"),
+        (@"killall axiomd", "tamper"),
+        (@"kill -9 $(pgrep axiomd)", "tamper"),
+        (@"kill `pidof axiomd`", "tamper"),
+        (@"pgrep axiomd | xargs kill -9", "tamper"),
+        (@"sudo pkill -x axiomd", "tamper"),
+        (@"powershell -c ""Stop-Process -Name Axiom.Service -Force""", "tamper"),
+        (@"powershell -c ""Stop-Process -Name Axiom*""", "tamper"),
+        (@"Stop-Process -Name Axiom* -Force", "tamper"),
+        (@"powershell -c ""Get-Process Axiom* | Stop-Process -Force""", "blocked"),
+        (@"Get-Process -Name axiom* | Stop-Process", "tamper"),
+        (@"wmic process where ""name='Axiom.Service.exe'"" delete", "tamper"),
+        (@"wmic process where name=""axiom.exe"" call terminate", "tamper"),
+        (@"sc config Axiom start= disabled", "tamper"),
+        (@"sc.exe config AxiomService start= disabled", "tamper"),
+        (@"systemctl mask axiomd", "tamper"),
+        (@"sudo systemctl --now mask axiomd.service", "tamper"),
+        (@"systemctl --user disable --now axiomd", "tamper"),
+        (@"systemctl kill axiomd", "tamper"),
+        (@"chmod +x build/app", "allowed"),
+        (@"chmod -R 755 dist", "allowed"),
+        (@"chown -R www-data build/", "allowed"),
+        (@"chgrp staff notes.txt", "allowed"),
+        (@"chattr +i build/lock", "allowed"),
+        (@"setfacl -m u:ci:r build/log", "allowed"),
+        (@"ls ~/.ssh && chmod +x build/app", "allowed"),
+        (@"find build -type f -exec chmod 644 {} +", "allowed"),
+        (@"kill %1", "allowed"),
+        (@"kill -9 12345", "allowed"),
+        (@"kill $(pgrep node)", "allowed"),
+        (@"pkill node", "allowed"),
+        (@"killall python3", "allowed"),
+        (@"pgrep axiomd", "allowed"),
+        (@"ps aux | grep axiom", "allowed"),
+        (@"pkill -f ""vite build""", "allowed"),
+        (@"Stop-Process -Name notepad", "allowed"),
+        (@"Get-Process node | Stop-Process", "allowed"),
+        (@"sc config Spooler start= disabled", "allowed"),
+        (@"sc query Axiom", "allowed"),
+        (@"wmic process where name=""notepad.exe"" delete", "allowed"),
+        (@"systemctl status axiomd", "allowed"),
+        (@"systemctl mask bluetooth", "allowed"),
+        (@"systemctl restart nginx", "allowed"),
+        (@"sed -i s/a/b/ README.md", "allowed"),
+        (@"sed -i ""s|~/.ssh|x|"" docs/guide.md", "allowed"),
+        (@"sed -n 1p notes.txt", "allowed"),
+        (@"perl -pi -e ""s/a/b/"" src/app.js", "allowed"),
+        (@"perl -e ""print 1""", "allowed"),
+        (@"perl -pe s/a/b/ README.md", "allowed"),
+        (@"rsync -a dist/ user@host:/var/www/", "allowed"),
+        (@"rsync -a src/ build/", "allowed"),
+        (@"scp build/app host:/tmp/", "allowed"),
+        (@"cp ~/.bashrc build/bashrc", "allowed"),
+        (@"mv build/a build/b", "allowed"),
+        (@"echo ""chmod 777 ~/.ssh""", "allowed"),
+        (@"git commit -m ""pkill axiomd docs""", "allowed"),
+    ];
+
+    /// <summary>Each form as written and inside bash -lc.</summary>
+    public static TheoryData<string, string> WritePermissionAndStopCases()
+    {
+        var cases = new TheoryData<string, string>();
+        foreach (var (command, expected) in WritePermissionAndStopForms)
+        {
+            cases.Add(command, expected);
+            cases.Add("bash -lc '" + command.Replace("'", "'\\''", StringComparison.Ordinal) + "'", expected);
+        }
+
+        return cases;
+    }
+
+    [Theory]
+    [MemberData(nameof(WritePermissionAndStopCases))]
+    public async Task Guard_checks_writes_permissions_and_stopping_the_guard(string command, string expected)
+    {
+        var pythonExe = FindPython();
+        if (pythonExe is null)
+        {
+            return;
+        }
+
+        var scriptPath = Path.Combine(_tempDir, "test_checks.py");
+        var script = "import os\nimport sys\nfrom pathlib import Path\n\n"
+            + AgentCommandGuard.PythonHelpers.Replace("\r\n", "\n", StringComparison.Ordinal)
+            + """
+
+result = _check_command_safety({"command": sys.argv[1]}, ["~/.ssh/*"])
+print(result[0] if result else "allowed")
+""";
+        await File.WriteAllTextAsync(scriptPath, script, Encoding.UTF8);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add(scriptPath);
+        psi.ArgumentList.Add(command);
+        using var proc = Process.Start(psi)!;
+        var stdout = await proc.StandardOutput.ReadToEndAsync();
+        var stderr = await proc.StandardError.ReadToEndAsync();
+        await proc.WaitForExitAsync();
+
+        Assert.True(proc.ExitCode == 0, $"python failed ({proc.ExitCode}): {stderr}");
+        Assert.Empty(stderr.Trim()); // hooks must stay quiet
+        if (expected == "blocked")
+        {
+            Assert.NotEqual("allowed", stdout.Trim());
+        }
+        else
+        {
+            Assert.Equal(expected, stdout.Trim());
+        }
+    }
+
     private static string? FindPython()
     {
         foreach (var candidate in new[] { "python3", "python" })

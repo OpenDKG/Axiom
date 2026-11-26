@@ -38,7 +38,9 @@ File protection for an agent that runs as the signed-in user is enforced at the 
 the difference instead of claiming a boundary that does not exist.
 
 **Scope of the command check:** the guard inspects local shell text; it is not a sandbox; remote
-commands (for example `ssh`), script files and interpreters fed from files are out of scope.
+commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
+files are out of scope. A delete whose command names no protected path, such as
+`find / -name id_rsa -execdir rm {} \;`, is not detected.
 
 ## Why Blackbox and DKG are part of Axiom
 

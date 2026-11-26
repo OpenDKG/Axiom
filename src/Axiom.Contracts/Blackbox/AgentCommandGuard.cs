@@ -1037,6 +1037,8 @@ public static class AgentCommandGuard
                 return False
             if "auditpol /clear" in norm or "shadowcopy delete" in norm or "wmic shadowcopy" in norm:
                 return True
+            if _stops_guard_process(command):
+                return True
             service_verbs = (
                 "sc stop", "sc delete", "stop-service", "restart-service", "set-service",
                 "net stop", "taskkill", "schtasks /change", "schtasks /delete",
@@ -1214,10 +1216,181 @@ public static class AgentCommandGuard
             return targets
 
 
-        def _written_paths(words) -> list:
-            # Paths that tee, dd, install, ln, cp, mv and destructive git -C calls write to.
+        def _edited_in_place(name: str, arguments) -> list:
+            # The files sed -i or perl -i rewrite; empty without an in-place flag. Without -e or -f the
+            # first operand is the script.
+            in_place = False
+            scripted = False
+            operands = []
+            idx = 0
+            while idx < len(arguments):
+                word = arguments[idx]
+                if name == "perl" and operands:
+                    operands.append(word)  # everything after a perl script belongs to the script
+                elif word == "--":
+                    operands.extend(arguments[idx + 1:])
+                    break
+                elif word.startswith("--"):
+                    option, equals, _ = word.partition("=")
+                    in_place = in_place or option == "--in-place"
+                    if option in ("--expression", "--file"):
+                        scripted = True
+                        idx += 0 if equals else 1
+                elif word.startswith("-") and len(word) > 1:
+                    for position in range(1, len(word)):
+                        char = word[position]
+                        if char == "i":
+                            in_place = True  # the rest is the backup suffix
+                            break
+                        if char in ("eE" if name == "perl" else "ef"):
+                            scripted = True
+                            if position == len(word) - 1:
+                                idx += 1
+                            break
+                        if name == "perl" and char in "IMm":
+                            break
+                else:
+                    operands.append(word)
+                idx += 1
+            if not in_place:
+                return []
+            return operands if scripted else operands[1:]
+
+
+        def _copy_destination(name: str, arguments) -> list:
+            # The local destination of rsync or scp: the last operand, unless it names another host.
+            import re as _re
+            short_valued = "efBTM" if name == "rsync" else "cDFiJloPSX"
+            long_valued = ("--rsh", "--filter", "--exclude", "--include", "--exclude-from", "--include-from",
+                           "--files-from", "--block-size", "--temp-dir", "--log-file", "--log-file-format",
+                           "--partial-dir", "--backup-dir", "--suffix", "--chmod", "--chown", "--port",
+                           "--timeout", "--contimeout", "--bwlimit", "--max-size", "--min-size", "--link-dest",
+                           "--compare-dest", "--copy-dest", "--password-file", "--out-format", "--rsync-path")
+            operands = []
+            idx = 0
+            while idx < len(arguments):
+                word = arguments[idx]
+                if word.startswith("--"):
+                    idx += 1 if word in long_valued else 0
+                elif word.startswith("-") and len(word) > 1:
+                    for position in range(1, len(word)):
+                        if word[position] in short_valued:
+                            if position == len(word) - 1:
+                                idx += 1
+                            break
+                else:
+                    operands.append(word)
+                idx += 1
+            if len(operands) < 2:
+                return []
+            destination = operands[-1]
+            remote = _re.match(r"[^/\\]{2,}:|(?:rsync|scp|sftp)://", destination)
+            return [] if remote else [destination]
+
+
+        def _permission_targets(words) -> list:
+            # The files chmod, chown, chgrp, chattr and setfacl change.
+            import re as _re
             name = _command_name(words[0])
             arguments = _split_redirections(words[1:])[0]
+            if name in ("chmod", "chown", "chgrp"):
+                operands = []
+                reference = False
+                for word in arguments:
+                    if word.startswith("--reference"):
+                        reference = True
+                    elif name == "chmod" and _re.fullmatch(r"-[rwxXstugo,=+]+", word):
+                        operands.append(word)  # a mode that removes permissions
+                    elif not (word.startswith("-") and len(word) > 1):
+                        operands.append(word)
+                return operands if reference else operands[1:]  # the first is the mode or owner
+            if name == "chattr":
+                return [word for word in arguments if not word.startswith(("-", "+", "="))]
+            if name == "setfacl":
+                files = []
+                idx = 0
+                while idx < len(arguments):
+                    word = arguments[idx]
+                    if word in ("--modify", "--remove", "--modify-file", "--remove-file", "--set", "--set-file") or (
+                            not word.startswith("--") and word.startswith("-") and word[-1] in "mxMX"):
+                        idx += 1
+                    elif not word.startswith("-"):
+                        files.append(word)
+                    idx += 1
+                return files
+            return []
+
+
+        def _changes_protected_permissions(command: str, protected) -> bool:
+            changers = ("chmod", "chown", "chgrp", "chattr", "setfacl")
+            for segment in _split_shell_segments(command):
+                if segment == _UNINSPECTABLE_SEGMENT:
+                    continue
+                for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words:
+                        continue
+                    targets = _permission_targets(words)
+                    if _command_name(words[0]) == "find" and any(
+                            _command_name(argv[0]) in changers for argv in _find_exec_commands(words)):
+                        # find hands what it found to the command: check where it starts looking.
+                        for word in words[1:]:
+                            if word.startswith("-") or word in ("(", "!"):
+                                break
+                            targets.append(word)
+                    if any(_text_hits_protected(target, protected) for target in dict.fromkeys(targets)):
+                        return True
+            return False
+
+
+        def _stops_guard_process(command: str) -> bool:
+            # Calls that kill, disable or mask Axiom's own processes and services.
+            import re as _re
+            guard = _re.compile(
+                r"(?<![a-z0-9_-])(?:com\.axiom\.service|axiomd|axiom(?:[.-]?(?:service|desktop|blackbox)"
+                r"(?:\.[a-z0-9.]+)?|\.exe|\*)?)(?![a-z0-9_/\\-])")
+            killers = ("kill", "pkill", "killall", "stop-process", "spps", "taskkill")
+            kills = False
+            finds_guard = False
+            searches_guard = False
+            lists_processes = False
+            for segment in _split_shell_segments(command):
+                for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
+                    words = [word.lower() for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words:
+                        continue
+                    # $(pgrep ...) and `pidof ...` are also read as segments of their own.
+                    name = _command_name(words[0].lstrip("$(`"))
+                    arguments = words[1:]
+                    named = any(guard.search(word) for word in arguments)
+                    kills = kills or name in killers
+                    lists_processes = lists_processes or name == "ps"
+                    if named:
+                        if name in ("kill", "pkill", "killall", "stop-process", "spps"):
+                            return True
+                        if name == "wmic" and "process" in arguments and (
+                                "delete" in arguments or "terminate" in arguments):
+                            return True
+                        if name == "sc" and "config" in arguments and any(
+                                word.startswith("start=") for word in arguments) and "disabled" in " ".join(arguments):
+                            return True
+                        if name == "systemctl" and any(word in ("stop", "disable", "mask", "kill") for word in arguments):
+                            return True
+                        finds_guard = finds_guard or name in ("pgrep", "pidof", "get-process", "gps")
+                        searches_guard = searches_guard or name == "grep"
+            # The process is looked up in one place and killed in another.
+            return kills and (finds_guard or (searches_guard and lists_processes))
+
+
+        def _written_paths(words) -> list:
+            # Paths that tee, dd, install, ln, cp, mv, in-place edits, rsync, scp and destructive git -C
+            # calls write to.
+            name = _command_name(words[0])
+            arguments = _split_redirections(words[1:])[0]
+            if name in ("sed", "gsed", "perl"):
+                return _edited_in_place("perl" if name == "perl" else "sed", arguments)
+            if name in ("rsync", "scp"):
+                return _copy_destination(name, arguments)
             if name == "dd":
                 return [word[3:] for word in arguments if word.startswith("of=")]
             if name == "git":
@@ -1270,6 +1443,8 @@ public static class AgentCommandGuard
 
 
         def _tampers_with_protected(command: str, protected) -> bool:
+            if _changes_protected_permissions(command, protected):
+                return True
             verbs = ("takeown", "icacls", "cacls", "attrib", "set-acl", "get-acl", "setaccessrule")
             return _has_command_verb(command, verbs) and _hits_protected(command, protected)
 
