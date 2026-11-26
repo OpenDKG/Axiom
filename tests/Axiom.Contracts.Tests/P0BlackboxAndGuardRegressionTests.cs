@@ -68,10 +68,15 @@ public sealed class P0BlackboxAndGuardRegressionTests : IDisposable
             return;
         }
 
+        // The helper reads %LOCALAPPDATA%\Axiom on Windows and the XDG ~/.local/share/Axiom elsewhere,
+        // so the persisted policy is written where the current platform looks for it.
         var fakeHome = Path.Combine(_tempDir, "home");
-        var xdgShareDir = Path.Combine(fakeHome, ".local", "share", "Axiom");
-        Directory.CreateDirectory(xdgShareDir);
-        await File.WriteAllTextAsync(Path.Combine(xdgShareDir, "guard-failure-policy.txt"), "fail-closed\n");
+        var localAppData = Path.Combine(fakeHome, "AppData", "Local");
+        var policyDir = OperatingSystem.IsWindows()
+            ? Path.Combine(localAppData, "Axiom")
+            : Path.Combine(fakeHome, ".local", "share", "Axiom");
+        Directory.CreateDirectory(policyDir);
+        await File.WriteAllTextAsync(Path.Combine(policyDir, "guard-failure-policy.txt"), "fail-closed\n");
 
         var scriptPath = Path.Combine(_tempDir, "test_guard.py");
         var script = "import os\nfrom pathlib import Path\n\n"
@@ -87,7 +92,7 @@ for _ in range(30):
 segs = _split_shell_segments(cmd)
 assert isinstance(segs, list) and len(segs) <= _MAX_SHELL_UNWRAP_DEPTH + 1, f"unexpected segments: {len(segs)}"
 
-assert _is_fail_closed() is True, "expected fail-closed from ~/.local/share/Axiom/guard-failure-policy.txt"
+assert _is_fail_closed() is True, "expected fail-closed from the persisted guard-failure-policy.txt"
 os.environ["AXIOM_GUARD_FAIL_CLOSED"] = "0"
 assert _is_fail_closed() is True, "env downgrade must not override persisted fail-closed policy"
 print("PY_GUARD_OK")
@@ -105,7 +110,15 @@ print("PY_GUARD_OK")
         psi.ArgumentList.Add(scriptPath);
         psi.Environment["HOME"] = fakeHome;
         psi.Environment["USERPROFILE"] = fakeHome;
-        psi.Environment.Remove("LOCALAPPDATA");
+        if (OperatingSystem.IsWindows())
+        {
+            psi.Environment["LOCALAPPDATA"] = localAppData;
+        }
+        else
+        {
+            psi.Environment.Remove("LOCALAPPDATA");
+        }
+
         psi.Environment.Remove("XDG_DATA_HOME");
         psi.Environment.Remove("AXIOM_GUARD_FAIL_CLOSED");
 
