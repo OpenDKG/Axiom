@@ -94,8 +94,9 @@ Axiom is a local-first Windows network monitor, firewall policy manager and opti
 protection console. It shows which applications use the network, which endpoints they talk to, and what
 happened over time. It manages only its own rules in the built-in Windows Firewall; Windows remains
 the enforcement authority. Core functions need no account or cloud connection; Axiom has no advertising or its own analytics
-telemetry. Optional AI, reputation, Blackbox and DKG features can contact external services or
-network peers when deliberately enabled.
+telemetry. Optional AI and reputation features can contact external services when you enable them.
+Blackbox and DKG can contact external services and network peers once installed, and the default
+Windows Setup (Complete) installs and starts both.
 
 Axiom brings together four surfaces:
 
@@ -228,12 +229,17 @@ shows the charts and captures.
 
 ### Privacy by default
 
-- All processing is local by default. The standard build makes no outbound network call unless the
-  optional AI Analyst, reputation feed or another optional module is explicitly enabled.
+- Monitoring data is processed locally. Some network features are **on by default**: the release
+  update check and the verified-graph snapshot fetch; and, after a Complete or Light install,
+  Privacy Shield (adapter DNS pointed at `127.0.0.1`, with allowed queries sent over
+  DNS-over-HTTPS to Cloudflare and Quad9, and daily blocklist updates) and the Community Feed
+  download. The AI Analyst and automatic threat sharing are off until you set them up. See
+  [PRIVACY.md](PRIVACY.md).
 - No mandatory Axiom account, Axiom-hosted analytics, advertising or data sales. Optional DKG/Blackbox synchronization involves external peers, and optional cloud AI/reputation integrations may make network requests.
-- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes sanitized process metadata and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
-- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
-  default, and never sit on the per-connection enforcement path.
+- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes process metadata, process command lines (passed through a pattern-based sanitiser), this computer's IP addresses, gateway addresses and DNS suffix, and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
+- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate and never
+  sit on the per-connection enforcement path. A Complete or Light install turns the Community Feed
+  on, and a Complete install also installs Blackbox and DKG.
 
 ## Optional modules
 
@@ -322,7 +328,7 @@ OriginTrail's Decentralized Knowledge Graph (DKG) is an optional knowledge and p
 is not a firewall engine and is not required for local monitoring or enforcement.
 
 - Core Windows Firewall policy and locally stored DNS lists do not require a wallet, TRAC, token, live DKG node or VM publication to work.
-- An optional local DKG node and Blackbox dashboard can be installed/started explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
+- The local DKG node and Blackbox dashboard are optional: the default Windows Setup (Complete) installs and starts them, and otherwise you can install/start them explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
 - Axiom does not yet perform general verified/community graph lookups on every connection or automatically turn graph sightings into Windows Firewall rules.
 - The user may explicitly submit normalized threat reports through Blackbox, but Axiom does not directly publish paid VM assets or assume TRAC/gas costs. See [Threat intelligence](docs/THREAT_INTELLIGENCE.md).
 - DKG is never on the per-flow Windows Firewall enforcement path.
