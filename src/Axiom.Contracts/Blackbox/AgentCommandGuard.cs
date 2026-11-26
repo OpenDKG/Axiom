@@ -704,8 +704,250 @@ public static class AgentCommandGuard
             return bool(words) and _command_name(words[0][0]) in _POSIX_SHELLS + ("eval", "su", "runuser")
 
 
+        def _reads_stdin_as_commands(command: str) -> bool:
+            # True for a shell that runs what it reads from standard input.
+            tokens = _tokenize_posix((_bare_commands(command) or [command])[0])
+            words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+            return (bool(words) and _command_name(words[0]) in _POSIX_SHELLS + ("su", "runuser")
+                    and _reads_commands_from_stdin([words[0]] + _split_redirections(words[1:])[0]))
+
+
+        def _matching_brackets(text: str) -> dict:
+            # For each ( the index of the ) that matches it, counting brackets only.
+            closes = {}
+            open_at = []
+            for index, char in enumerate(text):
+                if char == "(":
+                    open_at.append(index)
+                elif char == ")" and open_at:
+                    closes[open_at.pop()] = index
+            return closes
+
+
+        def _shell_reading(text: str, escapes: bool = True):
+            # Reads a command's quoting as a POSIX shell does. Returns the command without comments and
+            # here-documents, the here-document bodies that a shell runs, the bodies with an unquoted
+            # delimiter, the text of a quote or here-document that is left open, or "", and the command
+            # without the quoted here-documents inside a substitution that no shell runs.
+            import re as _re
+            heredoc = _re.compile(r"<<(-?)[ \t]*(?:'([^'\n]*)'|" + r'"([^"\n]*)"|(\\?)([A-Za-z_][\w.+-]*))'
+                                  + r"(?![^\s;&|<>()`])")
+            output = []
+            runs, expanding, pending = [], [], []
+            opened = []  # (what closes it, where it opened) for ( ), " and backticks
+            command_start = 0
+            command_reads, line_reads = {}, {}
+            closes = None
+            at_word = True
+            unfinished = ""
+            quoted_data = []  # (start, end) of quoted here-document bodies inside a substitution
+            i = 0
+            n = len(text)
+
+            def emit(part):
+                output.append(part)
+
+            while i < n:
+                ch = text[i]
+                inside = opened[-1][0] if opened else ""
+                if escapes and ch == "\\" and i + 1 < n:
+                    emit(text[i:i + 2])
+                    i += 2
+                    at_word = False
+                    continue
+                if inside == '"':
+                    if ch == '"':
+                        opened.pop()
+                    elif text.startswith("$(", i):
+                        opened.append((")", i))
+                        emit("$(")
+                        i += 2
+                        at_word, command_start = True, len(output)
+                        continue
+                    elif ch == "`":
+                        opened.append(("`", i))
+                        at_word, command_start = True, len(output) + 1
+                        emit(ch)
+                        i += 1
+                        continue
+                    emit(ch)
+                    i += 1
+                    at_word = False
+                    continue
+                if ch == "'" or text.startswith("$'", i):
+                    ansi = ch == "$"
+                    end = i + (2 if ansi else 1)
+                    while end < n and text[end] != "'":
+                        end += 2 if ansi and text[end] == "\\" else 1
+                    if end >= n:
+                        unfinished = text[i:]
+                        emit(text[i:])
+                        break
+                    if ansi:
+                        # This quoting form has its own backslash escapes.
+                        body = _re.sub(r"\\(.)", lambda found: "" if found.group(1) in "'\"" else found.group(),
+                                       text[i + 2:end], flags=_re.DOTALL)
+                        emit("'" + body + "'")
+                    else:
+                        emit(text[i:end + 1])
+                    i = end + 1
+                    at_word = False
+                    continue
+                # cmd comment lines.
+                batch = (ch in "rR:" and not inside and (not i or text[i - 1] == "\n")
+                         and _re.compile(r"(?:rem(?=[ \t])|::)", _re.IGNORECASE).match(text, i))
+                # PowerShell here-strings.
+                block_string = ch == "@" and _re.compile(r"@(['" + r'"])[ \t]*\r?\n').match(text, i)
+                if block_string:
+                    end = text.find("\n" + block_string.group(1) + "@", block_string.end() - 1)
+                    if end >= 0:
+                        emit("''")
+                        i = end + 3
+                        at_word = False
+                        continue
+                if (ch == "#" and at_word) or batch:
+                    while i < n and text[i] not in "\r\n" and not (inside == "`" and text[i] == "`"):
+                        i += 1
+                    continue
+                if text.startswith("((", i):
+                    # Arithmetic is kept as written.
+                    if closes is None:
+                        closes = _matching_brackets(text)
+                    end = closes.get(i, -1) + 1
+                    if end and text[end - 2:end] == "))":
+                        emit(text[i:end])
+                        i = end
+                        at_word = False
+                        continue
+                if text.startswith("<<<", i):
+                    emit("<<<")
+                    i += 3
+                    at_word = True
+                    continue
+                marker = heredoc.match(text, i) if ch == "<" else None
+                if marker:
+                    delimiter = next(group for group in marker.group(2, 3, 5) if group is not None)
+                    # Further markers in one command or on one line share the answer of the first.
+                    if command_start not in command_reads:
+                        command_reads[command_start] = _reads_stdin_as_commands("".join(output[command_start:]))
+                    line_end = text.find("\n", marker.end())
+                    line_end = n if line_end < 0 else line_end
+                    if line_end not in line_reads:
+                        line_reads[line_end] = any(_reads_stdin_as_commands(stage) for piped, stage in
+                                                   _split_stages(text[marker.end():line_end], True) if piped)
+                    pending.append((delimiter, marker.group(1) == "-", marker.group(5) is None or bool(marker.group(4)),
+                                    command_reads[command_start] or line_reads[line_end], i))
+                    i = marker.end()
+                    at_word = False
+                    continue
+                if ch == "\n" and pending:
+                    emit(ch)
+                    i += 1
+                    for delimiter, tabs, quoted, run, start in pending:
+                        body_start = i
+                        lines = []
+                        closed = False
+                        while i < n and not closed:
+                            end = text.find("\n", i)
+                            end = n if end < 0 else end
+                            line = text[i:end].rstrip("\r")
+                            bare = line.lstrip("\t") if tabs else line
+                            if bare == delimiter:
+                                closed, body_end = True, i
+                                i = end + 1
+                            elif opened and opened[-1][0] == ")" and bare.startswith(delimiter) and bare[len(delimiter):].lstrip()[:1] == ")":
+                                # The delimiter line can also close the enclosing substitution.
+                                closed, body_end = True, i
+                                i += len(line) - len(bare) + len(delimiter)
+                            else:
+                                lines.append(text[i:end])
+                                i = end + 1
+                        body = "\n".join(lines)
+                        if not closed:
+                            unfinished = unfinished or text[start:]
+                        elif quoted and not run and any(closer == ")" for closer, _ in opened):
+                            quoted_data.append((body_start, body_end))
+                        if run:
+                            runs.append(body)
+                        if not quoted:
+                            expanding.append(body)
+                    pending = []
+                    at_word, command_start = True, len(output)
+                    continue
+                closing = False
+                if ch == '"':
+                    opened.append(('"', i))
+                elif ch == "`":
+                    if inside == "`":
+                        opened.pop()
+                        closing = True
+                    else:
+                        opened.append(("`", i))
+                elif ch == "(":
+                    opened.append((")", i))
+                elif ch == ")" and inside == ")":
+                    opened.pop()
+                emit(ch)
+                i += 1
+                # Where the next word can start.
+                at_word = ch in " \t\r\n;&|(<>`" and not closing
+                if ch in "\n;&|(`":
+                    command_start = len(output)
+            quotes = [where for closer, where in opened if closer != ")"]
+            if quotes and not unfinished:
+                unfinished = text[quotes[0]:]
+            without_data = text
+            for start, end in reversed(quoted_data):
+                without_data = without_data[:start] + without_data[end:]
+            return "".join(output), runs, expanding, unfinished, without_data
+
+
+        def _expanded_substitutions(body: str):
+            # The substitutions that a shell runs in a here-document with an unquoted delimiter, and False
+            # when finding them would take more than the work budget.
+            found = []
+            work = 0
+            i = 0
+            while i < len(body):
+                if body[i] == "\\":
+                    i += 2
+                    continue
+                if body.startswith("$(", i):
+                    end = _group_end(body, i + 1, True)
+                    closed = end > i + 2 and body[end - 1] == ")"
+                elif body[i] == "`":
+                    end = i + 1
+                    while end < len(body) and body[end] != "`":
+                        end += 2 if body[end] == "\\" else 1
+                    closed = end < len(body)
+                    end += 1
+                else:
+                    i += 1
+                    continue
+                work += end - i
+                if work > _MAX_SHELL_WORK:
+                    return found, False
+                if not closed:
+                    i += 1
+                    continue
+                inner = body[i + 2:end - 1] if body[i] == "$" else body[i + 1:end - 1].replace("\\`", "`")
+                found.append(inner)
+                i = end
+            return found, True
+
+
+        def _runs_past_its_end(raw: str, unfinished: str) -> bool:
+            # True when a POSIX reading is left open with more text to run.
+            import re as _re
+            if not _re.search(r"[\n;&|]", unfinished):
+                return False
+            # Windows paths use backslashes differently, so they are also read without escapes.
+            windows = _re.search(r"[A-Za-z]:\\|%\w+%\\|\\\\[\w?.]", raw)
+            return not (windows and not _shell_reading(raw, False)[3])
+
+
         def _collect_segments(command: str, depth: int, powershell: bool, found: list, code: list, seen: dict,
-                              strict: bool = True, spent=None) -> None:
+                              strict: bool = True, spent=None, lane: int = 0, foreign: bool = False) -> None:
             # A reading that is not strict still adds what it finds for the checks, but cannot by itself
             # report a command as uninspectable.
             import re as _re
@@ -714,10 +956,11 @@ public static class AgentCommandGuard
             if not raw.strip() or seen.get(key, _MAX_SHELL_UNWRAP_DEPTH + 1) <= depth:
                 return
             seen[key] = depth
-            spent = [0] if spent is None else spent
-            spent[0] += (len(raw) + _OPERATOR_WORK * sum(raw.count(char) for char in _SHELL_OPERATORS)
-                         + _REDIRECTION_WORK * (raw.count("<") + raw.count(">")))
-            if len(seen) > _MAX_NESTED_COMMANDS or spent[0] > _MAX_SHELL_WORK:
+            # The second reading of a command has a budget of its own.
+            spent = [0, 0] if spent is None else spent
+            spent[lane] += (len(raw) + _OPERATOR_WORK * sum(raw.count(char) for char in _SHELL_OPERATORS)
+                            + _REDIRECTION_WORK * (raw.count("<") + raw.count(">")))
+            if len(seen) > _MAX_NESTED_COMMANDS or spent[lane] > _MAX_SHELL_WORK:
                 found.append(_UNINSPECTABLE_SEGMENT)
                 return
 
@@ -725,23 +968,49 @@ public static class AgentCommandGuard
                 if strict and sure:
                     found.append(_UNINSPECTABLE_SEGMENT)
 
-            def descend(inner: str, inner_powershell: bool, sure: bool = True) -> None:
+            def descend(inner: str, inner_powershell: bool, sure: bool = True, of_cmd=None) -> None:
                 # Fail closed at the limit: nothing below it gets checked.
                 if depth >= _MAX_SHELL_UNWRAP_DEPTH:
                     lost(sure)
                 else:
-                    _collect_segments(inner, depth + 1, inner_powershell, found, code, seen, strict and sure, spent)
+                    _collect_segments(inner, depth + 1, inner_powershell, found, code, seen, strict and sure, spent, lane,
+                                      foreign if of_cmd is None else of_cmd)
 
             first = _tokenize_segment(raw.lstrip()[:200])
             head = _command_name(first[0][0]) if first else ""
             # In PowerShell a backtick is an escape or a line continuation, not a substitution.
             in_powershell = powershell or head in _POWERSHELLS or bool(
                 _re.fullmatch(_POWERSHELL_CMDLET, head))
+            # The command is also read the way a POSIX shell reads its quoting; the checks see both readings.
+            posix = not (foreign or in_powershell or head == "cmd")
+            reading, run_bodies, expanding, unfinished, without_data = _shell_reading(raw)
+            differs = " ".join(reading.split()) != " ".join(raw.split())
+            if posix and _runs_past_its_end(raw, unfinished):
+                lost()
             bodies, closed = _substitutions(raw, backticks=not in_powershell)
+            unsure = []
+            if posix and not closed and without_data != raw:
+                # A quoted here-document holds plain data, so it does not leave a substitution open.
+                known, closed = _substitutions(without_data, backticks=True)
+                if closed:
+                    unsure, bodies = [body for body in bodies if body not in known], known
             if not closed:
                 lost()
+            for body in unsure:
+                descend(body, in_powershell, False)
+            read = _substitutions(reading, backticks=True)[0] if differs and posix else bodies
             for body in bodies:
-                descend(body, in_powershell)
+                descend(body, in_powershell, True, None if body in read else True)
+            if differs:
+                _collect_segments(reading, depth, powershell, found, code, seen, strict and posix, spent, 1, foreign)
+            for body in run_bodies:
+                descend(body, False, posix)
+            for body in expanding:
+                inners, complete = _expanded_substitutions(body)
+                if not complete:
+                    lost()
+                for inner in dict.fromkeys(inners):
+                    descend(inner, False, posix)
 
             # What each shell or interpreter that reads stdin is fed through a pipe. Pipelines are
             # read as a POSIX shell splits them.
@@ -856,7 +1125,7 @@ public static class AgentCommandGuard
                             lost(sure)
                         if tokens is literal and '\\"' not in segment and _nesting_is_lost(inner, words[position + 1:]):
                             lost(sure)
-                        descend(inner, name in _POWERSHELLS, sure)
+                        descend(inner, name in _POWERSHELLS, sure, name == "cmd")
 
 
         _expansions = {}
