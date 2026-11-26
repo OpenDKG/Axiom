@@ -7,6 +7,11 @@ using Xunit;
 
 namespace Axiom.Service.Hosting.Tests;
 
+/// <summary>
+/// Regression guard for the DoH bootstrap refresh that is already on main (commit dc10560d): the
+/// connect callback reads a volatile map that is rebuilt on every target swap. The test reads that
+/// map through <see cref="DnsProxyServer.CurrentDohBootstrapAddresses"/>; it opens no DoH connection.
+/// </summary>
 public sealed class P0DnsBootstrapRegressionTests
 {
     [Fact]
