@@ -94,7 +94,7 @@ are shown in the app. Re-check the upstream license before adding or redistribut
 | WindowsSpyBlocker telemetry | MIT | https://github.com/crazy-max/WindowsSpyBlocker |
 | The Block List Project - Ads | Unlicense | https://github.com/blocklistproject/Lists |
 | The Block List Project - Tracking | Unlicense | https://github.com/blocklistproject/Lists |
-| URLhaus malicious domains | CC0-1.0 / MIT | https://gitlab.com/malware-filter/urlhaus-filter |
+| URLhaus malicious domains | CC0-1.0 / MIT | https://gitlab.com/malware-filter/urlhaus-filter. The label is the compiled list's. For the URLhaus data, the [abuse.ch terms of use](https://abuse.ch/terms-of-use/) say commercial use may need a paid Spamhaus subscription (section 4.1) and bar AI training on the data without Spamhaus' prior written consent. Their CC0 statement (section 3.4) covers Feodo Tracker, SSL Blacklist and YARAify, not URLhaus. |
 | HaGeZi Threat Intelligence Feeds (Mini) | GPL-3.0 | https://github.com/hagezi/dns-blocklists |
 | Phishing domains (OpenPhish / PhishTank) | CC-BY-SA-4.0 | https://gitlab.com/malware-filter/phishing-filter |
 

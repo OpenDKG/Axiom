@@ -112,6 +112,22 @@ public sealed class StatementTruthTests
     }
 
     [Fact]
+    public void Urlhaus_notice_states_the_conditions_on_the_underlying_data()
+    {
+        var row = Read("THIRD_PARTY_NOTICES.md").Split('\n')
+            .Single(line => line.StartsWith("| URLhaus malicious domains |", StringComparison.Ordinal));
+
+        foreach (var required in new[]
+                 {
+                     "(https://abuse.ch/terms-of-use/)", "commercial use may need a paid Spamhaus subscription",
+                     "bar AI training on the data without", "covers Feodo Tracker, SSL Blacklist and YARAify, not URLhaus",
+                 })
+        {
+            Assert.Contains(required, row, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Blocklist_text_matches_the_updater_and_promises_nothing_about_feed_terms()
     {
         var updater = Read("src", "Axiom.Service", "PrivacyShieldSourceUpdater.cs");
