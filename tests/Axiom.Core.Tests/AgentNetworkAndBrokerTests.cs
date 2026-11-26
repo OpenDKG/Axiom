@@ -109,6 +109,11 @@ public sealed class AgentNetworkAndBrokerTests
 
         try
         {
+            // The broker decides on the path it resolves from the open handle (for example the long
+            // form of an 8.3 temp path on Windows), so policy scopes use that same form.
+            Assert.True(TrustedFileBroker.TryResolveFinalPath(secretFile, out var secretFinal));
+            Assert.True(TrustedFileBroker.TryResolveFinalPath(allowedFile, out var allowedFinal));
+            var workDir = Path.GetDirectoryName(allowedFinal)!;
             var policy = new EnforcementPolicy
             {
                 Version = "1",
@@ -118,7 +123,7 @@ public sealed class AgentNetworkAndBrokerTests
                     {
                         ResourceId = "res-env",
                         Kinds = [AgentActionKind.ReadFile],
-                        Scope = secretFile,
+                        Scope = secretFinal,
                     },
                 ],
                 Agents =
@@ -134,7 +139,7 @@ public sealed class AgentNetworkAndBrokerTests
                                 RuleId = "allow-work",
                                 Effect = EnforcementRuleEffect.Allow,
                                 Kind = AgentActionKind.ReadFile,
-                                TargetScope = tempDir,
+                                TargetScope = workDir,
                             },
                         ],
                     },
