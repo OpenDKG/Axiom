@@ -11,10 +11,14 @@ public static class AgentCommandGuard
     public const string PythonHelpers = """
         _MAX_SHELL_UNWRAP_DEPTH = 8
         _MAX_NESTED_COMMANDS = 512
-        # Longer commands are not parsed, and one command's nested readings share a fixed amount of
-        # parsing. Both limits fail closed.
+        # Longer commands are not parsed. One command's nested readings share a work budget: every
+        # character costs one unit, and every operator or bracket, which can start a segment,
+        # a redirection or a level, costs more. Both limits fail closed.
         _MAX_COMMAND_LENGTH = 16000
         _MAX_SHELL_WORK = 128000
+        _SHELL_OPERATORS = ";|&\n(){}`"
+        _OPERATOR_WORK = 12
+        _REDIRECTION_WORK = 24
         _POSIX_SHELLS = ("sh", "bash", "zsh", "dash", "ksh", "mksh", "fish")
         _POWERSHELLS = ("powershell", "pwsh")
         _POWERSHELL_CMDLET = (r"(?:add|clear|compress|convertfrom|convertto|copy|expand|export|foreach|format|get|import|"
@@ -58,6 +62,26 @@ public static class AgentCommandGuard
                       ("arg-file", "delimiter", "eof", "max-args", "max-chars", "max-lines", "max-procs",
                        "process-slot-var", "replace"), 0),
         }
+
+
+        def _remembered(function):
+            # Keeps recent results of a pure parsing helper: each check parses the same segments again.
+            # Lists are handed out as copies. Bounded by entries and by the characters held.
+            results = {}
+            held = [0]
+
+            def call(*key):
+                result = results.get(key)
+                if result is None:
+                    if len(results) >= 4096 or held[0] > 500000:
+                        results.clear()
+                        held[0] = 0
+                    held[0] += len(key[0] or "")
+                    result = results[key] = function(*key)
+                return list(result) if type(result) is list else result
+
+            call.cache = results
+            return call
 
 
         def _command_name(token: str) -> str:
@@ -239,6 +263,7 @@ public static class AgentCommandGuard
             return [], True, idx
 
 
+        @_remembered
         def _split_stages(raw: str, escapes: bool) -> list:
             # (piped, segment) pairs, split on unquoted ;, &&, ||, | and newlines. piped is True when
             # the segment reads the previous one's output. With escapes, a backslash also protects a
@@ -429,7 +454,8 @@ public static class AgentCommandGuard
                 return
             seen[key] = depth
             spent = [0] if spent is None else spent
-            spent[0] += len(raw)
+            spent[0] += (len(raw) + _OPERATOR_WORK * sum(raw.count(char) for char in _SHELL_OPERATORS)
+                         + _REDIRECTION_WORK * (raw.count("<") + raw.count(">")))
             if len(seen) > _MAX_NESTED_COMMANDS or spent[0] > _MAX_SHELL_WORK:
                 found.append(_UNINSPECTABLE_SEGMENT)
                 return
@@ -571,7 +597,9 @@ public static class AgentCommandGuard
             idx = 0
             while idx < len(words):
                 word = words[idx]
-                if "<<<" in word:
+                if "<" not in word and ">" not in word:
+                    arguments.append(word)
+                elif "<<<" in word:
                     before, _, after = word.partition("<<<")
                     if before and not before.isdigit():
                         arguments.append(before)
@@ -788,6 +816,7 @@ public static class AgentCommandGuard
             return any(bare(token) in ("/c", "-c", "-command") for token in rest)
 
 
+        @_remembered
         def _tokenize_posix(segment: str) -> list:
             # Like _tokenize_segment, reading backslashes as a POSIX shell does. A word that starts
             # like a Windows path keeps them.
@@ -837,7 +866,12 @@ public static class AgentCommandGuard
             return tokens
 
 
-        def _tokenize_segment(segment: str, start: int = 0, limit: int = 0) -> list:
+        @_remembered
+        def _tokenize_segment(segment: str) -> list:
+            return _scan_words(segment)
+
+
+        def _scan_words(segment: str, start: int = 0, limit: int = 0) -> list:
             # Returns list of (token_text, was_quoted) preserving backslashes for Windows paths.
             # Reads from start and, with a limit, stops after that many tokens.
             tokens = []
@@ -875,6 +909,7 @@ public static class AgentCommandGuard
             return tokens
 
 
+        @_remembered
         def _segment_verbs(segment: str) -> tuple:
             # Extract whole-word command names and two-word subcommands from unquoted structure.
             # Prevents substring false positives like "confirm " -> "rm " or "model " -> "del ".
@@ -1046,6 +1081,7 @@ public static class AgentCommandGuard
             return any(m in norm for m in path_markers) and _has_command_verb(command, file_verbs)
 
 
+        @_remembered
         def _normalize_command(command: str) -> str:
             # Shell variables and Win32 prefixes hide a protected path from token matching:
             # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
@@ -1122,7 +1158,7 @@ public static class AgentCommandGuard
             for candidate in _inspected_texts(command):
                 text = _normalize_command(candidate)
                 words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
-                if any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens):
+                if _any_word_matches(words, tokens) or _glob_hits(text, tokens):
                     return True
             return False
 
@@ -1169,7 +1205,7 @@ public static class AgentCommandGuard
                     while j < n and segment[j] in ">|":
                         j += 1
                     if segment[j:j + 1] != "&":
-                        tokens = _tokenize_segment(segment, j, 1)
+                        tokens = _scan_words(segment, j, 1)
                         if tokens:
                             targets.append(tokens[0][0])
                     i = j
@@ -1228,7 +1264,7 @@ public static class AgentCommandGuard
                     words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
                     if words:
                         targets.extend(_written_paths(words))
-                if any(_text_hits_protected(target, protected) for target in targets):
+                if any(_text_hits_protected(target, protected) for target in dict.fromkeys(targets)):
                     return True
             return False
 
@@ -1305,7 +1341,17 @@ public static class AgentCommandGuard
             return result
 
 
+        def _literal_end_differs(spelled: str, named: str, wildcards: str) -> bool:
+            # A first or last character that is no wildcard must be the name's own. Only ASCII is
+            # decided here; the pattern's case rules cover the rest.
+            return (spelled not in wildcards and spelled.isascii() and named.isascii()
+                    and spelled.lower() != named.lower())
+
+
         def _glob_compare(window: str, value: str) -> bool:
+            if window and value and (_literal_end_differs(window[0], value[0], "*?[")
+                                     or _literal_end_differs(window[-1], value[-1], "*?]")):
+                return False
             # Match one wildcard spelling against the literal name it could resolve to. Reads done
             # with a wildcard (`type C:\Users\me\.ss?\id_rsa`, `...\*\Login Data`) never
             # contain the literal protected token, so a plain substring test misses them.
@@ -1337,6 +1383,11 @@ public static class AgentCommandGuard
 
 
         def _glob_hits(text: str, needles) -> bool:
+            return _glob_search(text or "", tuple(needles))
+
+
+        @_remembered
+        def _glob_search(text: str, needles) -> bool:
             # True when a wildcard spelling in the command names one of the needles. Only windows
             # around each wildcard are tested, so a long tool argument stays cheap.
             text = (text or "").replace('"', " ").replace("'", " ")
@@ -1361,7 +1412,18 @@ public static class AgentCommandGuard
             return False
 
 
+        _token_lists = {}
+
+
         def _protected_tokens(protected) -> list:
+            key = tuple(str(pattern) for pattern in protected or ())
+            tokens = _token_lists.get(key)
+            if tokens is None:
+                tokens = _token_lists[key] = _build_protected_tokens(key)
+            return tokens
+
+
+        def _build_protected_tokens(protected) -> list:
             # Tokens that identify a protected path inside a shell command. A trailing * uses its
             # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a leading wildcard
             # extension (*.pem -> .pem) keeps its leading dot so short names do not match unrelated binaries.
@@ -1390,6 +1452,13 @@ public static class AgentCommandGuard
             return word == token
 
 
+        def _any_word_matches(words, tokens) -> bool:
+            # _word_matches_token for every pair, with each distinct word looked at once.
+            exact = set(tokens)
+            extensions = tuple(token for token in tokens if token.startswith(".") and "." not in token[1:])
+            return any(word in exact or word.endswith(extensions) for word in set(words))
+
+
         def _inspected_texts(command: str) -> list:
             # The command as written, then each segment of it and of the commands nested in it,
             # which may be spelled out only after unwrapping or decoding.
@@ -1405,7 +1474,7 @@ public static class AgentCommandGuard
             text = _normalize_command(command)
             tokens = _protected_tokens(protected)
             words = [w for w in _re.split(r'[\s\\/"\'=:@,;()]+', text) if w]
-            return any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens)
+            return _any_word_matches(words, tokens) or _glob_hits(text, tokens)
 
 
         def _executes_protected(command: str, protected) -> bool:
@@ -1763,7 +1832,7 @@ public static class AgentCommandGuard
                 norm_arg = _normalize_command(arg_path)
                 tokens = _protected_tokens(protected)
                 words = norm_arg.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
-                if any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(norm_arg, tokens):
+                if _any_word_matches(words, tokens) or _glob_hits(norm_arg, tokens):
                     return ("protected-path", "Blackbox blocked this call: it accesses a protected path.")
             if not command_text:
                 return None
@@ -1774,7 +1843,7 @@ public static class AgentCommandGuard
                     return ("escalation", f"Blackbox blocked this call: {escalation}.")
                 if len(command_text) > _MAX_COMMAND_LENGTH:
                     return ("nesting", "Blackbox blocked this call: the command is too long for the guard to inspect.")
-                return ("nesting", "Blackbox blocked this call: it contains a nested command that the guard cannot inspect.")
+                return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):

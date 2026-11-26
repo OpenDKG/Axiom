@@ -318,6 +318,98 @@ print("PY_BOUNDS_OK")
         Assert.Contains("PY_BOUNDS_OK", await stdout, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Python_guard_stays_fast_on_long_operator_chains()
+    {
+        var pythonExe = FindPython();
+        if (pythonExe is null)
+        {
+            return;
+        }
+
+        var scriptPath = Path.Combine(_tempDir, "test_chains.py");
+        var script = "import os\nfrom pathlib import Path\n\n"
+            + AgentCommandGuard.PythonHelpers.Replace("\r\n", "\n", StringComparison.Ordinal)
+            + """
+
+import time
+
+def forget():
+    # A hook is a fresh process: time every input with nothing remembered.
+    for value in list(globals().values()):
+        remembered = getattr(value, "cache", None)
+        if isinstance(remembered, dict):
+            remembered.clear()
+    for name in ("_expansions", "_glob_results", "_token_lists"):
+        globals().get(name, {}).clear()
+
+def judge(command):
+    times = []
+    for _ in range(3):
+        forget()
+        started = time.perf_counter()
+        result = _check_command_safety({"command": command}, list(_DEFAULT_PROTECTED_PATHS))
+        times.append((time.perf_counter() - started) * 1000)
+    return (result[0] if result else "allowed"), min(times)
+
+def chain(unit, size, tail=""):
+    return unit * ((size - len(tail)) // len(unit)) + tail
+
+def nest(opening, closing, size):
+    levels = (size - 2) // (len(opening) + len(closing))
+    return opening * levels + "ls" + closing * levels
+
+failures = []
+for label, command, expected in (
+        ("redirection chain", "echo " + chain(">x ", 15900), "nesting"),
+        ("input redirection chain", "echo " + chain("<x ", 15900), "nesting"),
+        ("pipe chain", chain("grep -v x | ", 14000, "wc -l"), "allowed"),
+        ("brace nest", nest("{ ", "; }", 15900), "nesting"),
+        ("process substitution nest", nest("<(", ")", 15900), "nesting"),
+        ("command substitution nest", nest("$(", ")", 15900), "nesting")):
+    got, took = judge(command)
+    if len(command) > _MAX_COMMAND_LENGTH or got != expected or took >= 100:
+        failures.append(f"{label} ({len(command)}): {got} in {took:.0f} ms")
+
+# The operator charge leaves long, ordinary nested scripts alone.
+script_body = "\n".join(f'echo "step {i}"; npm run build-{i} && ls -la dist | wc -l 2>&1' for i in range(150))
+command = script_body
+for _ in range(3):
+    command = "bash -c '" + command.replace("'", "'\\''") + "'"
+got, _ = judge(command)
+if len(command) < 9000 or got != "allowed":
+    failures.append(f"nested script ({len(command)}): {got}")
+
+# Remembered parses are limited by size as well as by count.
+forget()
+for index in range(200):
+    _tokenize_segment(f"{index} " + "a " * 5000)
+if len(getattr(_tokenize_segment, "cache", {})) > 60:
+    failures.append("remembered parses are not limited by size")
+
+assert not failures, f"{len(failures)} failures\n" + "\n".join(failures)
+print("PY_CHAINS_OK")
+""";
+        await File.WriteAllTextAsync(scriptPath, script, Encoding.UTF8);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add(scriptPath);
+        using var proc = Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEndAsync();
+        var stderr = proc.StandardError.ReadToEndAsync();
+        await proc.WaitForExitAsync();
+
+        Assert.True(proc.ExitCode == 0, $"python failed ({proc.ExitCode}): {await stderr}\n{await stdout}");
+        Assert.Contains("PY_CHAINS_OK", await stdout, StringComparison.Ordinal);
+    }
+
     /// <summary>Commands judged against the protected path ~/.ssh/*: true must be blocked.</summary>
     public static TheoryData<string, bool> WrappedShellForms => new()
     {
