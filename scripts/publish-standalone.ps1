@@ -71,5 +71,7 @@ if (-not $Output) {
 $exe = Join-Path $Output "Axiom.Desktop.exe"
 if (-not (Test-Path $exe)) { throw "Expected executable not found: $exe" }
 
+& (Join-Path $PSScriptRoot "verify-publish-natives.ps1") -PublishDir $Output
+
 $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host "Done: $exe ($size MB, self-contained single file)" -ForegroundColor Green

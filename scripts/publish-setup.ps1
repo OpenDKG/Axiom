@@ -73,6 +73,14 @@ New-Item -ItemType Directory -Force -Path $payloadOut | Out-Null
 Copy-Item (Join-Path $desktopOut "Axiom.Desktop.exe") $payloadOut -Force
 Copy-Item (Join-Path $serviceOut "Axiom.Service.exe") $payloadOut -Force
 Copy-Item (Join-Path $desktopOut "community") $payloadOut -Recurse -Force
+# Setup installs these into <install folder>\licenses.
+$payloadLicenses = Join-Path $payloadOut "licenses"
+& (Join-Path $PSScriptRoot "collect-dotnet-licenses.ps1") `
+    -Program (Join-Path $payloadOut "Axiom.Desktop.exe"), (Join-Path $payloadOut "Axiom.Service.exe") `
+    -OutputDir $payloadLicenses
+foreach ($document in "LICENSE", "NOTICE", "AUTHORS.md", "THIRD_PARTY_NOTICES.md") {
+    Copy-Item (Join-Path $root $document) $payloadLicenses -Force
+}
 
 $payloadZip = Join-Path $root "artifacts\publish\setup-payload.zip"
 Remove-Item $payloadZip -Force -ErrorAction SilentlyContinue
@@ -102,6 +110,8 @@ if ($LASTEXITCODE -ne 0) { throw "Publish lock verification failed." }
 
 $setupExe = Join-Path $OutputDir "Axiom.Setup.exe"
 if (-not (Test-Path $setupExe)) { throw "Setup executable not found: $setupExe" }
+
+& (Join-Path $PSScriptRoot "verify-publish-natives.ps1") -PublishDir $desktopOut, $serviceOut, $OutputDir
 
 $size = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
 Write-Host "Done: $setupExe ($size MB, self-contained single-file setup)" -ForegroundColor Green

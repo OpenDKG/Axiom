@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Microsoft.DiaSymReader.Native is part of the Windows runtime pack, but Microsoft lists it under
+    the proprietary .NET Library License, so no build ships it (docs/LICENSING.md). The runtime uses
+    it only to read Windows-format PDBs. The SDK already leaves it out of single-file publishes; this
+    also keeps it out of every other publish, from both the copied files and deps.json.
+  -->
+  <Target Name="ExcludeProprietaryRuntimeAssets" AfterTargets="ResolveRuntimePackAssets">
+    <ItemGroup>
+      <_ProprietaryRuntimeAsset Include="@(RuntimePackAsset)"
+                                Condition="$([System.String]::new('%(Filename)').StartsWith('Microsoft.DiaSymReader.Native.'))" />
+      <!-- The SDK has already copied the list into both item groups: deps.json and the file copy. -->
+      <RuntimePackAsset Remove="@(_ProprietaryRuntimeAsset)" />
+      <ReferenceCopyLocalPaths Remove="@(_ProprietaryRuntimeAsset)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

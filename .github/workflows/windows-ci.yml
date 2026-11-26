@@ -142,7 +142,8 @@ jobs:
       - name: Validate notices, licenses & starter feed integrity
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
-          foreach ($required in @('LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md', 'community/feed.json')) {
+          foreach ($required in @('LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md', 'community/feed.json',
+              'packaging/licenses/native-binaries.json', 'packaging/licenses/dotnet/DOTNET-LIBRARY-LICENSE.txt')) {
             if (-not (Test-Path $required)) {
               throw "Required legal/bundle file missing: $required"
             }
@@ -182,6 +183,28 @@ jobs:
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: .\scripts\publish-setup.ps1
 
+      - name: Native binary check fails when something is missing
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
+        run: .\scripts\test-verify-publish-natives.ps1 -PublishDir artifacts\publish\win-x64, artifacts\publish\service, artifacts\publish\setup
+
+      - name: Published desktop app and service start
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
+        run: .\scripts\smoke-published.ps1 -Desktop artifacts\publish\win-x64\Axiom.Desktop.exe -Service artifacts\publish\service\Axiom.Service.exe
+
+      - name: A multi-file publish does not contain DiaSymReader
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'service-multi-file'
+          dotnet publish src\Axiom.Service\Axiom.Service.csproj -c Release -f net10.0-windows -r win-x64 --self-contained true `
+              -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+              -p:PublishSingleFile=false -o $out
+          if ($LASTEXITCODE -ne 0) { throw "Multi-file publish failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path (Join-Path $out 'coreclr.dll'))) { throw "Expected a multi-file publish with coreclr.dll" }
+          if (Get-ChildItem $out -Recurse -Filter 'Microsoft.DiaSymReader.Native.*') { throw "DiaSymReader was published" }
+          if (Select-String -LiteralPath (Join-Path $out 'Axiom.Service.deps.json') -SimpleMatch 'DiaSymReader.Native' -Quiet) {
+            throw "deps.json still lists DiaSymReader"
+          }
+
       - name: Verify installer binary, hash & silent acceptance guard
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
         run: |
@@ -210,3 +233,27 @@ jobs:
             "- SHA-256: ``$hash``",
             "- Silent consent gate (``--silent`` without ``--accept-risk``): exit code ``$($proc.ExitCode)``"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      # The release script otherwise runs only for a tag. The version is a placeholder.
+      - name: Release script and portable install carry the license texts
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
+        run: |
+          $release = Join-Path $env:RUNNER_TEMP 'release'
+          .\scripts\build-release.ps1 -Version 99.0.0 -OutputDir $release
+          $unpacked = Join-Path $env:RUNNER_TEMP 'unpacked'
+          Expand-Archive -LiteralPath (Join-Path $release 'Axiom-99.0.0-win-x64.zip') -DestinationPath $unpacked
+          $documents = 'LICENSE', 'NOTICE', 'AUTHORS.md', 'THIRD_PARTY_NOTICES.md'
+          $dotnetTexts = 'dotnet\DOTNET-LIBRARY-LICENSE.txt', 'dotnet\LICENSE.TXT', 'dotnet\THIRD-PARTY-NOTICES.TXT'
+          foreach ($file in $documents + @($dotnetTexts | ForEach-Object { "licenses\$_" })) {
+            if (-not (Test-Path (Join-Path $unpacked $file))) { throw "The release ZIP lacks $file" }
+          }
+
+          $install = Join-Path $env:RUNNER_TEMP 'portable-install'
+          .\scripts\install-portable.ps1 -Source (Join-Path $unpacked 'Axiom.Desktop.exe') -InstallDir $install -NoShortcut
+          foreach ($file in $documents + $dotnetTexts) {
+            if (-not (Test-Path (Join-Path $install "licenses\$file"))) { throw "The portable install lacks licenses\$file" }
+          }
+          Set-Content -LiteralPath (Join-Path $install 'licenses\kept.txt') -Value 'not installed by Axiom'
+          .\scripts\uninstall-portable.ps1 -InstallDir $install
+          $left = @(Get-ChildItem -LiteralPath $install -Recurse -File | ForEach-Object { $_.Name })
+          if (($left -join ',') -ne 'kept.txt') { throw "Unexpected files after uninstall: $($left -join ', ')" }
