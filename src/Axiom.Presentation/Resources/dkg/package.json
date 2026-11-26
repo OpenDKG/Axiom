@@ -1,1 +1,1 @@
-{"name":"axiom-dkg","private":true,"dependencies":{"@origintrail-official/dkg":"10.1.2"}}
+{"name":"axiom-dkg","private":true,"dependencies":{"@origintrail-official/dkg":"10.1.2"},"overrides":{"@digitalbazaar/http-client":{"undici":"6.29.1"},"dompurify":"3.4.18","lodash-es":"4.18.1"}}
