@@ -109,7 +109,7 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
         : Firewall.ShieldEnabled ? "Shield: ON" : "Shield: OFF";
 
     /// <summary>Shield entry of the module health row, same model as the header lamp.</summary>
-    public string ShieldLevelText => ShieldProtection.LevelText(Firewall.ShieldLevel);
+    public string ShieldLevelText => ShieldProtection.ShieldText(Firewall.ShieldLevel, Firewall.VerifiedByOs);
 
     public bool IsShieldToneOk => ShieldProtection.Tone(Firewall.ShieldLevel) == "ok";
 

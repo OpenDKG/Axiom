@@ -102,6 +102,37 @@ public sealed class StatementTruthTests
         Assert.Contains("the Home headline says protected only with a verified OS result", readme, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Notices_list_every_catalogued_blocklist_with_its_license()
+    {
+        var notices = Read("THIRD_PARTY_NOTICES.md");
+
+        Assert.All(PrivacyShieldSourceCatalog.All, source =>
+            Assert.Contains($"| {source.Name} | {source.License} |", notices, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Blocklist_text_matches_the_updater_and_promises_nothing_about_feed_terms()
+    {
+        var updater = Read("src", "Axiom.Service", "PrivacyShieldSourceUpdater.cs");
+        Assert.Contains("MaxBytes = 20 * 1024 * 1024;", updater, StringComparison.Ordinal);
+        Assert.Contains("Timeout = TimeSpan.FromMinutes(3),", updater, StringComparison.Ordinal);
+        Assert.Equal(1_000_000, PrivacyShieldPolicy.MaxRules);
+
+        var shield = Flat(Read("docs", "PRIVACY_SHIELD.md"));
+        foreach (var withdrawn in new[] { "six HTTPS-only", "45 s bound", "500,000", "only if every selected source succeeds" })
+        {
+            Assert.DoesNotContain(withdrawn, shield, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("1,000,000 unique domains", shield, StringComparison.Ordinal);
+        foreach (var text in new[] { shield, Flat(Read("README.md")) })
+        {
+            Assert.DoesNotContain("no separate approval is required", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("the original feeds can set their own terms", text, StringComparison.Ordinal);
+        }
+    }
+
     private static string Flat(string text) =>
         System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
 

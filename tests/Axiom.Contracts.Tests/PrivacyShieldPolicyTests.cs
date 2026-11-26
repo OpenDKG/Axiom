@@ -186,9 +186,16 @@ public sealed class PrivacyShieldPolicyTests
         Assert.Equal(
             sources.Count,
             sources.Select(source => source.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.All(sources, source => Assert.True(
-            source.License is "GPL-3.0" or "MIT" or "Unlicense",
-            source.License));
+        Assert.Equal(
+            [
+                "blocklistproject-ads=Unlicense", "blocklistproject-tracking=Unlicense", "hagezi-pro=GPL-3.0",
+                "hagezi-tif=GPL-3.0", "oisd-big=GPL-3.0", "phishing-filter=CC-BY-SA-4.0",
+                "urlhaus-domains=CC0-1.0 / MIT", "windowsspyblocker=MIT",
+            ],
+            sources.Select(source => $"{source.Id}={source.License}").Order(StringComparer.Ordinal));
+        Assert.All(
+            sources,
+            source => Assert.DoesNotContain("MIT, ", source.Description, StringComparison.Ordinal));
         Assert.All(sources, source => Assert.StartsWith("https://", source.Url, StringComparison.Ordinal));
 
         // Only dedicated malware/phishing lists may claim the malware or phishing categories, so a

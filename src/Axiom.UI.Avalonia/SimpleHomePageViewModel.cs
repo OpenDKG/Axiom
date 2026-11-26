@@ -88,7 +88,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "NOT VERIFIED"
             : Firewall.ShieldEnabled
-            ? ShieldOnTitle(VerifiedByOs, PrivacyShield.Enabled).Badge
+            ? ShieldOnTitle(Firewall.VerifiedByOs, PrivacyShield.Enabled).Badge
             : "MONITORING ONLY";
 
     public string HeroHeadlineText => !Firewall.ProtectionKnown
@@ -96,11 +96,8 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "Shield is on, blocking is not verified"
             : Firewall.ShieldEnabled
-            ? ShieldOnTitle(VerifiedByOs, PrivacyShield.Enabled).Headline
+            ? ShieldOnTitle(Firewall.VerifiedByOs, PrivacyShield.Enabled).Headline
             : "Firewall protection is off";
-
-    /// <summary>Whether the OS has verified enforcement; null where it reports nothing (Windows Firewall).</summary>
-    private bool? VerifiedByOs => OperatingSystem.IsWindows() ? null : Firewall.Enforcement.IsEnforcementVerified;
 
     /// <summary>Badge and headline while the shield is on. "Protected" needs a verified OS result.</summary>
     internal static (string Badge, string Headline) ShieldOnTitle(bool? verified, bool privacyShield) =>

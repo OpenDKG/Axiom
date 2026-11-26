@@ -512,10 +512,13 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     /// while the service has not answered; Degraded off Windows while the filter has not proven
     /// enforcement (BPF hand-over pending, filter disconnected, nothing reported yet).
     /// </summary>
+    /// <summary>Whether the OS has verified enforcement; null where it reports nothing (Windows Firewall).</summary>
+    internal bool? VerifiedByOs => OperatingSystem.IsWindows() ? null : Enforcement.IsEnforcementVerified;
+
     public EnforcementLevel? ShieldLevel => ShieldProtection.Level(
         ProtectionKnown,
         ShieldEnabled,
-        OperatingSystem.IsWindows() ? null : Enforcement.IsEnforcementVerified);
+        VerifiedByOs);
 
     /// <summary>What disabling does besides removing rules; the service also clears saved decisions.</summary>
     internal const string DisableShieldEffect =

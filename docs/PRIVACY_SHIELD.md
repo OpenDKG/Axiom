@@ -39,17 +39,18 @@ does not change the hosts file, firewall rules, agent configuration or certifica
 - Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
   PID through the Windows owner tables. Protected or already-exited processes may show
   `unknown app`.
-- A catalog of **six HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
-  WindowsSpyBlocker, The Block List Project Ads and Tracking, and the dedicated malware-labelled
-  URLhaus domain feed compiled by malware-filter). A source update downloads with a
-  20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
-  if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
-  unique domains, and every selected source keeps a reserved share so a large list cannot starve a
-  smaller telemetry list such as WindowsSpyBlocker.
-- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker and malware-filter are MIT, and the two Block List Project
-  lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
-  list bytes; no separate approval is required beyond the license and attribution terms. Upstream
-  terms must be rechecked before adding or redistributing a list. See
+- A catalog of **eight HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, HaGeZi Threat
+  Intelligence Feeds (Mini), OISD Big, WindowsSpyBlocker, The Block List Project Ads and Tracking, and
+  the URLhaus and phishing domain lists compiled by malware-filter). A source update downloads each
+  list with a 20 MB size limit and a 3-minute request timeout, parses and normalizes domains, then
+  atomically replaces the previous ruleset if at least one selected source succeeds, and names the
+  sources that failed. If all fail, the previous ruleset stays. The previous rules file is retained.
+  The local cap is 1,000,000 unique domains, with room reserved for the sources still to be imported.
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, the two Block List Project lists are
+  Unlicense, the URLhaus list is CC0-1.0 / MIT and the phishing list is CC-BY-SA-4.0. Axiom downloads
+  them from the upstream URL at runtime and does not bundle the list bytes. These licenses cover the
+  lists as published; the original feeds can set their own terms. Upstream terms must be rechecked
+  before relying on, adding or redistributing a list. See
   [third-party notices](../THIRD_PARTY_NOTICES.md).
 - Settings and the compiled ruleset live in `%ProgramData%\Axiom\privacy-shield.json` and
   `privacy-shield-rules.json` when the installed service runs them, so the state survives service
