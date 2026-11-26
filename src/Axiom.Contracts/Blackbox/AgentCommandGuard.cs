@@ -415,6 +415,72 @@ public static class AgentCommandGuard
             return "".join(out)
 
 
+        def _without_stray_closers(text: str) -> str:
+            # Blanks the unquoted ) and } that close a group opened before this text.
+            out = list(text)
+            quote = ""
+            opened = {"(": 0, "{": 0}
+            i = 0
+            while i < len(text):
+                ch = text[i]
+                if ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch in opened:
+                    opened[ch] += 1
+                elif ch in (")", "}"):
+                    opener = "(" if ch == ")" else "{"
+                    if opened[opener]:
+                        opened[opener] -= 1
+                    else:
+                        out[i] = " "
+                i += 1
+            return "".join(out).strip()
+
+
+        def _group_starts(segment: str) -> list:
+            # Positions right after each unquoted { that stands before a space, as in f() { cmd.
+            starts = []
+            quote = ""
+            i = 0
+            while i < len(segment):
+                ch = segment[i]
+                if ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch == "{" and segment[i + 1:i + 2].isspace():
+                    starts.append(i + 1)
+                i += 1
+            return starts
+
+
+        @_remembered
+        def _bare_commands(segment: str) -> list:
+            # The commands a segment holds behind then, do, else and similar words, ( and {.
+            import re as _re
+            openers = _re.compile(r"(?:\s|[({]|(?:then|do|else|elif|if|while|until|!)(?=[\s({]))*")
+            cuts = [0] + (_group_starts(segment) if "{" in segment else [])
+            found = []
+            for start, end in zip(cuts, cuts[1:] + [len(segment)]):
+                piece = segment[start:end].rstrip()
+                if start != end and end != len(segment):
+                    piece = piece.removesuffix("{")  # the brace that opens the next piece
+                body = _without_stray_closers(piece[openers.match(piece).end():])
+                if body and body != segment:
+                    found.append(body)
+            return list(dict.fromkeys(found))
+
+
         def _quotes_closed(segment: str) -> bool:
             # True when a POSIX shell would find every quote closed.
             quote = ""
@@ -488,7 +554,7 @@ public static class AgentCommandGuard
             for position, (piped, segment) in enumerate(stages):
                 if not piped or position == 0:
                     continue
-                tokens = _tokenize_posix(segment)
+                tokens = _tokenize_posix((_bare_commands(segment) or [segment])[0])
                 start = _strip_prefixes(tokens)[0]
                 if any(_command_name(word) == "xargs" for word, _ in tokens[:start]):
                     continue  # xargs takes the pipe, not the command it runs
@@ -504,9 +570,17 @@ public static class AgentCommandGuard
 
             # Both readings are inspected, so neither one's blind spot hides a command.
             posix_segments = [segment for _, segment in stages]
-            escaped = {segment for segment in posix_segments if _is_escaped_shell_call(segment)}
             shell_segments = set(posix_segments)
+            # Each segment, then the bare commands inside it, which go through every check too.
+            segments = {}
             for segment in dict.fromkeys(_split_operators(raw, False) + posix_segments):
+                segments[segment] = None
+                for bare in _bare_commands(segment):
+                    segments[bare] = None
+                    if segment in posix_segments:
+                        shell_segments.add(bare)
+            escaped = {segment for segment in segments if segment in shell_segments and _is_escaped_shell_call(segment)}
+            for segment in segments:
                 found.append(segment)
                 plain = _unescape_unquoted(segment)
                 if plain != segment:
@@ -1380,10 +1454,23 @@ public static class AgentCommandGuard
         def _stage_command(words):
             # (command name, arguments) of one pipeline stage, past shell keywords, grouping and prefixes.
             words = list(words)
-            while words and words[0] in ("do", "then", "else", "elif", "while", "until", "if", "!", "{", "("):
-                words.pop(0)
+            while words:
+                if words[0] in ("do", "then", "else", "elif", "while", "until", "if", "!"):
+                    words.pop(0)
+                elif words[0].endswith("(){") or (words[0].endswith("()") and words[1:2] == ["{"]):
+                    del words[:1 if words[0].endswith("(){") else 2]  # a function header
+                elif words[0].startswith(("(", "{")):
+                    words[0] = words[0][1:]
+                    if not words[0]:
+                        words.pop(0)
+                else:
+                    break
             if words:
-                words[0] = words[0].lstrip("({")
+                # A ) or } that closes the surrounding group is not part of the last word.
+                last = words[-1]
+                while last[-1:] in (")", "}") and last.count(last[-1]) > last.count("(" if last[-1] == ")" else "{"):
+                    last = last[:-1]
+                words = words[:-1] + [last] if last else words[:-1]
             rest = words[_strip_prefixes([(word, False) for word in words])[0]:]
             return (_command_name(rest[0]), rest[1:]) if rest else ("", [])
 
