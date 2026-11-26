@@ -1307,7 +1307,7 @@ public static class AgentCommandGuard
                 if segment == _UNINSPECTABLE_SEGMENT:
                     continue
                 for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
-                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    words = _past_keywords(tokens)
                     if not words or _command_name(words[0]) != "rsync":
                         continue
                     operands = _copy_operands("rsync", _split_redirections(words[1:])[0])
@@ -2165,7 +2165,116 @@ public static class AgentCommandGuard
             )
 
 
-        def _check_command_safety(args, protected=None):
+        def _stages_as_run(command: str) -> list:
+            # The pipeline stages of every command text the shell would run, without the derived
+            # spellings that the segment list adds.
+            return [segment for script in _expand_command(command)[2] for _, segment in _split_stages(script, True)]
+
+
+        def _past_keywords(tokens) -> list:
+            # The words of a command after shell keywords, grouping, assignments and prefixes.
+            words = [word for word, _ in tokens]
+            while words and words[0] in ("do", "then", "else", "elif", "while", "until", "if", "!", "{", "("):
+                words.pop(0)
+            if words:
+                words[0] = words[0].lstrip("({")
+            return words[_strip_prefixes([(word, False) for word in words])[0]:]
+
+
+        def _rsync_transports(command: str) -> list:
+            # The values rsync runs on this computer to reach the other side: -e, --rsh and RSYNC_RSH.
+            values = []
+            for segment in _stages_as_run(command):
+                if "rsync" not in segment and "RSYNC_RSH" not in segment:
+                    continue
+                # With escaped quotes only the POSIX reading finds where a value ends.
+                readings = [_tokenize_posix(segment)]
+                if '\\"' not in segment:
+                    readings.append(_tokenize_segment(segment))
+                for tokens in readings:
+                    values.extend(word[10:] for word, _ in tokens if word.startswith("RSYNC_RSH="))
+                    words = _past_keywords(tokens)
+                    if not words or _command_name(words[0]) != "rsync":
+                        continue
+                    idx = 1
+                    while idx < len(words) and words[idx] != "--":
+                        word = words[idx]
+                        following = words[idx + 1] if idx + 1 < len(words) else ""
+                        if word == "--rsh":
+                            values.append(following)
+                            idx += 1
+                        elif word.startswith("--rsh="):
+                            values.append(word[6:])
+                        elif word.startswith("-") and not word.startswith("--"):
+                            for position in range(1, len(word)):
+                                if word[position] == "e":
+                                    attached = word[position + 1:].removeprefix("=")
+                                    values.append(attached or following)
+                                    idx += 0 if attached else 1
+                                    break
+                                if word[position] in "fBTM":
+                                    idx += 1 if position == len(word) - 1 else 0
+                                    break
+                        idx += 1
+            return [value for value in dict.fromkeys(values) if value.strip()]
+
+
+        def _plain_command_end(text: str) -> int:
+            # Where the first simple command of a text ends: an unquoted operator, redirection,
+            # backtick or $(.
+            quote = ""
+            i = 0
+            while i < len(text):
+                ch = text[i]
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch in ";|&<>\n`" or text.startswith("$(", i):
+                    return i
+                i += 1
+            return len(text)
+
+
+        def _transport_checks(value: str) -> list:
+            # The command texts to judge for one transport value. An ssh call may name the key it logs
+            # in with, so that option is set aside; commands that ssh itself would run are judged too.
+            import re as _re
+            tokens = _tokenize_segment(value)
+            if not tokens or _command_name(tokens[0][0]) != "ssh":
+                return [value]
+            end = _plain_command_end(value)
+            double = r'"(?:[^"`$]|\$(?!\())*"'
+            single = r"'[^']*'"
+            bare = r'(?:[^\s"\'`$();|&<>]|\$(?!\())+'
+            path = "(?:" + double + "|" + single + "|" + bare + ")"
+            identity = (r"(?<=\s)(?:-i\s*" + path + r"|-o\s*(?:IdentityFile=" + path
+                        + "|" + r'"IdentityFile=[^"`$]*"' + "|" + r"'IdentityFile=[^']*'" + r"))(?=\s|$)")
+            checks = [_re.sub(identity, "", value[:end]).strip() + value[end:]]
+            for word, _ in tokens:
+                option = _re.match(r"(?i)(?:-o)?(?:proxycommand|localcommand|knownhostscommand)=(.+)", word, _re.DOTALL)
+                if option:
+                    checks.append(option.group(1))
+            return checks
+
+
+        def _check_transports(command: str, protected, depth: int):
+            # rsync runs its transport value as a command, so it gets the same checks as any command.
+            if "rsync" not in command and "RSYNC_RSH" not in command:
+                return None
+            texts = [text for value in _rsync_transports(command) for text in _transport_checks(value)]
+            texts = [text for text in dict.fromkeys(texts) if text.strip() not in ("", "ssh")]
+            if texts and (depth >= 3 or len(texts) > 16):
+                return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
+            for text in texts:
+                result = _check_command_safety({"command": text}, protected, depth + 1)
+                if result is not None:
+                    return result
+            return None
+
+
+        def _check_command_safety(args, protected=None, transport_depth: int = 0):
             injection = "" if _is_non_executable_doc_or_test_edit(args) else _axiom_injection(args)
             if injection:
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
@@ -2194,6 +2303,9 @@ public static class AgentCommandGuard
                 if len(command_text) > _MAX_COMMAND_LENGTH:
                     return ("nesting", "Blackbox blocked this call: the command is too long for the guard to inspect.")
                 return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
+            transport = _check_transports(command_text, protected, transport_depth)
+            if transport is not None:
+                return transport
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):
