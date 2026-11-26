@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Release packaging calls this workflow so a release is gated on the same full suite.
+  workflow_call:
 
 permissions:
   contents: read
@@ -25,10 +27,9 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Set up .NET SDK from global.json
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         env:
           DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
         with:
@@ -58,6 +59,17 @@ jobs:
           dotnet --version
           dotnet --info | Select-Object -First 25
           python -c "import sys; print(sys.executable, sys.version)"
+
+      - name: Require every workflow action to be pinned to a commit SHA
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
+        run: |
+          $unpinned = Get-ChildItem .github/workflows -Filter *.yml |
+            Select-String -Pattern '^\s*-?\s*uses:\s*(\S+)' |
+            Where-Object { $_.Matches[0].Groups[1].Value -notmatch '^(\./|[^@\s]+@[0-9a-f]{40}$)' }
+          if ($unpinned) {
+            $unpinned | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            throw "Workflow actions must be pinned to a full commit SHA."
+          }
 
       - name: Restore solution (locked mode, portable + Windows)
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -command ". '{0}'"
@@ -148,7 +160,7 @@ jobs:
 
       - name: Upload TRX test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-test-results
           path: ${{ runner.temp }}/test-results/**/*.trx
@@ -163,10 +175,9 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Set up .NET SDK from global.json
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         env:
           DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
         with:
