@@ -85,19 +85,22 @@ if ([version]::TryParse($Version, [ref]$currentVersion) -and
 }
 
 $dotnet = Resolve-Dotnet
+# Publish locks from an earlier run would be checked as if they came from this one.
+Get-ChildItem -Path (Join-Path $root "src") -Recurse -File -Filter "publish.packages.lock.json" |
+    Where-Object { $_.Directory.Name -eq "obj" } | Remove-Item -Force
 $project = Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj"
 $serviceProject = Join-Path $root "src\Axiom.Service\Axiom.Service.csproj"
 
 Write-Host "Publishing Axiom $Version (win-x64)..." -ForegroundColor Cyan
 & $dotnet publish $project -c Release -p:PublishProfile=win-x64-selfcontained `
-    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 
 Write-Host "Publishing Axiom service $Version (win-x64, self-contained)..." -ForegroundColor Cyan
 $serviceOutput = Join-Path $root "artifacts\publish\service"
 Remove-Item $serviceOutput -Recurse -Force -ErrorAction SilentlyContinue
 & $dotnet publish $serviceProject -c Release -f net10.0-windows -r win-x64 --self-contained true `
-    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugType=None -p:DebugSymbols=false `
@@ -116,6 +119,10 @@ $setupScript = Join-Path $PSScriptRoot "publish-setup.ps1"
 $setupOutput = Join-Path $root "artifacts\publish\setup"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -OutputDir $setupOutput -ReusePayload
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed with exit code $LASTEXITCODE." }
+
+# Runtime-specific publishes cannot restore in locked mode; prove they resolved the tested versions.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-publish-locks.ps1") -Root $root
+if ($LASTEXITCODE -ne 0) { throw "Publish lock verification failed." }
 
 $setupExe = Join-Path $setupOutput "Axiom.Setup.exe"
 if (-not (Test-Path $setupExe)) { throw "Published setup not found: $setupExe" }
