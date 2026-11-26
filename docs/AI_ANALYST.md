@@ -31,14 +31,17 @@ Axiom supports official API keys, local inference, and strictly scoped OpenCode 
   `cloudcode-pa.googleapis.com` (`*.cloudcode-pa.googleapis.com`), `claude.ai` (`*.claude.ai`),
   `chatgpt.com` (`*.chatgpt.com`), `chat.openai.com`, `api.githubcopilot.com`, and
   `copilot-proxy.githubusercontent.com`.
-- **Blocked consumer OAuth tokens:** `sk-ant-oat*` tokens (Claude Free/Pro/Max/Claude Code OAuth) on
-  Anthropic and `ya29.*` tokens (Google Antigravity/Gemini CLI OAuth) on Google Gemini are rejected
-  with guidance to use an official API key or the read-only MCP workflow.
+- **Blocked consumer OAuth tokens:** `sk-ant-oat*` tokens (Claude Free/Pro/Max/Claude Code OAuth)
+  and `ya29.*` tokens (Google Antigravity/Gemini CLI OAuth) are rejected with every provider kind
+  and endpoint, including custom and local OpenAI-compatible endpoints, with guidance to use an
+  official API key or the read-only MCP workflow.
+- **No automatic redirects:** analyst HTTP requests do not follow redirects, so only the configured
+  endpoint that passed these checks is contacted.
 - **Restricted `OpenChamberLocal` (`opencode://local`) policy:**
   - `AiProviderCompliancePolicy.ValidateOpenCodeModel` validates both `Model` and `VerifierModel`,
     blocking third-party consumer OAuth provider prefixes (`anthropic`, `claude`, `claude-code`,
     `antigravity`, `google`, `google-gemini-cli`, `gemini`, `gemini-cli`, `vertex-antigravity`,
-    `github-copilot`, `copilot`, `chatgpt`, `codex`, `openai-codex`, `cursor`, `windsurf`) and
+    `github-copilot`, `copilot`, `chatgpt`, `codex`, `openai`, `openai-codex`, `cursor`, `windsurf`) and
     bare `claude-*` / `antigravity*` / `gemini-cli*` names.
   - External-routing-restricted free-tier models (`*:free`, `free`, `opencode/free*`) are also
     blocked.
