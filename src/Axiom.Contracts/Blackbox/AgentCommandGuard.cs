@@ -265,8 +265,8 @@ public static class AgentCommandGuard
 
         @_remembered
         def _split_stages(raw: str, escapes: bool) -> list:
-            # (piped, segment) pairs, split on unquoted ;, &&, ||, | and newlines. piped is True when
-            # the segment reads the previous one's output. With escapes, a backslash also protects a
+            # (piped, segment) pairs, split on unquoted ;, &&, ||, |, a single & and newlines. piped is
+            # True when the segment reads the previous one's output. With escapes, a backslash also protects a
             # quote or operator, as in a POSIX shell; without, backslashes are plain (Windows paths).
             stages = []
             buf = []
@@ -274,6 +274,10 @@ public static class AgentCommandGuard
             piped = False
             i = 0
             n = len(raw)
+            # Open ( that are outside quotes, True for $(. A single & inside $( ) or $(( )) does not end
+            # the outer command; the substitution's own text is split when it is read as a command.
+            opened = []
+            substitutions = 0
 
             def close():
                 segment = "".join(buf).strip()
@@ -299,11 +303,19 @@ public static class AgentCommandGuard
                     buf.append(ch)
                     i += 1
                     continue
+                if ch == "(":
+                    opened.append(i > 0 and raw[i - 1] == "$")
+                    substitutions += opened[-1]
+                elif ch == ")" and opened:
+                    substitutions -= opened.pop()
                 if ch == "|" and buf and buf[-1] == ">":
                     buf.append(ch)  # >| is a redirection
                     i += 1
                     continue
-                if ch in "\n\r;|" or raw.startswith("&&", i):
+                # A single & ends a command too, unless it is part of a redirection: &>, >&, <& (or |&).
+                background = (ch == "&" and not substitutions and raw[i + 1:i + 2] != ">"
+                              and (i == 0 or raw[i - 1] not in "<>|&"))
+                if ch in "\n\r;|" or raw.startswith("&&", i) or background:
                     pipe = ch == "|" and not raw.startswith("||", i)
                     ended = close()
                     # A newline right after a pipe continues the pipeline.
@@ -2405,10 +2417,21 @@ public static class AgentCommandGuard
             identity = (r"(?<=\s)(?:-i\s*" + path + r"|-o\s*(?:IdentityFile=" + path
                         + "|" + r'"IdentityFile=[^"`$]*"' + "|" + r"'IdentityFile=[^']*'" + r"))(?=\s|$)")
             checks = [_re.sub(identity, "", value[:end]).strip() + value[end:]]
-            for word, _ in tokens:
-                option = _re.match(r"(?i)(?:-o)?(?:proxycommand|localcommand|knownhostscommand)=(.+)", word, _re.DOTALL)
-                if option:
-                    checks.append(option.group(1))
+            # ssh takes these as Name=value, "Name value", or Name followed by the value as its own word.
+            for index, (word, _) in enumerate(tokens):
+                option = _re.fullmatch(
+                    r"(?:-o)?\s*(?:proxycommand|localcommand|knownhostscommand)\b\s*=?\s*(.*)",
+                    word, _re.IGNORECASE | _re.DOTALL)
+                if not option:
+                    continue
+                command = option.group(1).strip()
+                if not command:
+                    following = [token for token, _ in tokens[index + 1:index + 3]]
+                    if following[:1] == ["="]:
+                        following = following[1:]
+                    command = following[0].removeprefix("=").strip() if following else ""
+                if command:
+                    checks.append(command)
             return checks
 
 
