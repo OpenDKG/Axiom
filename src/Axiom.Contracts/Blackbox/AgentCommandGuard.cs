@@ -205,6 +205,30 @@ public static class AgentCommandGuard
             "daemonize": ("av", "ceElopu",
                 "",
                 "", 0),
+            "busybox": ("", "",
+                "help install list list-full",
+                "", 0),
+            "chronic": ("ev", "",
+                "",
+                "", 0),
+            "numactl": ("abdDHlstTuV", "cCfiILmMNopPSw",
+                ("all balancing cpu-compress dump dump-nodes hardware help huge localalloc show strict touch "
+                 "verify version"),
+                ("cpubind cpunodebind file interleave length membind offset physcpubind preferred "
+                 "preferred-many shm shmid shmmode weighted-interleave"), 0),
+            "setpriv": ("dhV", "",
+                ("clear-groups dump help init-groups keep-groups landlock-support list-caps "
+                 "list-landlock-access nnp no-new-privs reset-env version"),
+                ("ambient-caps apparmor-profile bounding-set egid euid groups inh-caps landlock-access "
+                 "landlock-rule list-landlock-rights pdeathsig ptracer regid reuid rgid ruid seccomp-filter "
+                 "securebits selinux-label"), 0),
+            "prlimit": ("cdefhilmnqrstuvVxy", "op",
+                ("as core cpu data fsize help locks memlock msgqueue nice noheadings nofile nproc raw rss "
+                 "rtprio rttime sigpending stack verbose version"),
+                "output pid", 0),
+            "runcon": ("c", "lrtu",
+                "compute help version",
+                "range role type user", 0),
             "flock": ("eFhnosuVx?", "cEw",
                 "close exclusive help nb no-fork nonblock nonblocking shared unlock verbose version",
                 "command conflict-exit-code timeout wait", 0),
@@ -255,7 +279,7 @@ public static class AgentCommandGuard
                  "work-dir workdir xapplyinputsource"), 0),
         }.items()}
         # Short options whose value, when there is one, is attached to them.
-        _ATTACHED_VALUES = {"nsenter": "CimnprTuUwW", "sshpass": "e", "script": "t"}
+        _ATTACHED_VALUES = {"nsenter": "CimnprTuUwW", "prlimit": "cdefilmnqrstuvxy", "sshpass": "e", "script": "t"}
         # Options whose value is a user or group number; any other word there is not read.
         _NUMBER_VALUES = {"nsenter": ("G", "S", "setgid", "setuid")}
         # Options of these programs whose value is only read as a word of its own.
@@ -283,7 +307,7 @@ public static class AgentCommandGuard
                                  "exec i iex init-command init-eval-command interpreter ix l p pid s se symbols "
                                  "tclcommand tty ui x").split())
         # Programs whose own command does not simply follow their options.
-        _SPECIAL_LAUNCHERS = ("bwrap", "entr", "flock", "gdb", "parallel", "script", "start-stop-daemon")
+        _SPECIAL_LAUNCHERS = ("bwrap", "entr", "flock", "gdb", "parallel", "runcon", "script", "start-stop-daemon")
         # These read the pipe as a list of arguments or files, not as input to the command they run.
         _LIST_READERS = ("xargs", "parallel", "entr")
 
@@ -362,6 +386,8 @@ public static class AgentCommandGuard
                         if char not in flags:
                             return idx, taken, False
                 following = words[idx] if idx < count else "-"
+                if name == "prlimit" and alone and _looks_like_limit(following):
+                    return idx, taken, False
                 if name == "script" and alone in ("t", "timing") and following.replace(".", "", 1).isdigit():
                     idx += 1  # the BSD script takes a flush time here
                 elif name == "parallel" and alone in _PARALLEL_OPTIONAL and not following.startswith("-"):
@@ -369,6 +395,11 @@ public static class AgentCommandGuard
                         return idx, taken, False
                     idx += 1
             return idx, taken, True
+
+
+        def _looks_like_limit(word: str) -> bool:
+            import re as _re
+            return bool(_re.fullmatch(r"(?:\d+|unlimited)(?::(?:\d+|unlimited)?)?|:(?:\d+|unlimited)", word))
 
 
         def _special_launch(name: str, words: list, idx: int):
@@ -405,18 +436,20 @@ public static class AgentCommandGuard
                 if any(word in ("--stop", "--status", "-K", "-T") for word in own):
                     return None
                 programs = {}
+                operands = []
                 position = 0
                 while position < len(own):
                     following, taken, known = _launcher_options(name, own, position)
                     if not known:
                         return idx + following, [], False
                     programs.update(taken)
-                    position = max(following, position + 1)
+                    operands.extend(own[following:following + 1])
+                    position = following + 1
                 # --startas wins over --exec, which then only identifies a running copy.
                 program = next((programs[key] for key in ("a", "startas", "x", "exec") if programs.get(key)), "")
                 if not program:
                     return None
-                return count, [_join_words([program] + words[end + 1:])], True
+                return count, [_join_words([program] + operands + words[end + 1:])], True
             if name == "script":
                 # Options may follow the file name. -c gives the command; in the BSD form it follows the file.
                 scripts = []
@@ -437,6 +470,12 @@ public static class AgentCommandGuard
             idx, taken, known = _launcher_options(name, words, idx)
             if not known:
                 return idx, [], False
+            if name == "runcon":
+                # Without a context option, the first operand is the context.
+                if not any(key in ("l", "r", "t", "u", "range", "role", "type", "user") for key, _ in taken) and not any(
+                        word in ("-c", "--compute") for word in words[start:idx]):
+                    idx += 1
+                return min(idx, count), [], True
             if name == "flock":
                 scripts = [value for key, value in taken if key in ("c", "command")]
                 idx += 1  # the lock file or descriptor; after it only -c is an option
@@ -454,8 +493,9 @@ public static class AgentCommandGuard
                 return idx, [], True
             # parallel
             if idx < count and words[idx] == ":::":
-                # With no command of its own, each argument is a command.
-                return count, [word for word in words[idx + 1:] if word not in (":::", "::::")], True
+                # With no command of its own, each argument is a command. They are also read as one.
+                arguments = [word for word in words[idx + 1:] if word not in (":::", "::::")]
+                return count, arguments + ([" ".join(arguments)] if len(arguments) > 1 else []), True
             if idx < count and any(char.isspace() for char in words[idx]):
                 return count, [words[idx]], True
             return idx, [], True
@@ -466,6 +506,7 @@ public static class AgentCommandGuard
             import re as _re
             idx = 0
             carried = []
+            split = None
             spoken = None
             count = len(tokens)
             while idx < count:
@@ -514,6 +555,7 @@ public static class AgentCommandGuard
                                 idx += 1
                             if key == "split-string":
                                 carried.append(value)
+                                split = value
                         elif key not in long_flags:
                             return idx, False, carried
                         continue
@@ -526,12 +568,16 @@ public static class AgentCommandGuard
                                 idx += 1
                             if name == "env" and char == "S":
                                 carried.append(value)
+                                split = value
                             break
                         if name == "xargs" and char in "eil":
                             break
                         if char not in flags:
                             return idx, False, carried
                 idx += operands
+                if split is not None and idx < count:
+                    carried.append(split + " " + _join_words([token for token, _ in tokens[idx:]]))
+                    split = None
             return min(idx, count), True, carried
 
 
@@ -3007,9 +3053,15 @@ public static class AgentCommandGuard
 
 
         # git settings whose value is a command, those where it is one only after !, and the variables.
-        _GIT_COMMAND_KEYS = (r"core\.(?:sshcommand|pager|editor|fsmonitor|gitproxy)|sequence\.editor|diff\.external")
+        _GIT_COMMAND_KEYS = (r"core\.(?:sshcommand|pager|editor|fsmonitor|gitproxy|askpass)|sequence\.editor|diff\.external"
+                             r"|interactive\.difffilter|pager\.[\w-]+|(?:difftool|mergetool)\.[^=\s]+\.cmd"
+                             r"|merge\.[^=\s]+\.driver|diff\.[^=\s]+\.textconv|filter\.[^=\s]+\.(?:clean|smudge|process)"
+                             r"|gpg\.(?:[\w-]+\.)?program|remote\.[^=\s]+\.(?:uploadpack|receivepack)")
         _GIT_BANG_KEYS = r"alias\.[\w-]+|credential(?:\.[^=\s]+)?\.helper"
-        _COMMAND_VARIABLES = "git_ssh_command|git_pager|pager|git_editor|git_external_diff|git_proxy_command"
+        _COMMAND_VARIABLES = ("git_ssh_command|git_pager|pager|git_editor|git_external_diff|git_proxy_command"
+                              "|git_sequence_editor|git_askpass|ssh_askpass|editor|visual|git_config_parameters")
+        # Names that are such variables only in upper case, because ordinary code uses them too.
+        _UPPER_CASE_VARIABLES = ("pager", "editor", "visual")
 
 
         def _ssh_option_commands(words: list) -> list:
@@ -3050,11 +3102,58 @@ public static class AgentCommandGuard
             return ""
 
 
-        def _git_config_command(words: list) -> str:
-            # words start at git. The command that git config [--global|--file F] <key> <value> stores.
+        def _git_subcommand(words: list) -> int:
+            # words start at git. The index of the subcommand, past git's own options.
             idx = 1
             while idx < len(words) and words[idx].startswith("-"):
                 idx += 2 if words[idx] in ("-C", "-c", "--config-env", "--git-dir", "--namespace", "--work-tree") else 1
+            return idx
+
+
+        def _git_subcommand_commands(words: list) -> list:
+            # words start at git. The commands that a subcommand runs, given as its own argument.
+            import re as _re
+            idx = _git_subcommand(words)
+            if idx >= len(words):
+                return []
+            name, rest = words[idx].lower(), words[idx + 1:]
+            if name == "bisect":
+                return [_join_words(rest[1:])] if rest[:1] == ["run"] and rest[1:] else []
+            if name == "submodule":
+                if "foreach" not in rest:
+                    return []
+                command = rest[rest.index("foreach") + 1:]
+                while command[:1] and command[0] in ("--quiet", "--recursive", "-q"):
+                    command = command[1:]
+                return [" ".join(command)]
+            if name in ("fetch", "fetch-pack", "ls-remote", "pull"):
+                options = r"--upload-pack"
+            elif name == "clone":
+                options = r"--upload-pack|-u"
+            elif name in ("push", "send-pack"):
+                options = r"--receive-pack|--exec"
+            elif name == "rebase":
+                options = r"--exec|-[a-wyzA-WYZ]*x"
+            elif name == "filter-branch":
+                options = r"--(?:commit|env|index|msg|parent|tag-name|tree)-filter|--setup"
+            else:
+                return []
+            found = []
+            for position, word in enumerate(rest):
+                option = _re.fullmatch("(" + options + ")(?:=(.*))?", word, _re.DOTALL)
+                if option:
+                    found.append(option.group(2) if option.group(2) is not None else
+                                 rest[position + 1] if position + 1 < len(rest) else "")
+                    continue
+                attached = _re.fullmatch("(" + options + ")(.+)", word, _re.DOTALL)
+                if attached and not word.startswith("--"):
+                    found.append(attached.group(2))
+            return found
+
+
+        def _git_config_command(words: list) -> str:
+            # words start at git. The command that git config [--global|--file F] <key> <value> stores.
+            idx = _git_subcommand(words)
             if words[idx:idx + 1] != ["config"]:
                 return ""
             operands = []
@@ -3088,6 +3187,37 @@ public static class AgentCommandGuard
                 if setting and (setting.group(1) or _re.fullmatch(option_name, words[index - 1])):
                     found.append(_git_setting_command(setting.group(2), setting.group(3)))
             found.append(_git_config_command(words))
+            return found + _git_subcommand_commands(words)
+
+
+        def _git_config_env(words: list) -> list:
+            # words start at git. The (setting, variable name) pairs given with --config-env.
+            pairs = []
+            for index in range(1, len(words)):
+                given = words[index][13:] if words[index].startswith("--config-env=") else (
+                    words[index] if words[index - 1] == "--config-env" else "")
+                key, equals, variable = given.rpartition("=")
+                if equals:
+                    pairs.append((key, variable))
+            return pairs
+
+
+        def _git_settings_from_variables(assigned: dict, pairs: list) -> list:
+            # Commands named through GIT_CONFIG_KEY_n with GIT_CONFIG_VALUE_n, or through --config-env.
+            import re as _re
+            found = []
+            for name, keys in assigned.items():
+                numbered = _re.fullmatch(r"GIT_CONFIG_KEY_(\d+)", name)
+                if numbered:
+                    for value in assigned.get("GIT_CONFIG_VALUE_" + numbered.group(1), []):
+                        found.extend(_git_setting_command(key, value) for key in keys)
+            for key, variable in pairs:
+                if variable in assigned:
+                    found.extend(_git_setting_command(key, value) for value in assigned[variable])
+                elif _git_setting_command(key, "!x"):
+                    # The value is not in this command, so it cannot be read: judged as a command known only
+                    # at run time.
+                    found.append('bash -c "$' + variable + '"')
             return found
 
 
@@ -3102,7 +3232,7 @@ public static class AgentCommandGuard
                 if not variable:
                     continue
                 # A shell tells pager from PAGER; PowerShell and cmd do not.
-                if (variable.group(2).lower() == "pager" and variable.group(2) != "PAGER"
+                if (variable.group(2).lower() in _UPPER_CASE_VARIABLES and not variable.group(2).isupper()
                         and not variable.group(1) and words[0].lower() != "set"):
                     continue
                 value = variable.group(3)
@@ -3119,14 +3249,32 @@ public static class AgentCommandGuard
                 if words[0].lower() == "set":
                     # cmd takes the rest of the line as the value.
                     value = " ".join([value] + words[index + 1:])
+                name = variable.group(2).lower()
+                if name == "git_config_parameters":
+                    # Settings written as 'key=value' or 'key'='value'.
+                    for setting, _ in _tokenize_posix(value):
+                        key, _, command = setting.partition("=")
+                        found.append(_git_setting_command(key, command))
+                    continue
+                # An editor or pager may be set to another variable, or to where a program is.
+                whole, position = value, index + 1
+                while position < len(words) and ((whole.startswith("$(") and not whole.endswith(")"))
+                                                 or (whole.startswith("`") and whole.count("`") == 1)):
+                    whole, position = whole + " " + words[position], position + 1
+                if name in _UPPER_CASE_VARIABLES and _re.fullmatch(
+                        r"\$\{?\w+\}?|\$\((?:which|command -v) [\w.+-]+\)|`(?:which|command -v) [\w.+-]+`", whole):
+                    continue
                 found.append(value)
             return found
 
 
 
         def _ssh_and_git_commands(command: str) -> list:
-            # Values that ssh, scp, sftp, git and pagers run as commands on this computer.
+            # Values that ssh, scp, sftp, git, editors and pagers run as commands on this computer.
+            import re as _re
             values = []
+            assigned = {}
+            config_env = []
             for segment in _stages_as_run(command):
                 # With escaped quotes only the POSIX reading finds where a value ends.
                 readings = [_tokenize_posix(segment)]
@@ -3135,6 +3283,10 @@ public static class AgentCommandGuard
                 for tokens in readings:
                     tokens = _quoted_assignments(segment, tokens)
                     values.extend(_command_variables([word for word, _ in tokens]))
+                    for word, _ in tokens:
+                        assignment = _re.fullmatch(r"(?:\$env:)?([A-Za-z_]\w*)=(.*)", word, _re.DOTALL)
+                        if assignment and assignment.group(2) not in assigned.setdefault(assignment.group(1), []):
+                            assigned[assignment.group(1)].append(assignment.group(2))
                     words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
                     if not words:
                         continue
@@ -3143,6 +3295,8 @@ public static class AgentCommandGuard
                         values.extend(_ssh_option_commands(words))
                     elif name == "git":
                         values.extend(_git_settings(words))
+                        config_env.extend(_git_config_env(words))
+            values.extend(_git_settings_from_variables(assigned, config_env))
             return [value for value in dict.fromkeys(values) if value.strip()]
 
 
@@ -3185,8 +3339,8 @@ public static class AgentCommandGuard
             values = []
             if "rsync" in plain:
                 values += _rsync_transports(command)
-            if any(name in plain for name in ("proxycommand", "localcommand", "knownhostscommand", "core.", "alias.",
-                                              ".helper", "sequence.editor", "diff.external", "git_", "pager")):
+            if any(name in plain for name in ("proxycommand", "localcommand", "knownhostscommand", "git", "pager",
+                                              "editor", "visual", "askpass")):
                 values += _ssh_and_git_commands(command)
             texts = [text for value in dict.fromkeys(values) for text in _transport_checks(value)]
             texts = [text for text in dict.fromkeys(texts) if text.strip() not in ("", "ssh")]
