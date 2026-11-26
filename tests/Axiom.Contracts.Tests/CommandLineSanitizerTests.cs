@@ -31,6 +31,19 @@ public sealed class CommandLineSanitizerTests
     [InlineData("STRIPE_KEY=xyz APP_SECRET=qrs run", "xyz")]
     [InlineData("STRIPE_KEY=xyz APP_SECRET=qrs run", "qrs")]
     [InlineData("curl https://host/?access_token=abc123", "abc123")]
+    [InlineData("curl -u alice:hunter2 https://host/", "hunter2")]
+    [InlineData("curl --user alice:hunter2 https://host/", "hunter2")]
+    [InlineData("curl --user=alice:hunter2 https://host/", "hunter2")]
+    [InlineData("curl --proxy-user alice:hunter2 https://host/", "hunter2")]
+    [InlineData("curl -u \"alice:two words\" https://host/", "two words")]
+    [InlineData("curl --user 'alice:two words' https://host/", "two words")]
+    [InlineData("curl -u alice:pa/ss:word https://host/", "pa/ss:word")]
+    [InlineData("curl -u :hunter2 https://host/", "hunter2")]
+    [InlineData("aws configure set aws_secret_access_key abc123", "abc123")]
+    [InlineData("aws configure set aws_session_token abc123 --profile dev", "abc123")]
+    [InlineData("tool config set db.password hunter2", "hunter2")]
+    [InlineData("tool set API_KEY \"two words\"", "two words")]
+    [InlineData("tool set client-secret-value abc123", "abc123")]
     public void Sensitive_values_are_masked_and_a_second_pass_changes_nothing(string commandLine, string value)
     {
         var sanitised = CommandLineSanitizer.Sanitize(commandLine);
@@ -70,6 +83,12 @@ public sealed class CommandLineSanitizerTests
     [InlineData("git clone git@github.com:org/repo.git")]
     [InlineData("task-runner-aaaaaaaaaaaaaaaa --monkey=1 --token-file /etc/app/token")]
     [InlineData("node server.js --max-connections 25 --keyboard us")]
+    [InlineData("git push -u origin main")]
+    [InlineData("journalctl -u nginx --since today")]
+    [InlineData("tool -u https://host/path")]
+    [InlineData("ssh --user alice host")]
+    [InlineData("git config set user.name alice")]
+    [InlineData("offset token_count 5")]
     public void Ordinary_command_lines_are_unchanged(string commandLine) =>
         Assert.Equal(commandLine, CommandLineSanitizer.Sanitize(commandLine));
 

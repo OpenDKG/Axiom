@@ -43,11 +43,15 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
 
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(10);
 
+    private static readonly TimeSpan HomeCacheLifetime = TimeSpan.FromMinutes(5);
+
     private readonly string _procRoot;
 
     private readonly TimeProvider _time;
 
     private readonly string _passwdPath;
+
+    private volatile Tuple<IReadOnlyDictionary<string, string>, DateTimeOffset>? _homes;
 
     private readonly ConcurrentDictionary<int, (LinuxProcessIdentity Identity, DateTimeOffset ResolvedUtc)> _cache = new();
 
@@ -189,19 +193,27 @@ public sealed class ProcProcessIdentityResolver : ILinuxProcessIdentitySource
         return argument[..split] + "\"" + argument[split..].Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
     }
 
+    /// <summary>Home directory from a uid map of the passwd file, re-read every few minutes.</summary>
     private string? ReadHomeDirectory(uint uid)
     {
-        var id = uid.ToString(CultureInfo.InvariantCulture);
-        foreach (var line in ReadText(_passwdPath).Split('\n'))
+        var now = _time.GetUtcNow();
+        var cached = _homes;
+        if (cached is null || now - cached.Item2 >= HomeCacheLifetime)
         {
-            var fields = line.Split(':');
-            if (fields.Length >= 6 && fields[2] == id)
+            var homes = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var line in ReadText(_passwdPath).Split('\n'))
             {
-                return fields[5];
+                var fields = line.Split(':');
+                if (fields.Length >= 6)
+                {
+                    homes.TryAdd(fields[2], fields[5]);
+                }
             }
+
+            _homes = cached = Tuple.Create<IReadOnlyDictionary<string, string>, DateTimeOffset>(homes, now);
         }
 
-        return null;
+        return cached.Item1.GetValueOrDefault(uid.ToString(CultureInfo.InvariantCulture));
     }
 
     private static uint? ReadUid(string processDirectory)

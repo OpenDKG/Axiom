@@ -151,6 +151,37 @@ public sealed class ProcNetAndIdentityTests
     }
 
     [Fact]
+    public void HomeDirectoryLookupIsCachedBetweenProcessesAndRefreshedLater()
+    {
+        using var temp = new TempDirectory();
+        var proc = Path.Combine(temp.Path, "proc");
+        foreach (var id in new[] { 100, 101, 102, 103 })
+        {
+            var pid = Path.Combine(proc, id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Directory.CreateDirectory(pid);
+            File.WriteAllText(Path.Combine(pid, "comm"), "app\n");
+            File.WriteAllText(Path.Combine(pid, "stat"), $"{id} (app) S 1 {id} {id} 0 -1 4194560 0");
+            File.WriteAllText(Path.Combine(pid, "status"), "Uid:\t1000\t1000\t1000\t1000\n");
+            File.WriteAllText(Path.Combine(pid, "cmdline"), "app\0/home/first/a\0/home/second/b\0");
+        }
+
+        var passwd = Path.Combine(temp.Path, "passwd");
+        File.WriteAllText(passwd, "tester:x:1000:1000::/home/first:/bin/sh\n");
+        var time = new FakeTime(DateTimeOffset.UnixEpoch);
+        var resolver = new ProcProcessIdentityResolver(proc, time, passwd);
+        Assert.Equal("app ~/a /home/second/b", resolver.Resolve(100, null).CommandLine);
+
+        File.Delete(passwd);
+        Assert.Equal("app ~/a /home/second/b", resolver.Resolve(101, null).CommandLine);
+
+        File.WriteAllText(passwd, "tester:x:1000:1000::/home/second:/bin/sh\n");
+        time.Advance(TimeSpan.FromMinutes(4));
+        Assert.Equal("app ~/a /home/second/b", resolver.Resolve(102, null).CommandLine);
+        time.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal("app /home/first/a ~/b", resolver.Resolve(103, null).CommandLine);
+    }
+
+    [Fact]
     public void ScannerCachesForTwoSecondsAndRefreshesOnDemand()
     {
         var passes = 0;

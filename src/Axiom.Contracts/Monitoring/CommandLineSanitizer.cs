@@ -42,6 +42,20 @@ public static class CommandLineSanitizer
     private static readonly Regex Flag = Create(
         @"(?<![\w-])(?<keep>--?(?>[\w-]+)(?<=password|passwd|pwd|token|secret|apikey|[_-]key)\s+)" + Value);
 
+    // -u user:password, --user=user:password, --proxy-user "user:pass word"
+    private const string UserFlag = @"(?<![\w-])(?:-u|--user|--proxy-user)(?:\s+|=)";
+
+    private static readonly Regex QuotedUserPassword = Create(
+        @"(?<keep>" + UserFlag + @"(?<quote>[""'])(?:(?!\k<quote>)[^:])*:)(?:(?!\k<quote>)[^…])+");
+
+    // The password may not start with "/", so that "-u https://host" is left alone.
+    private static readonly Regex UserPassword = Create(
+        @"(?<keep>" + UserFlag + @"[^\s""':=/-]*:)[^\s""'…/][^\s""'…]*");
+
+    // set <name containing secret, password, token or key> <value>
+    private static readonly Regex Setter = Create(
+        @"(?<![\w.-])(?<keep>set\s+(?=[\w.-]*(?:secret|password|passwd|token|key))(?>[\w.-]+)\s+)" + Value);
+
     private static readonly Regex TokenShape = Create(
         @"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{6,}|gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|" +
         @"xox[abprs]-[A-Za-z0-9-]{8,}|(?-i:AKIA[0-9A-Z]{16})|" +
@@ -71,6 +85,9 @@ public static class CommandLineSanitizer
             text = Authorization.Replace(text, "${keep}" + Mask);
             text = Assignment.Replace(text, "${keep}" + Mask);
             text = Flag.Replace(text, "${keep}" + Mask);
+            text = QuotedUserPassword.Replace(text, "${keep}" + Mask);
+            text = UserPassword.Replace(text, "${keep}" + Mask);
+            text = Setter.Replace(text, "${keep}" + Mask);
             text = TokenShape.Replace(text, Mask);
             text = ShortenHome(text, homeDirectory);
         }
