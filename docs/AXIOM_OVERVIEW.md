@@ -41,6 +41,9 @@ the difference instead of claiming a boundary that does not exist.
 commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
 files are out of scope. A delete whose command names no protected path, such as
 `find / -name id_rsa -execdir rm {} \;`, is not detected.
+Permission changes through a pipe are judged the same way, by what the earlier command names:
+`find ~/.ssh | xargs chmod` is blocked, while `find . | xargs chmod` on project files is allowed by
+design, even though a search that starts in a parent folder could reach protected files.
 
 Also not detected: in-place edits with `awk -i inplace`, `ruby -pi` or `ex`; stopping Axiom's process
 by a numeric ID, or after finding it with a pattern written to avoid its name (`grep [a]xiomd`);
