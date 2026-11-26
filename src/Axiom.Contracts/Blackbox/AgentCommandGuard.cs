@@ -1388,16 +1388,64 @@ public static class AgentCommandGuard
             return (_command_name(rest[0]), rest[1:]) if rest else ("", [])
 
 
+        def _process_substitutions(script: str) -> list:
+            # Bodies of <(...) outside quotes. Stops at one that is never closed.
+            bodies = []
+            quote = ""
+            i = 0
+            n = len(script)
+            while i < n:
+                ch = script[i]
+                if ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif script.startswith("<(", i):
+                    depth = 1
+                    inner = ""
+                    j = i + 2
+                    while j < n:
+                        current = script[j]
+                        if inner:
+                            if current == inner:
+                                inner = ""
+                        elif current in ("'", '"'):
+                            inner = current
+                        elif current == "(":
+                            depth += 1
+                        elif current == ")":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        j += 1
+                    if depth:
+                        break
+                    bodies.append(script[i + 2:j])
+                    i = j + 1
+                    continue
+                i += 1
+            return bodies
+
+
         def _pipelines(script: str, depth: int = 0):
-            # The pipelines of a script in order, each a list of stages of lowercase words. A $(...) or
-            # backtick body becomes a mark that says whether it looks up one of Axiom's processes.
-            for body in _substitutions(script, backticks=True)[0]:
+            # The pipelines of a script in order, each a list of stages of lowercase words. A $(...),
+            # backtick or <(...) body becomes a mark that says whether it looks up one of Axiom's processes.
+            def mask(text: str, body: str, spellings) -> str:
                 looked_up = depth < _MAX_SHELL_UNWRAP_DEPTH and _looks_up_guard(body, depth + 1)
                 mark = "__axiom_guard_pid__" if looked_up else "__axiom_other_value__"
-                for spelled in ("$(" + body + ")", "`" + body + "`"):
-                    if spelled in script:
-                        script = script.replace(spelled, mark, 1)
-                        break
+                for spelled in spellings:
+                    if spelled in text:
+                        return text.replace(spelled, mark, 1)
+                return text
+
+            for body in _substitutions(script, backticks=True)[0]:
+                script = mask(script, body, ("$(" + body + ")", "`" + body + "`"))
+            for body in _process_substitutions(script) if "<(" in script else ():
+                script = mask(script, body, ("<(" + body + ")",))
             pipeline = []
             for piped, segment in _split_stages(script, True):
                 if pipeline and not piped:
@@ -1473,8 +1521,30 @@ public static class AgentCommandGuard
                 assign(spelled.group(1), holds(value) or _stage_looks_up_guard(inner, inner_arguments, False))
             if name == "for" and len(arguments) > 2 and arguments[1] == "in":
                 assign(arguments[0], holds(arguments[2:]))
-            if name == "read" and fed:
-                tainted.update(word for word in arguments if not word.startswith("-"))
+            if name in ("read", "mapfile", "readarray"):
+                for word in arguments:
+                    if not word.startswith("-"):
+                        assign(word, fed)
+
+
+        def _fed_loop_reads(pipelines) -> set:
+            # Stages, as (pipeline, stage), that read inside a loop or { } group whose closing done or }
+            # is redirected from a looked-up Axiom process: done < <(...), done <<< "$(...)".
+            fed = set()
+            open_blocks = []
+            for number, pipeline in enumerate(pipelines):
+                for position, words in enumerate(pipeline):
+                    keywords = [word for word in words if word not in ("do", "then", "else", "!")]
+                    first = keywords[0] if keywords else ""
+                    if first in ("while", "until", "for", "{"):
+                        open_blocks.append([])
+                    if open_blocks and _stage_command(words)[0] in ("read", "mapfile", "readarray"):
+                        open_blocks[-1].append((number, position))
+                    if first in ("done", "}") and open_blocks:
+                        reads = open_blocks.pop()
+                        if "__axiom_guard_pid__" in " ".join(words):
+                            fed.update(reads)
+            return fed
 
 
         def _feeds_guard_into_kill(command: str) -> bool:
@@ -1484,10 +1554,12 @@ public static class AgentCommandGuard
                 if "axiom" not in script.lower():
                     continue
                 tainted = set()
-                for pipeline in _pipelines(script):
+                pipelines = list(_pipelines(script))
+                loop_reads = _fed_loop_reads(pipelines)
+                for number, pipeline in enumerate(pipelines):
                     fed = False
                     after_ps = False
-                    for words in pipeline:
+                    for position, words in enumerate(pipeline):
                         name, arguments = _stage_command(words)
                         text = " ".join(words)
                         carries = "__axiom_guard_pid__" in text or any(
@@ -1495,7 +1567,7 @@ public static class AgentCommandGuard
                         if _kills_a_process(name, arguments) and (fed or carries):
                             return True
                         looks_up = carries or _stage_looks_up_guard(name, arguments, after_ps)
-                        fed = fed or looks_up
+                        fed = fed or looks_up or (number, position) in loop_reads
                         after_ps = after_ps or name == "ps"
                         _follow_values(words, name, arguments, fed, tainted)
             return False
