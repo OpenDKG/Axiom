@@ -1244,7 +1244,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         else if (ServiceStatus?.Capabilities?.FirewallWrites == true)
         {
             StatusFirewallText = "Firewall writes: enabled for this service session";
-            StatusFirewallBadgeText = "TEST VM";
+            StatusFirewallBadgeText = "WRITES ON";
             StatusFirewallBadgeBrush = new SolidColorBrush(Color.Parse("#FBBF24"));
         }
         else

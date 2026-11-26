@@ -221,11 +221,11 @@ shows the charts and captures.
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
-- Write operations stay off until consent. A **complete installation** enables **Axiom Shield**
-  during setup: it registers and starts the Axiom Windows service (one administrator approval) and
-  then may create or remove `Axiom::{id}::{OUT|IN}` rules. A **partial installation** leaves Shield
-  off until you enable it. Every change is confirmed, read back and audited; disabling the shield
-  removes every Axiom-owned rule.
+- Write operations stay off until consent. A **Complete** or **Light / Partial** installation enables
+  **Axiom Shield** during setup: it registers and starts the Axiom Windows service (one
+  administrator approval) and then may create or remove `Axiom::{id}::{OUT|IN}` rules. Only a Windows
+  **Optional** installation lets you leave Shield off. Every change is confirmed, read back and
+  audited; disabling the shield removes every Axiom-owned rule and the saved Allow and Block decisions.
 
 ### Privacy by default
 
@@ -255,12 +255,16 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 ### Privacy Shield
 
 A local DNS filter with Basic/Balanced/Strict profiles, custom allow and block lists and a loopback
-resolver. A **complete installation** turns it on with the Balanced profile and all five sources; a
-partial installation leaves it off. It never changes adapter DNS settings automatically; manual
-adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
-Five HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO and OISD Big (GPL-3.0),
-WindowsSpyBlocker (MIT), and The Block List Project Ads/Tracking (Unlicense). They are downloaded at
-runtime, not bundled; no separate approval is required beyond the license and attribution terms.
+resolver. A **Complete** or **Light / Partial** installation turns it on with the Strict profile and
+all eight catalogued sources, and points the network adapters' DNS at the local resolver
+(`127.0.0.1`). In a Windows **Optional** installation you choose whether to turn it on. Adapter
+configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
+Eight HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO, HaGeZi Threat
+Intelligence Feeds (Mini) and OISD Big (GPL-3.0); WindowsSpyBlocker (MIT); The Block List Project Ads
+and Tracking (Unlicense); the URLhaus domain list compiled by malware-filter (CC0-1.0 / MIT); and the
+phishing domain list compiled by malware-filter (CC-BY-SA-4.0). They are downloaded at
+runtime, not bundled. These licenses cover the lists as published; the original feeds can set their
+own terms ([third-party notices](THIRD_PARTY_NOTICES.md)).
 Counters are in memory; a bounded local history of blocked domains/categories/timestamps and the
 requesting application (when Windows exposes it) is kept and can be cleared. Recent blocks refresh
 every 2 seconds and offer Allow/Block actions. Allowed queries are never stored. DoH/DoT/DoQ,
@@ -383,8 +387,10 @@ Windows Service
   removal and a documented recovery path.
 - **Data at rest:** bounded local SQLite network metadata plus separate blocked-DNS history, audit, findings and opt-in module state; no packet payload capture; credential storage and optional egress are detailed in the security model.
 - **Honest status:** the interface distinguishes observed data, estimates, partial attribution,
-  unavailable adapters and external policy conflicts. It never shows "Protected" unless the OS
-  result is verified.
+  unavailable adapters and external policy conflicts. On the Simple Home screen, the Home headline
+  says protected only with a verified OS result, and so does the Shield label in Mini mode. Windows
+  Firewall reports no such result, so there they say "Protection settings on" and "Settings on"; shield
+  colours show the configured state.
 - **Supply chain:** pinned NuGet versions, committed lock files, warnings-as-errors and a generated
   third-party license inventory.
 
