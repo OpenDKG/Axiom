@@ -96,6 +96,18 @@ public static class TestAppBuilder
         UiReady.Task.GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    /// Runs an async test body on the headless UI thread. Avalonia objects keep thread affinity,
+    /// and dispatcher-posted work runs there too, so tests that touch view models directly must
+    /// not race that thread from an xUnit worker.
+    /// </summary>
+    public static Task RunOnUiThreadAsync(Func<Task> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        StartUiThread();
+        return Dispatcher.UIThread.InvokeAsync(action);
+    }
+
     public static void RunOnUiThread(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);

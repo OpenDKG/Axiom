@@ -243,6 +243,12 @@ public sealed class DohBypassDetectorTests : IDisposable
             Assert.Equal(DohBypassDetector.LinuxNoBypassText, DohBypassDetector.NoBypassTextForCurrentPlatform);
             Assert.DoesNotContain("Windows", DohBypassDetector.NoBypassTextForCurrentPlatform, StringComparison.Ordinal);
         }
+        else if (OperatingSystem.IsMacOS())
+        {
+            Assert.True(DohBypassDetector.IsCheckSupported);
+            Assert.Equal(DohBypassDetector.MacOSNoBypassText, DohBypassDetector.NoBypassTextForCurrentPlatform);
+            Assert.DoesNotContain("Windows", DohBypassDetector.NoBypassTextForCurrentPlatform, StringComparison.Ordinal);
+        }
         else
         {
             Assert.False(DohBypassDetector.IsCheckSupported);

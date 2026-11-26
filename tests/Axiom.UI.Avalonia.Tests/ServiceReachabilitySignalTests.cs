@@ -29,6 +29,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -49,6 +51,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -59,6 +62,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -79,6 +84,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -89,6 +95,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -106,6 +114,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -116,6 +125,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -145,6 +156,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -155,6 +167,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient { Failure = Offline() };
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -175,6 +189,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -185,6 +200,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient { FilterState = FilterEnforcementState.Pending };
         var shell = NewShell(client, UiMode.Simple);
         try
@@ -207,6 +224,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -217,6 +235,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Simple);
         try
@@ -239,6 +259,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -249,6 +270,8 @@ public sealed class ServiceReachabilitySignalTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client, UiMode.Advanced);
         try
@@ -280,6 +303,7 @@ public sealed class ServiceReachabilitySignalTests
         {
             shell.Dispose();
         }
+        });
     }
 
     private static void AssertAllUnknown(ShellViewModel shell)

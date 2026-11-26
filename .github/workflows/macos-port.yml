@@ -56,8 +56,8 @@ jobs:
         run: |
           # macOS Unix domain socket paths are limited to 104 characters. The GitHub
           # runner temp path is longer than that, so point Path.GetTempPath() at /tmp.
-          mkdir -p /tmp/axiom-ci
-          echo "TMPDIR=/tmp/axiom-ci" >> "$GITHUB_ENV"
+          mkdir -p /private/tmp/axiom-ci
+          echo "TMPDIR=/private/tmp/axiom-ci" >> "$GITHUB_ENV"
 
       - name: Build the solution
         run: dotnet build Axiom.sln -c Release -p:EnableWindowsTargeting=true
@@ -79,14 +79,16 @@ jobs:
             --logger "trx;LogFileName=macos-desktop.trx" \
             --results-directory "${{ runner.temp }}/test-results"
 
-      - name: Portable core tests (Contracts, MCP, Persistence, Presentation)
+      - name: Portable core, Unix and service-hosting tests
         run: |
           status=0
           for project in \
             tests/Axiom.Contracts.Tests/Axiom.Contracts.Tests.csproj \
             tests/Axiom.McpServer.Tests/Axiom.McpServer.Tests.csproj \
             tests/Axiom.Persistence.Tests/Axiom.Persistence.Tests.csproj \
-            tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj; do
+            tests/Axiom.Presentation.Tests/Axiom.Presentation.Tests.csproj \
+            tests/Axiom.Infrastructure.Unix.Tests/Axiom.Infrastructure.Unix.Tests.csproj \
+            tests/Axiom.Service.Hosting.Tests/Axiom.Service.Hosting.Tests.csproj; do
             dotnet test "$project" \
               -c Release --no-build \
               --logger "trx;LogFileName=$(basename "$project" .csproj).trx" \
@@ -101,13 +103,26 @@ jobs:
             --logger "trx;LogFileName=avalonia-ui.trx" \
             --results-directory "${{ runner.temp }}/test-results"
 
-      - name: Core tests (known non-Windows failures, informational)
-        continue-on-error: true
+      - name: Core tests
         run: |
           dotnet test tests/Axiom.Core.Tests/Axiom.Core.Tests.csproj \
             -c Release --no-build \
-            --logger "trx;LogFileName=core-informational.trx" \
+            --logger "trx;LogFileName=core.trx" \
             --results-directory "${{ runner.temp }}/test-results"
+
+      - name: Package, sign and verify the app bundle
+        run: |
+          arch=x86_64
+          rid=osx-x64
+          if [ "$(uname -m)" = "arm64" ]; then arch=arm64; rid=osx-arm64; fi
+          mkdir -p "$RUNNER_TEMP/axiom"
+          export TMPDIR="$RUNNER_TEMP/axiom"
+          AXIOM_BUILD=26 bash scripts/macos/package-app.sh "$rid" --build-filter
+          app="build/macos/$rid/Axiom.app"
+          codesign --verify --deep --strict "$app"
+          test -d "$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension"
+          test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = "$arch"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = 26
 
       - name: Upload test results
         if: always()

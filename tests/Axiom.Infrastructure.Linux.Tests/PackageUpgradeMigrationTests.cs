@@ -23,6 +23,12 @@ public sealed class PackageUpgradeMigrationTests
     [Fact]
     public void Configure_disarms_the_replaced_package_script_and_runs_the_bundled_daemon()
     {
+        if (!OperatingSystem.IsLinux())
+        {
+            // Exercises the Linux postinst and systemd install path.
+            return;
+        }
+
         using var sandbox = new Sandbox(OldPostrm);
 
         var result = sandbox.Run("configure");

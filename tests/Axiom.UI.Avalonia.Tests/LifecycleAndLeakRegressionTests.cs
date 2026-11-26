@@ -271,6 +271,12 @@ public sealed class LifecycleAndLeakRegressionTests
     [Fact]
     public async Task Privacy_shield_cancel_uac_does_not_leave_auto_point_adapter_dns_enabled()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // UAC adapter-DNS helper path; on Linux/macOS the daemon owns system DNS.
+            return;
+        }
+
         TestAppBuilder.StartUiThread();
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {

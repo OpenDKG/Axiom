@@ -23,9 +23,11 @@ public sealed class ProtectionLampTests
             return; // Windows keeps its existing header behaviour.
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new MutableProtectionClient { Enabled = true };
         var shell = new ShellViewModel(
-            new EmptySource(),
+            new ServiceSnapshotSource(client),
             new NoopTimerFactory(),
             serviceClient: client,
             uiModeService: new FixedUiModeService(UiMode.Simple));
@@ -70,6 +72,7 @@ public sealed class ProtectionLampTests
         {
             shell.Dispose();
         }
+        });
     }
 
     private sealed class MutableProtectionClient : IServiceRequestClient
@@ -104,22 +107,6 @@ public sealed class ProtectionLampTests
             };
             return Task.FromResult((T)result);
         }
-    }
-
-    private sealed class EmptySource : IConnectionSnapshotSource
-    {
-        public string Name => "test";
-
-        public TimeSpan PollInterval => TimeSpan.FromSeconds(1);
-
-        public Task<ConnectionSnapshot> CaptureAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new ConnectionSnapshot
-            {
-                CapturedUtc = DateTimeOffset.UtcNow,
-                Connections = [],
-                ProcessCount = 0,
-                SourceName = "test",
-            });
     }
 
     private sealed class NoopTimerFactory : IUiTimerFactory
