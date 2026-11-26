@@ -10,6 +10,10 @@ public static class AgentCommandGuard
 {
     public const string PythonHelpers = """
         _MAX_SHELL_UNWRAP_DEPTH = 8
+        _SHELL_WRAPPERS = ("cmd", "bash", "sh", "zsh", "powershell", "pwsh", "python", "python3")
+        _SHELL_COMMAND_FLAGS = ("/c", "-c", "-command")
+        # Stands for a nested command that was not inspected. _check_command_safety blocks on it.
+        _UNINSPECTABLE_SEGMENT = "__axiom_uninspectable_nested_command__"
 
 
         def _split_shell_segments(command: str, _depth: int = 0) -> list:
@@ -66,20 +70,35 @@ public static class AgentCommandGuard
             expanded = []
             for seg in segments:
                 expanded.append(seg)
-                if _depth >= _MAX_SHELL_UNWRAP_DEPTH:
-                    continue
                 tokens = _tokenize_segment(seg)
                 if len(tokens) >= 3:
                     head = os.path.basename(tokens[0][0].lower()).removesuffix(".exe")
-                    if head in ("cmd", "bash", "sh", "zsh", "powershell", "pwsh", "python", "python3"):
+                    if head in _SHELL_WRAPPERS:
                         for idx in range(1, len(tokens) - 1):
                             flag = tokens[idx][0].lower()
-                            if flag in ("/c", "-c", "-command") and not tokens[idx][1]:
+                            if flag in _SHELL_COMMAND_FLAGS and not tokens[idx][1]:
                                 inner = tokens[idx + 1][0]
                                 if inner:
-                                    expanded.extend(_split_shell_segments(inner, _depth + 1))
+                                    # Fail closed: at the depth limit, or when the inner command
+                                    # cannot be followed, nothing below this level gets checked.
+                                    if _depth >= _MAX_SHELL_UNWRAP_DEPTH or _nesting_is_lost(inner, tokens[idx + 2:]):
+                                        expanded.append(_UNINSPECTABLE_SEGMENT)
+                                    else:
+                                        expanded.extend(_split_shell_segments(inner, _depth + 1))
                                 break
             return expanded
+
+
+        def _nesting_is_lost(inner: str, rest) -> bool:
+            # The tokenizer does not follow backslash-escaped or reused quotes. Then the argument
+            # to unwrap stops at the next shell's name, and that shell's command lies in the rest.
+            def bare(token: str) -> str:
+                return token.lower().strip("\\\"'^")
+
+            words = inner.split()
+            if not words or os.path.basename(bare(words[-1])).removesuffix(".exe") not in _SHELL_WRAPPERS:
+                return False
+            return any(bare(token) in _SHELL_COMMAND_FLAGS for token, _ in rest)
 
 
         def _tokenize_segment(segment: str) -> list:
@@ -871,6 +890,8 @@ public static class AgentCommandGuard
                     return ("protected-path", "Blackbox blocked this call: it accesses a protected path.")
             if not command_text:
                 return None
+            if _UNINSPECTABLE_SEGMENT in _split_shell_segments(command_text):
+                return ("nesting", "Blackbox blocked this call: it nests shell commands more deeply than the guard can inspect.")
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):

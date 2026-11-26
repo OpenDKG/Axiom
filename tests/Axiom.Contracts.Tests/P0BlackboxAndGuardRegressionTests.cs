@@ -131,6 +131,80 @@ print("PY_GUARD_OK")
         Assert.Contains("PY_GUARD_OK", stdout, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Python_guard_blocks_shell_nesting_it_cannot_inspect()
+    {
+        var pythonExe = FindPython();
+        if (pythonExe is null)
+        {
+            return;
+        }
+
+        var scriptPath = Path.Combine(_tempDir, "test_nesting.py");
+        var script = "import os\nfrom pathlib import Path\n\n"
+            + AgentCommandGuard.PythonHelpers.Replace("\r\n", "\n", StringComparison.Ordinal)
+            + """
+
+protected = ["/home/x/protected"]
+
+def escaped(command, levels, wrapper):
+    for _ in range(levels):
+        command = wrapper + ' "' + command.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return command
+
+def unescaped(command, levels, wrapper):
+    for _ in range(levels):
+        command = f'{wrapper} "{command}"'
+    return command
+
+def verdict(command):
+    result = _check_command_safety({"command": command}, protected)
+    return result[0] if result else "allowed"
+
+failures = []
+for leaf, wrapper in (("rm -rf /home/x/protected", "sh -c"), ("del /f /q /home/x/protected", "cmd /c")):
+    for nest in (escaped, unescaped):
+        for levels in (3, 9):
+            got = verdict(nest(leaf, levels, wrapper))
+            if got != "nesting":
+                failures.append(f"{nest.__name__} {wrapper} x{levels}: {got}")
+        for levels in (1, 2):
+            got = verdict(nest(leaf, levels, wrapper))
+            if got != "delete":
+                failures.append(f"{nest.__name__} {wrapper} x{levels}: {got}")
+
+for command in ('bash -c "echo hi"', 'grep -r "bash -c" .', 'echo "sh -c sh -c"',
+                "sh -c 'sh -c \"echo ok\"'", 'bash -c bash', 'sh -c a && sh -c b && sh -c c'):
+    if verdict(command) != "allowed":
+        failures.append(f"false positive: {command}: {verdict(command)}")
+
+# The recursion limit itself fails closed.
+if _UNINSPECTABLE_SEGMENT not in _split_shell_segments('sh -c "echo ok"', _MAX_SHELL_UNWRAP_DEPTH):
+    failures.append("no block marker at the depth limit")
+
+assert not failures, "\n".join(failures)
+print("PY_NESTING_OK")
+""";
+        await File.WriteAllTextAsync(scriptPath, script, Encoding.UTF8);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add(scriptPath);
+        using var proc = Process.Start(psi)!;
+        var stdout = await proc.StandardOutput.ReadToEndAsync();
+        var stderr = await proc.StandardError.ReadToEndAsync();
+        await proc.WaitForExitAsync();
+
+        Assert.True(proc.ExitCode == 0, $"python failed ({proc.ExitCode}): {stderr}\n{stdout}");
+        Assert.Contains("PY_NESTING_OK", stdout, StringComparison.Ordinal);
+    }
+
     private static string? FindPython()
     {
         foreach (var candidate in new[] { "python3", "python" })
