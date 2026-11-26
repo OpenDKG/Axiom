@@ -781,18 +781,20 @@ public static class AgentCommandGuard
 
 
         def _expand_command(command: str):
-            # Every segment of a command and of the commands nested in it, and inline interpreter
-            # code. Each check asks again, so recent results are kept.
+            # Every segment of a command and of the commands nested in it, inline interpreter code, and
+            # the command texts themselves. Each check asks again, so recent results are kept.
             if len(command) > _MAX_COMMAND_LENGTH:
-                return (_UNINSPECTABLE_SEGMENT,), ()
+                return (_UNINSPECTABLE_SEGMENT,), (), ()
             cached = _expansions.get(command)
             if cached is None:
                 found = []
                 code = []
-                _collect_segments(command, 0, False, found, code, {})
+                seen = {}
+                _collect_segments(command, 0, False, found, code, seen)
                 if len(_expansions) >= 64:
                     _expansions.clear()
-                cached = _expansions[command] = (tuple(dict.fromkeys(found)), tuple(code))
+                scripts = dict.fromkeys(text for text, _, strict in seen if strict)
+                cached = _expansions[command] = (tuple(dict.fromkeys(found)), tuple(code), tuple(scripts))
             return cached
 
 
@@ -1321,8 +1323,32 @@ public static class AgentCommandGuard
             return []
 
 
+        def _pipes_protected_into(command: str, protected, changers) -> bool:
+            # find, ls or echo naming a protected path, piped to xargs and one of the changers.
+            for script in _expand_command(command)[2]:
+                if "xargs" not in script:
+                    continue
+                for pipeline in _pipelines(script):
+                    sources = []
+                    for words in pipeline:
+                        name, arguments = _stage_command(words)
+                        if name in changers and any(_command_name(word) == "xargs" for word in words) and any(
+                                _text_hits_protected(source, protected) for source in dict.fromkeys(sources)):
+                            return True
+                        if name == "find":
+                            for word in arguments:
+                                if word.startswith("-") or word in ("(", "!"):
+                                    break
+                                sources.append(word)
+                        elif name in ("ls", "echo", "printf"):
+                            sources.extend(word for word in arguments if not word.startswith("-"))
+            return False
+
+
         def _changes_protected_permissions(command: str, protected) -> bool:
             changers = ("chmod", "chown", "chgrp", "chattr", "setfacl")
+            if _pipes_protected_into(command, protected, changers):
+                return True
             for segment in _split_shell_segments(command):
                 if segment == _UNINSPECTABLE_SEGMENT:
                     continue
@@ -1343,17 +1369,140 @@ public static class AgentCommandGuard
             return False
 
 
+        def _names_guard(word: str) -> bool:
+            # True for a word that names one of Axiom's processes or services, not a path through it.
+            import re as _re
+            return _re.search(
+                r"(?<![a-z0-9_-])(?:com\.axiom\.service|axiomd|axiom(?:[.-]?(?:service|desktop|blackbox)"
+                r"(?:\.[a-z0-9.]+)?|\.exe|\*)?)(?![a-z0-9_/\\-])", word) is not None
+
+
+        def _stage_command(words):
+            # (command name, arguments) of one pipeline stage, past shell keywords, grouping and prefixes.
+            words = list(words)
+            while words and words[0] in ("do", "then", "else", "elif", "while", "until", "if", "!", "{", "("):
+                words.pop(0)
+            if words:
+                words[0] = words[0].lstrip("({")
+            rest = words[_strip_prefixes([(word, False) for word in words])[0]:]
+            return (_command_name(rest[0]), rest[1:]) if rest else ("", [])
+
+
+        def _pipelines(script: str, depth: int = 0):
+            # The pipelines of a script in order, each a list of stages of lowercase words. A $(...) or
+            # backtick body becomes a mark that says whether it looks up one of Axiom's processes.
+            for body in _substitutions(script, backticks=True)[0]:
+                looked_up = depth < _MAX_SHELL_UNWRAP_DEPTH and _looks_up_guard(body, depth + 1)
+                mark = "__axiom_guard_pid__" if looked_up else "__axiom_other_value__"
+                for spelled in ("$(" + body + ")", "`" + body + "`"):
+                    if spelled in script:
+                        script = script.replace(spelled, mark, 1)
+                        break
+            pipeline = []
+            for piped, segment in _split_stages(script, True):
+                if pipeline and not piped:
+                    yield pipeline
+                    pipeline = []
+                pipeline.append([word.lower() for word, _ in _tokenize_posix(segment)])
+            if pipeline:
+                yield pipeline
+
+
+        def _stage_looks_up_guard(name: str, arguments, after_ps: bool) -> bool:
+            if not any(_names_guard(word) for word in arguments):
+                return False
+            if name in ("pgrep", "pidof", "get-process", "gps"):
+                return True
+            if name == "grep":
+                return after_ps
+            return name in ("cat", "head") and any(word.rstrip(")").endswith(".pid") for word in arguments)
+
+
+        def _looks_up_guard(script: str, depth: int) -> bool:
+            for pipeline in _pipelines(script, depth):
+                after_ps = False
+                for words in pipeline:
+                    name, arguments = _stage_command(words)
+                    if "__axiom_guard_pid__" in " ".join(words) or _stage_looks_up_guard(name, arguments, after_ps):
+                        return True
+                    after_ps = after_ps or name == "ps"
+            return False
+
+
+        def _only_probes(arguments) -> bool:
+            # Signal 0 only asks whether a process exists.
+            return arguments[:1] in (["-0"], ["--signal=0"]) or arguments[:2] in (
+                ["-s", "0"], ["-n", "0"], ["--signal", "0"])
+
+
+        def _kills_a_process(name: str, arguments) -> bool:
+            killers = ("kill", "pkill", "killall", "stop-process", "spps", "taskkill")
+            if name in killers:
+                return not _only_probes(arguments)
+            if name in ("foreach-object", "foreach", "%") or name in _POSIX_SHELLS + _POWERSHELLS:
+                # A script block or inline shell that runs the kill itself.
+                return any(token.strip("{}();'\"") in killers for word in arguments for token in word.split())
+            return False
+
+
+        def _follow_values(words, name: str, arguments, fed: bool, tainted: set) -> None:
+            # Records which variables now hold a looked-up Axiom process.
+            import re as _re
+
+            def holds(part) -> bool:
+                text = " ".join(part)
+                return "__axiom_guard_pid__" in text or any(
+                    variable in tainted for variable in _re.findall(r"\$\{?([a-z_]\w*)", text))
+
+            def assign(variable: str, value: bool) -> None:
+                if value:
+                    tainted.add(variable)
+                else:
+                    tainted.discard(variable)
+
+            for word in words:
+                match = _re.fullmatch(r"([a-z_]\w*)=(.*)", word)
+                if match:
+                    assign(match.group(1), holds([match.group(2)]))
+            # PowerShell: $p = Get-Process ...
+            spelled = _re.fullmatch(r"\$([a-z_]\w*)(=.*)?", words[0]) if words else None
+            if spelled and (spelled.group(2) or words[1:2] == ["="]):
+                value = ([spelled.group(2)[1:]] if spelled.group(2) else []) + words[1:]
+                value = [word for word in value if word not in ("", "=")]
+                inner, inner_arguments = _stage_command(value)
+                assign(spelled.group(1), holds(value) or _stage_looks_up_guard(inner, inner_arguments, False))
+            if name == "for" and len(arguments) > 2 and arguments[1] == "in":
+                assign(arguments[0], holds(arguments[2:]))
+            if name == "read" and fed:
+                tainted.update(word for word in arguments if not word.startswith("-"))
+
+
+        def _feeds_guard_into_kill(command: str) -> bool:
+            # A looked-up Axiom process reaches a kill through its pipeline, a substitution or a variable.
+            import re as _re
+            for script in _expand_command(command)[2]:
+                if "axiom" not in script.lower():
+                    continue
+                tainted = set()
+                for pipeline in _pipelines(script):
+                    fed = False
+                    after_ps = False
+                    for words in pipeline:
+                        name, arguments = _stage_command(words)
+                        text = " ".join(words)
+                        carries = "__axiom_guard_pid__" in text or any(
+                            variable in tainted for variable in _re.findall(r"\$\{?([a-z_]\w*)", text))
+                        if _kills_a_process(name, arguments) and (fed or carries):
+                            return True
+                        looks_up = carries or _stage_looks_up_guard(name, arguments, after_ps)
+                        fed = fed or looks_up
+                        after_ps = after_ps or name == "ps"
+                        _follow_values(words, name, arguments, fed, tainted)
+            return False
+
+
         def _stops_guard_process(command: str) -> bool:
             # Calls that kill, disable or mask Axiom's own processes and services.
-            import re as _re
-            guard = _re.compile(
-                r"(?<![a-z0-9_-])(?:com\.axiom\.service|axiomd|axiom(?:[.-]?(?:service|desktop|blackbox)"
-                r"(?:\.[a-z0-9.]+)?|\.exe|\*)?)(?![a-z0-9_/\\-])")
-            killers = ("kill", "pkill", "killall", "stop-process", "spps", "taskkill")
-            kills = False
-            finds_guard = False
-            searches_guard = False
-            lists_processes = False
             for segment in _split_shell_segments(command):
                 for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
                     words = [word.lower() for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
@@ -1362,24 +1511,21 @@ public static class AgentCommandGuard
                     # $(pgrep ...) and `pidof ...` are also read as segments of their own.
                     name = _command_name(words[0].lstrip("$(`"))
                     arguments = words[1:]
-                    named = any(guard.search(word) for word in arguments)
-                    kills = kills or name in killers
-                    lists_processes = lists_processes or name == "ps"
-                    if named:
-                        if name in ("kill", "pkill", "killall", "stop-process", "spps"):
-                            return True
-                        if name == "wmic" and "process" in arguments and (
-                                "delete" in arguments or "terminate" in arguments):
-                            return True
-                        if name == "sc" and "config" in arguments and any(
-                                word.startswith("start=") for word in arguments) and "disabled" in " ".join(arguments):
-                            return True
-                        if name == "systemctl" and any(word in ("stop", "disable", "mask", "kill") for word in arguments):
-                            return True
-                        finds_guard = finds_guard or name in ("pgrep", "pidof", "get-process", "gps")
-                        searches_guard = searches_guard or name == "grep"
-            # The process is looked up in one place and killed in another.
-            return kills and (finds_guard or (searches_guard and lists_processes))
+                    if not any(_names_guard(word) for word in arguments):
+                        continue
+                    if name in ("kill", "pkill", "killall", "stop-process", "spps") and not _only_probes(arguments):
+                        return True
+                    if name == "wmic" and "process" in arguments and (
+                            "delete" in arguments or "terminate" in arguments):
+                        return True
+                    if name == "sc" and "config" in arguments and any(
+                            word.startswith("start=") for word in arguments) and "disabled" in " ".join(arguments):
+                        return True
+                    if name == "systemctl" and any(word in ("stop", "disable", "mask", "kill") for word in arguments):
+                        return True
+                    if name == "service" and "stop" in arguments:
+                        return True
+            return _feeds_guard_into_kill(command)
 
 
         def _written_paths(words) -> list:

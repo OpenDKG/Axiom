@@ -42,6 +42,11 @@ commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and inte
 files are out of scope. A delete whose command names no protected path, such as
 `find / -name id_rsa -execdir rm {} \;`, is not detected.
 
+Also not detected: in-place edits with `awk -i inplace`, `ruby -pi` or `ex`; stopping Axiom's process
+by a numeric ID, or after finding it with a pattern written to avoid its name (`grep [a]xiomd`);
+changing the service start type with `reg add …\Services\Axiom … Start=4`; CIM or WMI `Terminate`
+calls and `.Kill()`; and `systemctl edit` or `systemctl isolate`.
+
 ## Why Blackbox and DKG are part of Axiom
 
 **Agent Blackbox** is the decision engine: a portable, local guard with a ruleset, hooks for many
