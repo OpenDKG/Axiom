@@ -148,6 +148,68 @@ public sealed class OptionalModuleInstallerTests
     }
 
     [Fact]
+    public void Blackbox_script_installs_python_packages_only_from_the_hash_lock()
+    {
+        var buildBlackbox = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildBlackboxScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var script = (string)buildBlackbox.Invoke(new OptionalModuleInstaller(), null)!;
+
+        var installs = script.Split('\n')
+            .Where(line => line.Contains("-m pip install", StringComparison.Ordinal))
+            .Select(line => line.Trim())
+            .ToArray();
+
+        Assert.Equal(
+            ["& $venv -m pip install --disable-pip-version-check --require-hashes --no-deps -r $requirements"],
+            installs);
+        Assert.Contains("$requirements = Join-Path $dir 'axiom-requirements.lock.txt'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blackbox_dependency_repair_arguments_name_no_packages()
+    {
+        var arguments = OptionalModuleInstaller.BuildBlackboxPipArguments(@"C:\Users\a b\lock.txt");
+
+        Assert.Equal(
+            "-m pip install --disable-pip-version-check --quiet --require-hashes --no-deps -r \"C:\\Users\\a b\\lock.txt\"",
+            arguments);
+    }
+
+    [Fact]
+    public void Blackbox_requirements_are_exact_versions_with_hashes()
+    {
+        using var stream = typeof(OptionalModuleInstaller).Assembly
+            .GetManifestResourceStream(OptionalModuleInstaller.BlackboxRequirementsResource);
+        Assert.NotNull(stream);
+        using var reader = new StreamReader(stream);
+        var text = reader.ReadToEnd().Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\\\n", " ", StringComparison.Ordinal); // join continued lines
+
+        var requirements = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .ToArray();
+
+        Assert.All(requirements, line =>
+        {
+            Assert.Matches(@"^[a-z0-9-]+==[0-9][0-9a-z.]*( ;[^-]*)?\s+--hash=sha256:[0-9a-f]{64}", line);
+        });
+        var names = requirements.Select(line => line[..line.IndexOf("==", StringComparison.Ordinal)]).ToHashSet();
+        foreach (var required in new[]
+                 {
+                     "cryptography", "cffi", "psutil", "fastapi", "uvicorn", "ruamel-yaml", "pyyaml",
+                     "python-dotenv", "rich", "aiohttp", "pywin32",
+                 })
+        {
+            Assert.Contains(required, names);
+        }
+
+        Assert.Single(requirements, line => line.StartsWith("pywin32==", StringComparison.Ordinal) &&
+                                            line.Contains("sys_platform == 'win32'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Blackbox_dashboard_launcher_guards_null_stdio_for_pythonw()
     {
         Assert.Contains("if sys.stdout is None:", OptionalModuleInstaller.BlackboxDashboardLauncherCode, StringComparison.Ordinal);
