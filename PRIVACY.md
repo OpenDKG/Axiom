@@ -16,7 +16,8 @@ Axiom is a local-first network monitor, firewall policy manager, and AI coding a
 
 Core local monitoring operates without sending telemetry. Outbound network connections occur for the features below. Items 2 to 4 are active without a separate opt-in.
 
-1. **Blackbox and OriginTrail DKG Threat Sharing (Strict Opt-In / Off by Default)**
+1. **Automatic Threat Sharing via Blackbox and OriginTrail DKG (Strict Opt-In / Sharing Off by Default)**
+   - "Off by default" here applies to sharing only. A default Windows Setup still installs and starts Blackbox and a DKG node (item 4).
    - Automatic community threat sharing is **unchecked (off) by default** in both Setup and First-Run setup. You must explicitly opt in (or enable it later on the Agents page / `--enable-automatic-threat-sharing`) before Axiom publishes indicators.
    - Shared sightings contain sanitized indicators and structured threat metadata; local custom rules and local credentials are excluded.
    - Public CC0 OriginTrail DKG replicas may keep published sightings even after retraction.
@@ -34,6 +35,7 @@ Core local monitoring operates without sending telemetry. Outbound network conne
    - In a Windows Optional install you choose these yourself.
    - **Privacy Shield DNS:** turned on with the Strict profile and all catalogued blocklist sources. Axiom **points your network adapters' DNS at its own local resolver (`127.0.0.1`)**. Allowed DNS queries are forwarded over DNS-over-HTTPS to **both default upstreams, Cloudflare (`1.1.1.1`) and Quad9 (`9.9.9.9`)**, unless you change them. Blocklists are downloaded from their publishers and updated automatically every 24 hours.
    - **Community Feed:** Setup saves the feed as enabled, with its auto-sync setting on, using the recommended bundle. When the desktop app starts with the feed enabled, it downloads the lists in that bundle over HTTPS: a bundled offline starter list, a list from `botvrij.eu`, and a list hosted in a personal repository on GitHub. These hosts receive standard request metadata such as your IP address.
+   - **DKG node and Blackbox (Complete install only):** Complete is the default mode of Windows Setup, and it installs and starts Blackbox and an OriginTrail DKG node. If Blackbox reports its own DKG node reachable, Setup does not add a second one. This causes network traffic by default: the DKG node package is downloaded from npm; the Blackbox installer is downloaded from Umanitek (`https://blackbox-w.umanitek.ai`) and run only if it matches a pinned hash (that third-party installer may download more); Blackbox's Python packages are downloaded from PyPI; Setup may install missing prerequisites with winget; and a running DKG node exchanges traffic with network peers (Axiom sets up its own node for the testnet). These hosts and peers receive standard network metadata such as your IP address. A Light install skips both. On Linux and macOS, the one-command installer defaults to Light and installs both with `--complete`. Installing them does not turn on automatic threat sharing (item 1).
 
 5. **Opt-in External Integrations (Off by Default)**
    - **VirusTotal (`VT Check`):** Submits only the SHA-256 hash of a file you explicitly select using your own API key; files are never uploaded.

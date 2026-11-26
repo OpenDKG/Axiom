@@ -94,8 +94,9 @@ Axiom is a local-first Windows network monitor, firewall policy manager and opti
 protection console. It shows which applications use the network, which endpoints they talk to, and what
 happened over time. It manages only its own rules in the built-in Windows Firewall; Windows remains
 the enforcement authority. Core functions need no account or cloud connection; Axiom has no advertising or its own analytics
-telemetry. Optional AI, reputation, Blackbox and DKG features can contact external services or
-network peers when deliberately enabled.
+telemetry. Optional AI and reputation features can contact external services when you enable them.
+Blackbox and DKG can contact external services and network peers once installed, and the default
+Windows Setup (Complete) installs and starts both.
 
 Axiom brings together four surfaces:
 
@@ -324,7 +325,7 @@ OriginTrail's Decentralized Knowledge Graph (DKG) is an optional knowledge and p
 is not a firewall engine and is not required for local monitoring or enforcement.
 
 - Core Windows Firewall policy and locally stored DNS lists do not require a wallet, TRAC, token, live DKG node or VM publication to work.
-- An optional local DKG node and Blackbox dashboard can be installed/started explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
+- The local DKG node and Blackbox dashboard are optional: the default Windows Setup (Complete) installs and starts them, and otherwise you can install/start them explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
 - Axiom does not yet perform general verified/community graph lookups on every connection or automatically turn graph sightings into Windows Firewall rules.
 - The user may explicitly submit normalized threat reports through Blackbox, but Axiom does not directly publish paid VM assets or assume TRAC/gas costs. See [Threat intelligence](docs/THREAT_INTELLIGENCE.md).
 - DKG is never on the per-flow Windows Firewall enforcement path.

@@ -60,6 +60,34 @@ public sealed class PrivacyDocConsistencyTests
     }
 
     [Fact]
+    public void Dkg_node_and_blackbox_installed_by_default_are_disclosed_as_on_by_default()
+    {
+        // The Windows Setup project has no test project, so its default is read from the source.
+        var options = Read("src", "Axiom.Setup", "SetupOptions.cs");
+        Assert.Contains("var mode = SetupInstallMode.Complete;", options, StringComparison.Ordinal);
+        foreach (var module in new[] { "Blackbox", "Dkg" })
+        {
+            Assert.Contains(
+                $"public bool EffectiveInstall{module} =>\n        EffectiveMode == SetupInstallMode.Complete ||",
+                options,
+                StringComparison.Ordinal);
+        }
+
+        var onByDefault = Section(Privacy, "On by Default After a Complete or Light Install**");
+        Assert.Contains("**DKG node and Blackbox (Complete install only):**", onByDefault, StringComparison.Ordinal);
+        Assert.Contains("installs and starts Blackbox and an OriginTrail DKG node", onByDefault, StringComparison.Ordinal);
+        Assert.Contains("npm", onByDefault, StringComparison.Ordinal);
+        Assert.Contains("PyPI", onByDefault, StringComparison.Ordinal);
+        Assert.Contains("network peers", onByDefault, StringComparison.Ordinal);
+
+        // Only the sharing is off by default; no heading may say so about the node or Blackbox itself.
+        var sharing = Assert.Single(
+            Items(Privacy), item => FirstLine(item).Contains("OriginTrail DKG", StringComparison.Ordinal));
+        Assert.EndsWith("Sharing Off by Default)**", FirstLine(sharing), StringComparison.Ordinal);
+        Assert.DoesNotContain("when deliberately enabled", Readme, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Update_check_default_and_interval_match_the_product()
     {
         var missing = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());

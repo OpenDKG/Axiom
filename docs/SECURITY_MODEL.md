@@ -10,8 +10,8 @@
 | Axiom service | Local Windows host (installed Shield service: LocalSystem; portable monitoring: per-user service/process) | Observations, bounded stores and privileged Axiom rule coordinator | Service validates typed IPC; Windows Firewall does actual enforcement |
 | Windows Firewall | Windows OS | Applies persistent rules | Axiom manages only its own named rules |
 | Privacy Shield | Local Axiom service | Loopback DNS resolution and blocklists | DNS filtering only; it is not an inline network firewall |
-| Blackbox guard/dashboard | Optional local third-party module | Agent hook decisions, audit, graph cache, reporter integration | Mode and functioning hook/guard determine protection |
-| DKG node | Optional separate process | Network sync and external knowledge | May contact peers; local status does not prove sync |
+| Blackbox guard/dashboard | Optional local third-party module; installed by default in Windows Setup (Complete) | Agent hook decisions, audit, graph cache, reporter integration | Mode and functioning hook/guard determine protection |
+| DKG node | Optional separate process; installed and started by default in Windows Setup (Complete) | Network sync and external knowledge | May contact peers; local status does not prove sync |
 | AI provider / VirusTotal | Opt-in third-party endpoints | External inference or reputation evidence | May transmit bounded data upon user's explicit configuration/action |
 | Community feed hosts | Third-party endpoints; the feed is enabled by a Complete or Light install | Reputation lists | Downloads when the desktop app starts with the feed enabled |
 | Read-only MCP adapter | Local stdio process | Read-only queries through Axiom pipe | No arbitrary file, shell, process kill, OS-rule write or generic execution tool |
@@ -52,7 +52,7 @@ Axiom's own database is not generally encrypted at rest. File ACLs, restricted s
 | AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default; no provider endpoint or model configured by default | Evidence about current connections, including process command lines, local IP addresses and subnets, gateway addresses and the DNS suffix (full list in [PRIVACY.md](../PRIVACY.md)) | Remote provider sees the evidence. Path redaction covers the program path field only; command-line sanitising is pattern-based |
 | VirusTotal hash lookup | Opt-in API key and user checks hash | File SHA-256, not the file bytes | Provider can correlate lookups |
 | Community feed | **Enabled by a Complete or Light install** with the recommended bundle; fetched when the desktop app starts, and on *Refresh feed* | HTTPS fetch from each list host; optional bearer token for a configured feed | The bundle holds an offline starter list plus remote lists (`botvrij.eu` and a personal GitHub repository) |
-| DKG/Blackbox installation and sync | User elects to install/start/enable integration | Network package downloads, DKG peer traffic and sync metadata | Localhost API reads are local, but the underlying node is networked |
+| DKG/Blackbox installation and sync | Installed and started by a Complete install, the default in Windows Setup; otherwise the user elects to install/start/enable the integration | Network package downloads, DKG peer traffic and sync metadata | Localhost API reads are local, but the underlying node is networked |
 | Community IOC report | Explicit **opt-in** consent (`off` by default) and manual or approved sharing | Signed, normalized threat indicator and reporter identity | Automatic sharing starts unchecked in Setup and First-Run setup |
 | VM publication | Not implemented directly in Axiom | None by Axiom | Any TRAC/gas-funded publishing belongs to an external, explicitly approved integration |
 
