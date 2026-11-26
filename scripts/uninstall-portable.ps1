@@ -112,6 +112,19 @@ foreach ($file in $installedFiles) {
     }
 }
 
+# Only the license files the installer adds; anything else in the folder is left alone.
+$licenseDir = Join-Path $InstallDir "licenses"
+foreach ($document in "LICENSE", "NOTICE", "AUTHORS.md", "THIRD_PARTY_NOTICES.md",
+    "dotnet\DOTNET-LIBRARY-LICENSE.txt", "dotnet\LICENSE.TXT", "dotnet\THIRD-PARTY-NOTICES.TXT") {
+    $licenseFile = Join-Path $licenseDir $document
+    if (Test-Path -LiteralPath $licenseFile) { Remove-SafeItem -Path $licenseFile }
+}
+foreach ($folder in (Join-Path $licenseDir "dotnet"), $licenseDir) {
+    if ((Test-Path -LiteralPath $folder) -and -not (Get-ChildItem -LiteralPath $folder -Force)) {
+        Remove-SafeItem -Path $folder
+    }
+}
+
 $communityDir = Join-Path $InstallDir "community"
 $communityFeed = Join-Path $communityDir "feed.json"
 if (Test-Path $communityFeed) {

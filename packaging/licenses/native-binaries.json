@@ -1,0 +1,14 @@
+{
+  "about": "Every native binary a Windows release may contain. scripts/verify-publish-natives.ps1 fails on a native binary that is not listed here and named in THIRD_PARTY_NOTICES.md. Review the license before adding one.",
+  "singleFileHost": {
+    "notice": ".NET single-file host",
+    "package": "Microsoft.NETCore.App.Host.win-x64",
+    "license": ".NET Library License"
+  },
+  "binaries": [
+    { "file": "av_libglesv2.dll", "package": "Avalonia.Angle.Windows.Natives", "license": "BSD-3-Clause" },
+    { "file": "libHarfBuzzSharp.dll", "package": "HarfBuzzSharp.NativeAssets.Win32", "license": "MIT, with third-party notices" },
+    { "file": "libSkiaSharp.dll", "package": "SkiaSharp.NativeAssets.Win32", "license": "MIT, with third-party notices" },
+    { "file": "e_sqlite3.dll", "package": "SQLitePCLRaw.lib.e_sqlite3", "license": "Apache-2.0 package; SQLite itself is public domain" }
+  ]
+}

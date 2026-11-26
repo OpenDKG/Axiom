@@ -197,6 +197,9 @@ Copy-Item (Join-Path $desktopOut "community") (Join-Path $staging "community") -
 Copy-Item (Join-Path $root "LICENSE") $staging
 Copy-Item (Join-Path $root "NOTICE") $staging
 Copy-Item (Join-Path $root "THIRD_PARTY_NOTICES.md") $staging
+& (Join-Path $PSScriptRoot "verify-publish-natives.ps1") -PublishDir $desktopOut, $serviceOut
+& (Join-Path $PSScriptRoot "collect-dotnet-licenses.ps1") -Program $desktopExe, $serviceExe `
+    -OutputDir (Join-Path $staging "licenses")
 
 $manifest = Get-Content $manifestTemplate -Raw
 $manifest = $manifest.Replace("__IDENTITY_NAME__", $IdentityName)

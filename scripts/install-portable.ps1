@@ -108,6 +108,21 @@ if (Test-Path (Join-Path $communitySource "feed.json")) {
     Copy-Item $communitySource $InstallDir -Recurse -Force
 }
 
+# Keep the license texts with the installed programs, in one folder of our own.
+$packageRoot = Split-Path -Parent $sourceItem.FullName
+$licenseTarget = Join-Path $InstallDir "licenses"
+foreach ($document in "LICENSE", "NOTICE", "AUTHORS.md", "THIRD_PARTY_NOTICES.md",
+    "licenses\dotnet\DOTNET-LIBRARY-LICENSE.txt", "licenses\dotnet\LICENSE.TXT", "licenses\dotnet\THIRD-PARTY-NOTICES.TXT") {
+    $from = Join-Path $packageRoot $document
+    if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { continue }
+    $to = Join-Path $licenseTarget ($document -replace '^licenses\\', '')
+    if (Test-ReparsePath (Split-Path -Parent $to)) {
+        throw "License folder contains a junction or symbolic link: $to"
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
+    Copy-Item -LiteralPath $from -Destination $to -Force
+}
+
 $serviceHash = $null
 $serviceTarget = Join-Path $InstallDir "Axiom.Service.exe"
 if ($hasService) {

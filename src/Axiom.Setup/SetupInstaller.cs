@@ -174,6 +174,11 @@ internal static class SetupInstaller
                     CopyFile(payload.CommunityPath, communityTarget, overwrite: true);
                 }
 
+                var licenses = BundledLegalFiles.Install(tempDir, options.InstallDir);
+                Report(licenses > 0
+                    ? $"Installed {licenses} license and notice files."
+                    : "This setup build carries no license files.");
+
                 var version = FileVersionInfo.GetVersionInfo(desktopTarget).ProductVersion ?? "0.0.0";
                 var manifest = new
                 {
@@ -819,6 +824,16 @@ internal static class SetupInstaller
                     {
                         issues.Add($"Could not remove {fileName}: {exception.Message}");
                     }
+                }
+
+                try
+                {
+                    BundledLegalFiles.Remove(options.InstallDir);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    issues.Add("Could not remove the license files: " + exception.Message);
+                    Report(issues[^1]);
                 }
 
                 var communityDir = Path.Combine(options.InstallDir, "community");
