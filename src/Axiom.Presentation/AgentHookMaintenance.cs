@@ -10,6 +10,22 @@ namespace Axiom.Presentation;
 /// </summary>
 public static class AgentHookMaintenance
 {
+    /// <summary>Runs best-effort startup maintenance off the calling thread. The task never faults.</summary>
+    public static Task RunInBackground(Action maintenance, Action<Exception>? onError = null) =>
+        Task.Run(() =>
+        {
+            try
+            {
+                maintenance();
+            }
+#pragma warning disable CA1031 // Hook maintenance is best-effort and must not stop the app.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                onError?.Invoke(exception);
+            }
+        });
+
     public static void ProvisionDetectedHooks()
     {
         var marker = Path.Combine(
