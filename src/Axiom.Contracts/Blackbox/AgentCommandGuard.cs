@@ -11,6 +11,10 @@ public static class AgentCommandGuard
     public const string PythonHelpers = """
         _MAX_SHELL_UNWRAP_DEPTH = 8
         _MAX_NESTED_COMMANDS = 512
+        # Longer commands are not parsed, and one command's nested readings share a fixed amount of
+        # parsing. Both limits fail closed.
+        _MAX_COMMAND_LENGTH = 16000
+        _MAX_SHELL_WORK = 128000
         _POSIX_SHELLS = ("sh", "bash", "zsh", "dash", "ksh", "mksh", "fish")
         _POWERSHELLS = ("powershell", "pwsh")
         _POWERSHELL_CMDLET = (r"(?:add|clear|compress|convertfrom|convertto|copy|expand|export|foreach|format|get|import|"
@@ -376,7 +380,7 @@ public static class AgentCommandGuard
                     word_start = len(out)
                     continue
                 elif ch == "\\" and i + 1 < n:
-                    word = "".join(out[word_start:])
+                    word = "".join(out[word_start:word_start + 2])
                     if not _re.match(r"[A-Za-z]:|\\\\|%|\.\\|~\\|\\", word + (segment[i:i + 2] if not word else "")):
                         out.append(segment[i + 1])
                         i += 2
@@ -386,22 +390,60 @@ public static class AgentCommandGuard
             return "".join(out)
 
 
-        def _collect_segments(command: str, depth: int, powershell: bool, found: list, code: list, seen: dict) -> None:
+        def _quotes_closed(segment: str) -> bool:
+            # True when a POSIX shell would find every quote closed.
+            quote = ""
+            i = 0
+            while i < len(segment):
+                ch = segment[i]
+                if ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                i += 1
+            return not quote
+
+
+        def _is_escaped_shell_call(segment: str) -> bool:
+            # A POSIX shell call that escapes the quotes inside its argument. Reading its backslashes
+            # as plain characters garbles it, so the POSIX reading decides what cannot be inspected.
+            if not any(pair in segment for pair in ('\\"', "\\'", "\\\\")) or not _quotes_closed(segment):
+                return False
+            tokens = _tokenize_posix(segment)
+            words = tokens[_strip_prefixes(tokens)[0]:]
+            return bool(words) and _command_name(words[0][0]) in _POSIX_SHELLS + ("eval", "su", "runuser")
+
+
+        def _collect_segments(command: str, depth: int, powershell: bool, found: list, code: list, seen: dict,
+                              strict: bool = True, spent=None) -> None:
+            # A reading that is not strict still adds what it finds for the checks, but cannot by itself
+            # report a command as uninspectable.
             import re as _re
             raw = command or ""
-            if not raw.strip() or seen.get((raw, powershell), _MAX_SHELL_UNWRAP_DEPTH + 1) <= depth:
+            key = (raw, powershell, strict)
+            if not raw.strip() or seen.get(key, _MAX_SHELL_UNWRAP_DEPTH + 1) <= depth:
                 return
-            seen[(raw, powershell)] = depth
-            if len(seen) > _MAX_NESTED_COMMANDS:
+            seen[key] = depth
+            spent = [0] if spent is None else spent
+            spent[0] += len(raw)
+            if len(seen) > _MAX_NESTED_COMMANDS or spent[0] > _MAX_SHELL_WORK:
                 found.append(_UNINSPECTABLE_SEGMENT)
                 return
 
-            def descend(inner: str, inner_powershell: bool) -> None:
+            def lost(sure: bool = True) -> None:
+                if strict and sure:
+                    found.append(_UNINSPECTABLE_SEGMENT)
+
+            def descend(inner: str, inner_powershell: bool, sure: bool = True) -> None:
                 # Fail closed at the limit: nothing below it gets checked.
                 if depth >= _MAX_SHELL_UNWRAP_DEPTH:
-                    found.append(_UNINSPECTABLE_SEGMENT)
+                    lost(sure)
                 else:
-                    _collect_segments(inner, depth + 1, inner_powershell, found, code, seen)
+                    _collect_segments(inner, depth + 1, inner_powershell, found, code, seen, strict and sure, spent)
 
             first = _tokenize_segment(raw.lstrip()[:200])
             head = _command_name(first[0][0]) if first else ""
@@ -410,7 +452,7 @@ public static class AgentCommandGuard
                 _re.fullmatch(_POWERSHELL_CMDLET, head))
             bodies, closed = _substitutions(raw, backticks=not in_powershell)
             if not closed:
-                found.append(_UNINSPECTABLE_SEGMENT)
+                lost()
             for body in bodies:
                 descend(body, in_powershell)
 
@@ -429,13 +471,16 @@ public static class AgentCommandGuard
                 before = _tokenize_posix(stages[position - 1][1])
                 literal = _literal_output([word for word, _ in before[_strip_prefixes(before)[0]:]])
                 if literal is None:
-                    found.append(_UNINSPECTABLE_SEGMENT)
+                    lost()
                     continue
                 for text in dict.fromkeys([" ".join(literal)] + literal):
                     descend(text, False)
 
             # Both readings are inspected, so neither one's blind spot hides a command.
-            for segment in dict.fromkeys(_split_operators(raw, False) + _split_operators(raw, True)):
+            posix_segments = [segment for _, segment in stages]
+            escaped = {segment for segment in posix_segments if _is_escaped_shell_call(segment)}
+            shell_segments = set(posix_segments)
+            for segment in dict.fromkeys(_split_operators(raw, False) + posix_segments):
                 found.append(segment)
                 plain = _unescape_unquoted(segment)
                 if plain != segment:
@@ -446,11 +491,14 @@ public static class AgentCommandGuard
                 if shell_like != literal:
                     readings.append(shell_like)
                 for tokens in readings:
+                    # Not sure: pieces cut out of an escaped shell argument, and its plain-backslash reading.
+                    garbled = tokens is literal and len(readings) > 1 and segment in escaped
+                    sure = (segment in shell_segments or not escaped) and not garbled
                     start, known, carried = _strip_prefixes(tokens)
                     if not known:
-                        found.append(_UNINSPECTABLE_SEGMENT)
+                        lost(sure)
                     for inner in carried:
-                        descend(inner, in_powershell)
+                        descend(inner, in_powershell, sure)
                     words = [word for word, _ in tokens[start:]]
                     if not words:
                         continue
@@ -470,46 +518,46 @@ public static class AgentCommandGuard
                         words = [command_word] + words[1:]
                     if here is not None and _reads_commands_from_stdin([words[0]] + arguments):
                         if "$" in here or "`" in here:
-                            found.append(_UNINSPECTABLE_SEGMENT)
+                            lost(sure)
                         else:
-                            descend(here, False)
+                            descend(here, False, sure)
                     if name in ("su", "runuser"):
                         argv, inner, parsed = _su_command(name, words)
                         if not parsed:
-                            found.append(_UNINSPECTABLE_SEGMENT)
+                            lost(sure)
                         if argv:
-                            descend(_join_words(argv), False)
+                            descend(_join_words(argv), False, sure)
                         if inner is not None:
-                            descend(inner, False)
+                            descend(inner, False, sure)
                         continue
                     if name == "watch":
                         inner, parsed = _watched_command(words)
                         if not parsed:
-                            found.append(_UNINSPECTABLE_SEGMENT)
-                        descend(inner, False)
+                            lost(sure)
+                        descend(inner, False, sure)
                         continue
                     if name == "find":
                         for argv in _find_exec_commands(words):
-                            descend(_join_words(argv), False)
+                            descend(_join_words(argv), False, sure)
                         continue
                     if name in ("eval", "source") or words[0] == ".":
                         if len(words) > 1:
-                            descend(" ".join(words[1:]), False)
+                            descend(" ".join(words[1:]), False, sure)
                         continue
                     if name not in _SHELL_WRAPPERS:
                         continue
                     inners, parsed, position = _wrapper_arguments(name, words)
                     if not parsed:
-                        found.append(_UNINSPECTABLE_SEGMENT)
+                        lost(sure)
                     for inner in inners:
                         if name in _CODE_INTERPRETERS:
                             code.append(inner)
                         elif _re.match(r"\s*(?:\$\(|`|\$\{?[A-Za-z_]\w*\}?\s*$)", inner):
                             # The command itself is only known at run time.
-                            found.append(_UNINSPECTABLE_SEGMENT)
+                            lost(sure)
                         if tokens is literal and '\\"' not in segment and _nesting_is_lost(inner, words[position + 1:]):
-                            found.append(_UNINSPECTABLE_SEGMENT)
-                        descend(inner, name in _POWERSHELLS)
+                            lost(sure)
+                        descend(inner, name in _POWERSHELLS, sure)
 
 
         _expansions = {}
@@ -707,6 +755,8 @@ public static class AgentCommandGuard
         def _expand_command(command: str):
             # Every segment of a command and of the commands nested in it, and inline interpreter
             # code. Each check asks again, so recent results are kept.
+            if len(command) > _MAX_COMMAND_LENGTH:
+                return (_UNINSPECTABLE_SEGMENT,), ()
             cached = _expansions.get(command)
             if cached is None:
                 found = []
@@ -757,7 +807,7 @@ public static class AgentCommandGuard
                     if quote:
                         escapes = following in '"\\$`'
                     else:
-                        escapes = not _re.match(r"[A-Za-z]:|\\\\|%|\.\\|~\\", "".join(buf)) and not (not buf and following == "\\")
+                        escapes = not _re.match(r"[A-Za-z]:|\\\\|%|\.\\|~\\", "".join(buf[:2])) and not (not buf and following == "\\")
                     if escapes:
                         buf.append(following)
                         in_tok = True
@@ -787,14 +837,17 @@ public static class AgentCommandGuard
             return tokens
 
 
-        def _tokenize_segment(segment: str) -> list:
+        def _tokenize_segment(segment: str, start: int = 0, limit: int = 0) -> list:
             # Returns list of (token_text, was_quoted) preserving backslashes for Windows paths.
+            # Reads from start and, with a limit, stops after that many tokens.
             tokens = []
             buf = []
             quote = ""
             had_quote = False
             in_tok = False
-            for ch in (segment or ""):
+            text = segment or ""
+            for index in range(start, len(text)):
+                ch = text[index]
                 if quote:
                     if ch == quote:
                         quote = ""
@@ -812,6 +865,8 @@ public static class AgentCommandGuard
                         buf = []
                         had_quote = False
                         in_tok = False
+                        if len(tokens) == limit:
+                            break
                     continue
                 buf.append(ch)
                 in_tok = True
@@ -859,6 +914,7 @@ public static class AgentCommandGuard
             for seg in _split_shell_segments(command):
                 first_word, cmd_verbs, unquoted_words = _segment_verbs(seg)
                 low_seg = " ".join((seg or "").lower().split())
+                unquoted_only = " ".join(w for w, q in _tokenize_segment(seg) if not q).lower()
                 for target in targets:
                     if target == ">":
                         if _re.search(r"(?:^|[\s\d])>{1,2}\s*[^\s;&|]+", low_seg):
@@ -868,7 +924,6 @@ public static class AgentCommandGuard
                         if target in cmd_verbs:
                             return True
                         # Match unquoted multi-word invocation outside quoted strings
-                        unquoted_only = " ".join(w for w, q in _tokenize_segment(seg) if not q).lower()
                         if _re.search(r"(?<![a-z0-9_-])" + _re.escape(target) + r"(?![a-z0-9_-])", unquoted_only):
                             return True
                     elif target.startswith(".") or target.endswith("("):
@@ -878,7 +933,6 @@ public static class AgentCommandGuard
                         if target in cmd_verbs:
                             return True
                         # Also catch inline function/cmdlet verbs in unquoted position or PowerShell subexpressions
-                        unquoted_only = " ".join(w for w, q in _tokenize_segment(seg) if not q).lower()
                         if target in unquoted_words or _re.search(r"(?<![a-z0-9_-])" + _re.escape(target) + r"(?![a-z0-9_-])", unquoted_only):
                             return True
             return False
@@ -1115,7 +1169,7 @@ public static class AgentCommandGuard
                     while j < n and segment[j] in ">|":
                         j += 1
                     if segment[j:j + 1] != "&":
-                        tokens = _tokenize_segment(segment[j:].lstrip())
+                        tokens = _tokenize_segment(segment, j, 1)
                         if tokens:
                             targets.append(tokens[0][0])
                     i = j
@@ -1239,7 +1293,19 @@ public static class AgentCommandGuard
             return ""
 
 
+        _glob_results = {}
+
+
         def _glob_fullmatch(window: str, value: str) -> bool:
+            result = _glob_results.get((window, value))
+            if result is None:
+                if len(_glob_results) >= 32768:
+                    _glob_results.clear()
+                result = _glob_results[(window, value)] = _glob_compare(window, value)
+            return result
+
+
+        def _glob_compare(window: str, value: str) -> bool:
             # Match one wildcard spelling against the literal name it could resolve to. Reads done
             # with a wildcard (`type C:\Users\me\.ss?\id_rsa`, `...\*\Login Data`) never
             # contain the literal protected token, so a plain substring test misses them.
@@ -1702,6 +1768,12 @@ public static class AgentCommandGuard
             if not command_text:
                 return None
             if _UNINSPECTABLE_SEGMENT in _split_shell_segments(command_text):
+                # Blocked either way. A known risky shape keeps its more specific label.
+                escalation = _escalation_risk(command_text)
+                if escalation:
+                    return ("escalation", f"Blackbox blocked this call: {escalation}.")
+                if len(command_text) > _MAX_COMMAND_LENGTH:
+                    return ("nesting", "Blackbox blocked this call: the command is too long for the guard to inspect.")
                 return ("nesting", "Blackbox blocked this call: it contains a nested command that the guard cannot inspect.")
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
