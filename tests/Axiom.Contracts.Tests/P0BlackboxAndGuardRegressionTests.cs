@@ -823,6 +823,11 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         (@"pid=$(pgrep axiomd); echo $pid", "allowed"),
         (@"pid=$(pgrep axiomd); pid=$(pgrep node); kill $pid", "allowed"),
         (@"pgrep axiomd | grep -v kill", "allowed"),
+        // A { that is only a word must not hide the rest of the command after a keyword or bracket.
+        (@"if true; then chmod 777 { x } ~/.ssh; fi", "permissions"),
+        (@"(chmod 777 { ~/.ssh)", "permissions"),
+        (@"if true; then sed -i s/a/b/ { ~/.ssh/config; fi", "write"),
+        (@"for f in 1; do service axiomd { stop; done", "tamper"),
         // A lookup read into a loop or command through process substitution or a here-string.
         (@"while read p; do kill $p; done < <(pgrep Axiom)", "tamper"),
         (@"while read -r pid; do kill -9 ""$pid""; done < <(pgrep -f axiomd)", "tamper"),

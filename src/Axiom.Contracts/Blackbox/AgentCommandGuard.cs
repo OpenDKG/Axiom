@@ -471,7 +471,8 @@ public static class AgentCommandGuard
             openers = _re.compile(r"(?:\s|[({]|(?:then|do|else|elif|if|while|until|!)(?=[\s({]))*")
             cuts = [0] + (_group_starts(segment) if "{" in segment else [])
             found = []
-            for start, end in zip(cuts, cuts[1:] + [len(segment)]):
+            # Each piece between group braces, then the whole segment: a brace may also be a plain word.
+            for start, end in list(zip(cuts, cuts[1:] + [len(segment)])) + [(0, len(segment))]:
                 piece = segment[start:end].rstrip()
                 if start != end and end != len(segment):
                     piece = piece.removesuffix("{")  # the brace that opens the next piece
