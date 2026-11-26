@@ -394,7 +394,7 @@ public static class AgentCommandGuard
 
 
         def _unescape_unquoted(segment: str) -> str:
-            # r\m runs rm. Removes such backslashes outside quotes, keeping Windows paths and commands.
+            # Removes the backslashes that a shell ignores outside quotes, keeping Windows paths and commands.
             import re as _re
             tokens = _tokenize_segment(segment)
             if "\\" not in segment or not tokens or _command_name(tokens[0][0]) in ("cmd",) + _POWERSHELLS:
@@ -767,7 +767,7 @@ public static class AgentCommandGuard
                 for text in dict.fromkeys([" ".join(literal)] + literal):
                     descend(text, False)
 
-            # Both readings are inspected, so neither one's blind spot hides a command.
+            # Both readings are inspected.
             posix_segments = [segment for _, segment in stages]
             shell_segments = set(posix_segments)
             # Each segment, then the bare commands inside it, which go through every check too.
@@ -1080,8 +1080,7 @@ public static class AgentCommandGuard
 
 
         def _nesting_is_lost(inner: str, rest) -> bool:
-            # Reused quotes: the argument to unwrap stops at the next shell's name, and that shell's
-            # command lies in the words after it.
+            # True when the argument to unwrap does not hold the whole command, so it cannot be inspected.
             def bare(token: str) -> str:
                 return token.lower().strip("\\\"'^")
 
@@ -1360,9 +1359,7 @@ public static class AgentCommandGuard
 
         @_remembered
         def _normalize_command(command: str) -> str:
-            # Shell variables and Win32 prefixes hide a protected path from token matching:
-            # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
-            # form blocked. Expand them before any path check runs.
+            # Expands shell variables and Win32 path prefixes before any path check runs.
             text = (command or "").lower()
             home = os.path.normpath(str(Path.home())).lower()
             profile = (os.environ.get("USERPROFILE") or str(Path.home())).lower()
@@ -1443,10 +1440,8 @@ public static class AgentCommandGuard
 
 
         def _hidden_path_read(command: str, protected) -> bool:
-            # Blackbox blocks a literal read of a protected path. The same read written with a
-            # shell variable or a Win32 prefix ($HOME/.ssh, %USERPROFILE%\.ssh, \\?\C:\...)
-            # passed. Only commands that actually hide a path are checked, so a literal
-            # `.env.example` read is not a false positive.
+            # The read check for paths written with a shell variable or a Win32 prefix. Other commands
+            # keep the literal check, so that ordinary file names are not false positives.
             raw = (command or "").lower()
             hidden = ("$home", "%userprofile%", "$env:userprofile", "$env:localappdata",
                       "%localappdata%", "$env:appdata", "%appdata%", "~/", "~\\", "\\\\?\\", "//?/")
@@ -2065,9 +2060,7 @@ public static class AgentCommandGuard
             if window and value and (_literal_end_differs(window[0], value[0], "*?[")
                                      or _literal_end_differs(window[-1], value[-1], "*?]")):
                 return False
-            # Match one wildcard spelling against the literal name it could resolve to. Reads done
-            # with a wildcard (`type C:\Users\me\.ss?\id_rsa`, `...\*\Login Data`) never
-            # contain the literal protected token, so a plain substring test misses them.
+            # Match one wildcard spelling against the literal name it could resolve to.
             import re as _re
 
             parts = []
@@ -2115,8 +2108,8 @@ public static class AgentCommandGuard
                 for spot in spots:
                     for start in range(max(0, spot - size + 1), spot + 1):
                         window = text[start:start + size]
-                        # A character class spells one name character with several text
-                        # characters (`[.]ssh`), so extend the window to its closing bracket.
+                        # A character class takes several text characters for one name
+                        # character, so extend the window to its closing bracket.
                         closing = window.find("]")
                         if "[" in window and closing > 0:
                             window = text[start:start + size + closing]
@@ -2198,8 +2191,7 @@ public static class AgentCommandGuard
 
 
         def _executes_protected(command: str, protected) -> bool:
-            # An agent must not launch a file that lives in a protected path: reading and copying
-            # are covered by Blackbox, but Start-Process/&/cmd on the same file was allowed.
+            # An agent must not launch a file that lives in a protected path.
             import re as _re
             if not _hits_protected(" ".join((command or "").lower().split()), protected):
                 return False
@@ -2212,8 +2204,7 @@ public static class AgentCommandGuard
 
 
         def _exfiltrates_protected(command: str, protected) -> bool:
-            # Uploading or encoding a protected file is exfiltration even when no file-access rule
-            # matched the argument (curl -F file=@... was allowed in the lab).
+            # Uploading or encoding a protected file is exfiltration.
             if _rsync_copies_protected(command or "", protected, to_other_host=True):
                 return True
             if not _hits_protected(" ".join((command or "").lower().split()), protected):
@@ -2486,9 +2477,8 @@ public static class AgentCommandGuard
 
 
         def _axiom_injection(value) -> str:
-            # Axiom-owned phrasings the vendor's curated regexes missed in the lab: plain
-            # "ignore previous instructions", "before answering, run ..." and zero-width
-            # obfuscation between words. Returns the matched phrase for a named block.
+            # Axiom's own prompt-injection phrasings, in addition to the vendor's rules. Returns the matched
+            # phrase for a named block.
             text = _flatten_args(value).lower()
             for mark in ("\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"):
                 text = text.replace(mark, "")
