@@ -712,6 +712,18 @@ public static class AgentCommandGuard
                     and _reads_commands_from_stdin([words[0]] + _split_redirections(words[1:])[0]))
 
 
+        def _matching_brackets(text: str) -> dict:
+            # For each ( the index of the ) that matches it, counting brackets only.
+            closes = {}
+            open_at = []
+            for index, char in enumerate(text):
+                if char == "(":
+                    open_at.append(index)
+                elif char == ")" and open_at:
+                    closes[open_at.pop()] = index
+            return closes
+
+
         def _shell_reading(text: str, escapes: bool = True):
             # Reads a command's quoting as a POSIX shell does. Returns the command without comments and
             # here-documents, the here-document bodies that a shell runs, the bodies with an unquoted
@@ -724,6 +736,8 @@ public static class AgentCommandGuard
             runs, expanding, pending = [], [], []
             opened = []  # (what closes it, where it opened) for ( ), " and backticks
             command_start = 0
+            command_reads, line_reads = {}, {}
+            closes = None
             at_word = True
             unfinished = ""
             quoted_data = []  # (start, end) of quoted here-document bodies inside a substitution
@@ -797,13 +811,10 @@ public static class AgentCommandGuard
                     continue
                 if text.startswith("((", i):
                     # Arithmetic is kept as written.
-                    depth, end = 0, i
-                    while end < n:
-                        depth += {"(": 1, ")": -1}.get(text[end], 0)
-                        end += 1
-                        if not depth:
-                            break
-                    if not depth and text[end - 2:end] == "))":
+                    if closes is None:
+                        closes = _matching_brackets(text)
+                    end = closes.get(i, -1) + 1
+                    if end and text[end - 2:end] == "))":
                         emit(text[i:end])
                         i = end
                         at_word = False
@@ -816,11 +827,16 @@ public static class AgentCommandGuard
                 marker = heredoc.match(text, i) if ch == "<" else None
                 if marker:
                     delimiter = next(group for group in marker.group(2, 3, 5) if group is not None)
+                    # Further markers in one command or on one line share the answer of the first.
+                    if command_start not in command_reads:
+                        command_reads[command_start] = _reads_stdin_as_commands("".join(output[command_start:]))
                     line_end = text.find("\n", marker.end())
-                    rest = text[marker.end():n if line_end < 0 else line_end]
-                    readers = ["".join(output[command_start:])] + [stage for piped, stage in _split_stages(rest, True) if piped]
+                    line_end = n if line_end < 0 else line_end
+                    if line_end not in line_reads:
+                        line_reads[line_end] = any(_reads_stdin_as_commands(stage) for piped, stage in
+                                                   _split_stages(text[marker.end():line_end], True) if piped)
                     pending.append((delimiter, marker.group(1) == "-", marker.group(5) is None or bool(marker.group(4)),
-                                    any(_reads_stdin_as_commands(reader) for reader in readers), i))
+                                    command_reads[command_start] or line_reads[line_end], i))
                     i = marker.end()
                     at_word = False
                     continue
@@ -858,11 +874,13 @@ public static class AgentCommandGuard
                     pending = []
                     at_word, command_start = True, len(output)
                     continue
+                closing = False
                 if ch == '"':
                     opened.append(('"', i))
                 elif ch == "`":
                     if inside == "`":
                         opened.pop()
+                        closing = True
                     else:
                         opened.append(("`", i))
                 elif ch == "(":
@@ -871,7 +889,8 @@ public static class AgentCommandGuard
                     opened.pop()
                 emit(ch)
                 i += 1
-                at_word = ch in " \t\r\n;&|()<>`"
+                # Where the next word can start.
+                at_word = ch in " \t\r\n;&|(<>`" and not closing
                 if ch in "\n;&|(`":
                     command_start = len(output)
             quotes = [where for closer, where in opened if closer != ")"]
@@ -883,23 +902,38 @@ public static class AgentCommandGuard
             return "".join(output), runs, expanding, unfinished, without_data
 
 
-        def _expanded_substitutions(body: str) -> list:
-            # The substitutions that a shell runs in a here-document with an unquoted delimiter.
+        def _expanded_substitutions(body: str):
+            # The substitutions that a shell runs in a here-document with an unquoted delimiter, and False
+            # when finding them would take more than the work budget.
             found = []
+            work = 0
             i = 0
             while i < len(body):
                 if body[i] == "\\":
                     i += 2
                     continue
-                if body.startswith("$(", i) or body[i] == "`":
-                    # The first substitution of the rest is the one that starts here.
-                    inner = _substitutions(body[i:], backticks=True)[0]
-                    if inner:
-                        found.append(inner[0])
-                        i += len(inner[0]) + (3 if body[i] == "$" else 2)
-                        continue
-                i += 1
-            return found
+                if body.startswith("$(", i):
+                    end = _group_end(body, i + 1, True)
+                    closed = end > i + 2 and body[end - 1] == ")"
+                elif body[i] == "`":
+                    end = i + 1
+                    while end < len(body) and body[end] != "`":
+                        end += 2 if body[end] == "\\" else 1
+                    closed = end < len(body)
+                    end += 1
+                else:
+                    i += 1
+                    continue
+                work += end - i
+                if work > _MAX_SHELL_WORK:
+                    return found, False
+                if not closed:
+                    i += 1
+                    continue
+                inner = body[i + 2:end - 1] if body[i] == "$" else body[i + 1:end - 1].replace("\\`", "`")
+                found.append(inner)
+                i = end
+            return found, True
 
 
         def _runs_past_its_end(raw: str, unfinished: str) -> bool:
@@ -972,7 +1006,10 @@ public static class AgentCommandGuard
             for body in run_bodies:
                 descend(body, False, posix)
             for body in expanding:
-                for inner in _expanded_substitutions(body):
+                inners, complete = _expanded_substitutions(body)
+                if not complete:
+                    lost()
+                for inner in dict.fromkeys(inners):
                     descend(inner, False, posix)
 
             # What each shell or interpreter that reads stdin is fed through a pipe. Pipelines are

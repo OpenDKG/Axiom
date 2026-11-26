@@ -371,6 +371,21 @@ for label, command, expected in (
     if len(command) > _MAX_COMMAND_LENGTH or got != expected or took >= 100:
         failures.append(f"{label} ({len(command)}): {got} in {took:.0f} ms")
 
+# The second reading of a command stays in proportion up to the work budget. The bound is wide, so that
+# a slow machine passes, while work that grows with the square of the length does not.
+pad = "a" * 12
+for label, command, expected in (
+        ("here-document markers on one line", ("<<a " + pad) * 990, "allowed"),
+        ("here-document markers after pipes", ("x|<<a " + pad) * 850, "allowed"),
+        ("double brackets", ("((a" + pad + "\n") * 990, "allowed"),
+        ("substitutions around here-documents",
+         "$(" * 1700 + ("<<'a' " + pad) * 550 + "\n" + "a\n" * 550, "nesting"),
+        ("substitutions in a here-document", "cat <<E\n" + ("it's $(date) `id` " + pad) * 500 + "\nE", None),
+        ("commented script", "".join(f"npm run build-{i}  # step {i}: don't skip\n" for i in range(300)), "allowed")):
+    got, took = judge(command)
+    if len(command) > _MAX_COMMAND_LENGTH or (expected and got != expected) or took >= 1500:
+        failures.append(f"{label} ({len(command)}): {got} in {took:.0f} ms")
+
 # The operator charge leaves long, ordinary nested scripts alone.
 script_body = "\n".join(f'echo "step {i}"; npm run build-{i} && ls -la dist | wc -l 2>&1' for i in range(150))
 command = script_body
@@ -905,6 +920,10 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         (@"read line < <(pgrep axiomd); kill %2", "allowed"),
         (@"cat <(pgrep axiomd); kill 123", "allowed"),
         // Shell comments, here-documents and ANSI-C quoted strings.
+        ("echo $(true)#$'\\'' ; chmod 777 ~/.ssh", "blocked"),
+        ("echo $(true)#$'\\'' ; pkill axiomd", "blocked"),
+        ("echo `true`#$'\\'' ; chmod 777 ~/.ssh", "blocked"),
+        ("echo `true`#$'\\'' ; pkill axiomd", "blocked"),
         ("# Don't touch prod\nrm -rf ~/.ssh", "blocked"),
         ("# Don't touch prod\nbash -c \"rm -rf ~/.ssh\"", "blocked"),
         ("# Don't touch prod\npkill axiomd", "blocked"),
@@ -988,6 +1007,7 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         ("# `\nchmod 777 ~/.ssh", "blocked"),
         ("cat <<EOF\n<<X '\nEOF\nchmod 777 ~/.ssh", "blocked"),
         // Ordinary commands that use them stay allowed.
+        ("echo $(true) # it's fine\nls", "allowed"),
         ("cat > check.ps1 <<'EOF'\n    Write-Host \"[DRY-RUN] Live canary target: $RemoteHost`:$RemotePort (loopback is not used; Windows Firewall exempts it)\"\n        throw \"Baseline connection failed. The VM has no route to $RemoteHost`:$RemotePort.\"\n    Write-Host \"[2/5] Creating temporary rule $ruleName (block $TargetProgram -> $RemoteHost`:$RemotePort)...\"\n    New-NetFirewallRule -DisplayName $ruleName -Name $ruleName `\n        -Direction Outbound -Action Block -Program $TargetProgram `\n    Write-Host \"RESULT: OS_DENY_VERIFIED (block, read-back and rollback on $RemoteHost`:$RemotePort)\"\nEOF", "allowed"),
         ("git commit -m \"$(cat <<'EOF'\nFix: don't crash\nEOF\n)\"", "allowed"),
         ("# it's\nls", "allowed"),
@@ -1026,13 +1046,7 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         ("[[ $v =~ ^#.*$ ]] && echo c", "allowed"),
         ("case $x in \\#*) echo c;; esac", "allowed"),
         ("git log --format='%h # %s' | head", "allowed"),
-        ("cd \"C:\\Users\\u\\proj\\\" && dir", "allowed"),
-        ("dir \"C:\\temp\\\" & echo done", "allowed"),
-        ("type \"C:\\a\\b\\\"; echo x", "allowed"),
-        ("robocopy \"C:\\src\\\" \"D:\\dst\\\" /E", "allowed"),
         ("cmd /c \"echo it's done & dir\"", "allowed"),
-        ("echo Don't panic", "allowed"),
-        ("echo it's", "allowed"),
         ("REM don't\ndir", "allowed"),
         (":: it's a comment\ndir", "allowed"),
         ("powershell -Command \"Write-Output 'it''s'\"", "allowed"),
@@ -1043,8 +1057,6 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         ("<# block comment: don't #>\nGet-Date", "allowed"),
         ("Get-Content .\\a.txt | Select-String \"can't\"", "allowed"),
         ("$env:A = 'x' # don't", "allowed"),
-        ("Write-Output 'C:\\path\\'", "allowed"),
-        ("Set-Location 'C:\\x\\'; Get-ChildItem", "allowed"),
         ("npm test # TODO: don't forget\nnpm run lint", "allowed"),
         ("make build\t# user's build", "allowed"),
         ("export MSG=\"it's\"\necho \"$MSG\"", "allowed"),
@@ -1056,10 +1068,19 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         ("rm -rf build # don't remove src", "allowed"),
         ("docker exec c sh -c \"echo it's\"", "allowed"),
         ("kubectl exec p -- sh -c 'echo \"don'\\''t\"'", "allowed"),
-        ("echo \\'", "allowed"),
-        ("echo \\\"hello", "allowed"),
         ("man bash # 'comment'", "allowed"),
         ("time make -j4 2>&1 | tee log # it's slow", "allowed"),
+        // Parser edge cases: unfinished or escaped quotes, and Windows paths that end in a backslash.
+        ("cd \"C:\\Users\\u\\proj\\\" && dir", "allowed"),
+        ("dir \"C:\\temp\\\" & echo done", "allowed"),
+        ("type \"C:\\a\\b\\\"; echo x", "allowed"),
+        ("robocopy \"C:\\src\\\" \"D:\\dst\\\" /E", "allowed"),
+        ("echo Don't panic", "allowed"),
+        ("echo it's", "allowed"),
+        ("Write-Output 'C:\\path\\'", "allowed"),
+        ("Set-Location 'C:\\x\\'; Get-ChildItem", "allowed"),
+        ("echo \\'", "allowed"),
+        ("echo \\\"hello", "allowed"),
         // A single & separates commands; &>, >&, <&, |& and PowerShell or quoted uses do not.
         (@"true & bash -c ""rm -rf ~/.ssh""", "blocked"),
         (@"true & sed -i s/a/b/ ~/.ssh/config", "blocked"),
