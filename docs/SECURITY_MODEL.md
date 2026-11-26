@@ -12,7 +12,8 @@
 | Privacy Shield | Local Axiom service | Loopback DNS resolution and blocklists | DNS filtering only; it is not an inline network firewall |
 | Blackbox guard/dashboard | Optional local third-party module | Agent hook decisions, audit, graph cache, reporter integration | Mode and functioning hook/guard determine protection |
 | DKG node | Optional separate process | Network sync and external knowledge | May contact peers; local status does not prove sync |
-| AI provider / community feed / VirusTotal | Opt-in third-party endpoints | External inference or reputation evidence | May transmit bounded data upon user's explicit configuration/action |
+| AI provider / VirusTotal | Opt-in third-party endpoints | External inference or reputation evidence | May transmit bounded data upon user's explicit configuration/action |
+| Community feed hosts | Third-party endpoints; the feed is enabled by a Complete or Light install | Reputation lists | Downloads when the desktop app starts with the feed enabled |
 | Read-only MCP adapter | Local stdio process | Read-only queries through Axiom pipe | No arbitrary file, shell, process kill, OS-rule write or generic execution tool |
 
 ## Local IPC and privileged firewall writes
@@ -46,11 +47,11 @@ Axiom's own database is not generally encrypted at rest. File ACLs, restricted s
 | Core monitoring, local firewall | Local, no account needed | None required | Continues without DKG, Blackbox or internet |
 | Release update check | Enabled by default (*Settings -> Updates*) | HTTPS GET to `api.github.com/repos/OpenDKG/Axiom/releases/latest` on startup & every 30 min | Toggleable in Settings; no device/install ID sent |
 | Verified Graph snapshot | Default Threat Intelligence initialization | Read-only HTTPS GET for signed snapshot (`github.com/a-51-50/axiom-verified-graph`) | ECDSA P-256 verified; disable via `AXIOM_GRAPH_SNAPSHOT_DISABLE=1` |
-| DNS resolution with Privacy Shield | User enables/configures resolver and points adapter at it | Allowed DNS questions to selected upstream DoH resolver (e.g., Cloudflare `1.1.1.1` / Quad9 `9.9.9.9`) | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
-| Blocklist update | User updates selected sources | HTTPS source requests | Existing local rules retained on failed source update |
-| AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default | Sanitized evidence about selected process/connections | Remote provider sees the evidence; defaults to local Ollama (`localhost:11434`) |
+| DNS resolution with Privacy Shield | **On after a Complete or Light install, which also points adapter DNS at `127.0.0.1`**; otherwise when the user enables it | Allowed DNS questions to the upstream DoH resolvers, by default both Cloudflare `1.1.1.1` and Quad9 `9.9.9.9` | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
+| Blocklist update | With Privacy Shield on: at install and automatically every 24 h; also when the user updates sources | HTTPS source requests | Existing local rules retained on failed source update |
+| AI Analyst | Explicitly configured and invoked; automatic analysis optional and off by default; no provider endpoint or model configured by default | Evidence about current connections, including process command lines, local IP addresses and subnets, gateway addresses and the DNS suffix (full list in [PRIVACY.md](../PRIVACY.md)) | Remote provider sees the evidence. Path redaction covers the program path field only; command-line sanitising is pattern-based |
 | VirusTotal hash lookup | Opt-in API key and user checks hash | File SHA-256, not the file bytes | Provider can correlate lookups |
-| Community feed | Configured HTTPS URL / Refresh feed | Network fetch and optional bearer token | Starter feed is bundled and offline |
+| Community feed | **Enabled by a Complete or Light install** with the recommended bundle; fetched when the desktop app starts, and on *Refresh feed* | HTTPS fetch from each list host; optional bearer token for a configured feed | The bundle holds an offline starter list plus remote lists (`botvrij.eu` and a personal GitHub repository) |
 | DKG/Blackbox installation and sync | User elects to install/start/enable integration | Network package downloads, DKG peer traffic and sync metadata | Localhost API reads are local, but the underlying node is networked |
 | Community IOC report | Explicit **opt-in** consent (`off` by default) and manual or approved sharing | Signed, normalized threat indicator and reporter identity | Automatic sharing starts unchecked in Setup and First-Run setup |
 | VM publication | Not implemented directly in Axiom | None by Axiom | Any TRAC/gas-funded publishing belongs to an external, explicitly approved integration |

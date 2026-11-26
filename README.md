@@ -228,12 +228,17 @@ shows the charts and captures.
 
 ### Privacy by default
 
-- All processing is local by default. The standard build makes no outbound network call unless the
-  optional AI Analyst, reputation feed or another optional module is explicitly enabled.
+- Monitoring data is processed locally. Some network features are **on by default**: the release
+  update check and the verified-graph snapshot fetch; and, after a Complete or Light install,
+  Privacy Shield (adapter DNS pointed at `127.0.0.1`, with allowed queries sent over
+  DNS-over-HTTPS to Cloudflare and Quad9, and daily blocklist updates) and the Community Feed
+  download. The AI Analyst and automatic threat sharing are off until you set them up. See
+  [PRIVACY.md](PRIVACY.md).
 - No mandatory Axiom account, Axiom-hosted analytics, advertising or data sales. Optional DKG/Blackbox synchronization involves external peers, and optional cloud AI/reputation integrations may make network requests.
-- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes sanitized process metadata and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
-- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
-  default, and never sit on the per-connection enforcement path.
+- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes process metadata, process command lines (passed through a pattern-based sanitiser), this computer's IP addresses, gateway addresses and DNS suffix, and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
+- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate and never
+  sit on the per-connection enforcement path. A Complete or Light install turns the Community Feed
+  on, and a Complete install also installs Blackbox and DKG.
 
 ## Optional modules
 

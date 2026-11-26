@@ -1,6 +1,6 @@
 # Axiom Privacy Policy
 
-**Effective date:** 2026-11-22
+**Effective date:** 2026-11-26
 **Website policy:** https://opendkg.org/privacy/
 **Contact:** contact@opendkg.org
 
@@ -10,11 +10,11 @@ Axiom is a local-first network monitor, firewall policy manager, and AI coding a
 
 - **No telemetry or user accounts:** OpenDKG and Axiom do not collect usage analytics, crash telemetry, advertising identifiers, or account profiles.
 - **Local storage by default:** Network history (`axiom.db`), local settings, firewall baselines, and non-sensitive hook metadata (`agent-evidence.jsonl`) remain on your device and can be deleted at any time.
-- **Optional external features:** Outbound connections happen only for user-enabled features or release checks described below.
+- **Network features:** Some features that connect to the network are **on by default**, including after a Complete or Light install. Section 2 lists them.
 
-## 2. Optional and User-Controlled Network Features
+## 2. Network Features and Local Data
 
-Core local monitoring operates without sending telemetry. Outbound network connections occur only for the following features:
+Core local monitoring operates without sending telemetry. Outbound network connections occur for the features below. Items 2 to 4 are active without a separate opt-in.
 
 1. **Blackbox and OriginTrail DKG Threat Sharing (Strict Opt-In / Off by Default)**
    - Automatic community threat sharing is **unchecked (off) by default** in both Setup and First-Run setup. You must explicitly opt in (or enable it later on the Agents page / `--enable-automatic-threat-sharing`) before Axiom publishes indicators.
@@ -22,25 +22,30 @@ Core local monitoring operates without sending telemetry. Outbound network conne
    - Public CC0 OriginTrail DKG replicas may keep published sightings even after retraction.
    - Turning automatic sharing off keeps local Blackbox guard blocking active without publishing sightings.
 
-2. **Release Update Checks (Toggleable)**
-   - When enabled (*Settings -> Updates -> Check for updates*), Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 30 minutes, or when you click *Check for updates now*.
+2. **Release Update Checks (On by Default, Toggleable)**
+   - Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 30 minutes, and when you click *Check for updates now*. Turn the automatic check off under *Settings -> Updates -> Check for updates*.
    - No installation ID or hardware identifier is sent; GitHub receives standard HTTP transport metadata and the `Axiom/<version>` User-Agent header.
 
 3. **Verified Graph Curated Snapshot (Read-Only Fetch / Disableable)**
    - When Threat Intelligence peer relay initialization runs, Axiom can fetch a signed curator-verified snapshot from `https://github.com/a-51-50/axiom-verified-graph/releases/download/verified-graph-latest/verified-graph-snapshot.json` (ECDSA P-256 signature verified).
    - No local telemetry or query payload is uploaded; disable anytime via `AXIOM_GRAPH_SNAPSHOT_DISABLE=1` or `AXIOM_GRAPH_SNAPSHOT_URL=off`.
 
-4. **Privacy Shield DNS (Toggleable / Enabled in Complete Install)**
-   - When enabled, allowed DNS queries are forwarded to your selected upstream DNS-over-HTTPS resolver (such as Cloudflare `1.1.1.1` or Quad9 `9.9.9.9`), and enabled public blocklists are downloaded when refreshed.
+4. **On by Default After a Complete or Light Install**
+   - In a Windows Optional install you choose these yourself.
+   - **Privacy Shield DNS:** turned on with the Strict profile and all catalogued blocklist sources. Axiom **points your network adapters' DNS at its own local resolver (`127.0.0.1`)**. Allowed DNS queries are forwarded over DNS-over-HTTPS to **both default upstreams, Cloudflare (`1.1.1.1`) and Quad9 (`9.9.9.9`)**, unless you change them. Blocklists are downloaded from their publishers and updated automatically every 24 hours.
+   - **Community Feed:** Setup saves the feed as enabled, with its auto-sync setting on, using the recommended bundle. When the desktop app starts with the feed enabled, it downloads the lists in that bundle over HTTPS: a bundled offline starter list, a list from `botvrij.eu`, and a list hosted in a personal repository on GitHub. These hosts receive standard request metadata such as your IP address.
 
 5. **Opt-in External Integrations (Off by Default)**
    - **VirusTotal (`VT Check`):** Submits only the SHA-256 hash of a file you explicitly select using your own API key; files are never uploaded.
-   - **Community Feed:** Bundles an offline starter feed; remote fetches download indicator hashes only from the HTTPS feed URL you enable or refresh.
-   - **AI Analyst:** Uses local Ollama (`http://localhost:11434`) by default; an external provider receives only the prompt and redacted summary you choose to submit.
+   - **AI Analyst:** Off until you set it up. No AI provider endpoint or model is configured by default. When you run it (or turn on automatic analysis), the provider you chose receives the prompt and an evidence package about current connections. The package includes application names, program paths, process IDs, local and remote addresses and ports, parent processes, signer and product details, **process command lines**, hosted Windows service names, a summary of local connection history, and details of this computer's network: **local IP addresses, subnets, gateway addresses and the DNS suffix**. The *redact paths* setting (on by default) shortens only the program path field to a file name. Command lines are passed through a pattern-based sanitiser, which cannot guarantee that they contain no paths or secrets.
 
 6. **Local Retention and User Deletion**
-   - Network flow history (`axiom.db`) retains up to 30 days locally; per-user logs, evidence trails, cached snapshots, and crash dumps live under `%LOCALAPPDATA%\Axiom` (`$XDG_DATA_HOME/axiom` on Linux, `~/Library/Application Support/Axiom` on macOS).
-   - You can delete per-user logs, evidence files, and caches anytime via *Settings -> Local data & privacy -> Clear local logs & cache*, or remove all program data during uninstall (checkbox / `--remove-data`).
+   - Network flow history in `axiom.db` is kept for 30 days. The installed service stores it in its machine-wide data folder (`%ProgramData%\Axiom` on Windows), which needs administrator rights to change. Per-user files live under `%LOCALAPPDATA%\Axiom` (`$XDG_DATA_HOME/axiom` on Linux, `~/Library/Application Support/Axiom` on macOS).
+   - *Settings -> Local data & privacy -> Clear local logs & cache* deletes only per-user items: the `logs`, `evidence`, `cache` and `snapshots` folders, `agent-evidence.jsonl*` and `history.db*`. It **does not remove** `axiom.db`, the firewall rule audit or the process-spawn audit.
+   - These records have **no retention limit**; Axiom does not delete old entries:
+     - the firewall rule audit (the `rule_audit` table in `axiom.db`), which records the Windows SID or user ID of the account that made each change;
+     - the process start audit, `process-spawn-audit.jsonl` (Windows), stored in the machine-wide data folder when the service runs as a Windows service.
+   - To remove all data on Windows, uninstall and choose to remove data (checkbox or `--remove-data`). Without that choice, history and settings are kept.
 
 ## 3. Third-Party Services
 
