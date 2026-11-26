@@ -34,6 +34,15 @@ public sealed class FirewallComBoundsTests
     }
 
     [Fact]
+    public async Task Executor_can_be_created_lazily_as_the_firewall_adapter_does()
+    {
+        // Lazy<T> needs a real parameterless constructor; optional parameters do not count.
+        using var executor = new Lazy<StaComExecutor>().Value;
+
+        Assert.Equal(1, await executor.InvokeAsync(() => 1, CancellationToken.None));
+    }
+
+    [Fact]
     public void Rule_lookup_asks_for_the_rule_by_name_without_enumerating()
     {
         var rules = new FakeRules(new FakeRule("Axiom::a::OUT"));

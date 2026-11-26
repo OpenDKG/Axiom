@@ -20,9 +20,15 @@ public sealed class StaComExecutor : IDisposable
     private readonly Thread _thread;
     private readonly TimeSpan _callTimeout;
 
-    public StaComExecutor(TimeSpan? callTimeout = null)
+    // A real parameterless constructor: the firewall adapter creates this through Lazy<T>.
+    public StaComExecutor()
+        : this(DefaultCallTimeout)
     {
-        _callTimeout = callTimeout ?? DefaultCallTimeout;
+    }
+
+    public StaComExecutor(TimeSpan callTimeout)
+    {
+        _callTimeout = callTimeout;
         _thread = new Thread(Run)
         {
             IsBackground = true,
