@@ -170,7 +170,7 @@ public sealed class LinuxConnectionSource : IConnectionSnapshotSource
         {
             _flows.Prune(now);
             connections.AddRange(BlockedFlows(_flows.Capture(now), now, cancellationToken));
-            limitations.Add("Blocked attempts come from the nftables trace of Axiom's block rules (TCP reset / UDP drop); allowed flows are not traced.");
+            limitations.Add("Blocked attempts from eBPF or the nftables trace appear in one snapshot. Sampled connection history does not reliably retain them.");
         }
 
         return new ConnectionSnapshot
