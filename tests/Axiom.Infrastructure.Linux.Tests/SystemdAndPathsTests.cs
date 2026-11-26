@@ -426,6 +426,12 @@ public sealed class SystemdAndPathsTests
     [Fact]
     public void DoctorReportsMissingInstallAndSkipsRootOnlyEnforcementCheck()
     {
+        if (!OperatingSystem.IsLinux())
+        {
+            // Linux systemd/doctor paths; the class ships in the portable solution.
+            return;
+        }
+
         using var temp = new TempDirectory();
         var targets = new LinuxDoctorTargets(
             Path.Combine(temp.Path, "axiomd.service"),

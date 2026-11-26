@@ -205,6 +205,12 @@ public sealed class UpdateCheckServiceTests : IDisposable
     [InlineData(true)]
     public async Task Installer_download_keeps_only_bytes_verified_for_the_detected_release(bool tampered)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // Covers the Windows installer asset mapping; Linux/macOS use their own package kinds.
+            return;
+        }
+
         const string url = "https://github.com/OpenDKG/Axiom/releases/download/v1.4.5/Axiom-Setup.exe";
         var expected = new byte[150 * 1024];
         var returned = expected.ToArray();

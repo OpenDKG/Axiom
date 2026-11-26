@@ -139,6 +139,8 @@ public sealed class DaemonStoppedStaleStateTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client);
         try
@@ -183,6 +185,7 @@ public sealed class DaemonStoppedStaleStateTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]

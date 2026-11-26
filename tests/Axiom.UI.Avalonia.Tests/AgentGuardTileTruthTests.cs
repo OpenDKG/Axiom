@@ -19,6 +19,8 @@ public sealed class AgentGuardTileTruthTests
     [Fact]
     public async Task Agent_guard_tile_follows_consistent_parity_across_platforms()
     {
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new ProtectionClient();
         var shell = new ShellViewModel(
             new ServiceSnapshotSource(client),
@@ -49,6 +51,7 @@ public sealed class AgentGuardTileTruthTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]

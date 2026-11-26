@@ -51,8 +51,8 @@ jobs:
         run: |
           # macOS Unix domain socket paths are limited to 104 characters; the runner
           # temp path is longer, which breaks the IPC tests (same fix as macos-port.yml).
-          mkdir -p /tmp/axiom-ci
-          echo "TMPDIR=/tmp/axiom-ci" >> "$GITHUB_ENV"
+          mkdir -p /private/tmp/axiom-ci
+          echo "TMPDIR=/private/tmp/axiom-ci" >> "$GITHUB_ENV"
 
       - name: Restore portable solution (locked mode)
         run: dotnet restore Axiom.Portable.slnx --locked-mode

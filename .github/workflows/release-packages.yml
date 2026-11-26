@@ -136,8 +136,8 @@ jobs:
           dotnet restore Axiom.Portable.slnx --locked-mode
           dotnet build Axiom.Portable.slnx -c Release --no-restore
           dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1
-          mkdir -p "$RUNNER_TEMP/axiom"
-          export TMPDIR="$RUNNER_TEMP/axiom"
+          mkdir -p /private/tmp/axiom-ci
+          export TMPDIR=/private/tmp/axiom-ci
           bash macos/build.sh test
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package, sign and verify ${{ matrix.rid }}
