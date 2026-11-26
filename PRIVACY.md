@@ -23,7 +23,7 @@ Core local monitoring operates without sending telemetry. Outbound network conne
    - Turning automatic sharing off keeps local Blackbox guard blocking active without publishing sightings.
 
 2. **Release Update Checks (On by Default, Toggleable)**
-   - Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 30 minutes, and when you click *Check for updates now*. Turn the automatic check off under *Settings -> Updates -> Check for updates*.
+   - Axiom queries GitHub Releases (`https://api.github.com/repos/OpenDKG/Axiom/releases/latest`) on startup, every 15 minutes while the app runs, and when you click *Check for updates now*. Turn the automatic check off under *Settings -> Updates -> Check for updates*.
    - No installation ID or hardware identifier is sent; GitHub receives standard HTTP transport metadata and the `Axiom/<version>` User-Agent header.
 
 3. **Verified Graph Curated Snapshot (Read-Only Fetch / Disableable)**

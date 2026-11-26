@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Text.Json;
 using Axiom.Contracts.Ai;
+using Axiom.Contracts.Privacy;
 using Axiom.Presentation;
 using Xunit;
 
@@ -46,9 +47,52 @@ public sealed class PrivacyDocConsistencyTests
         // Setup writes the same file; the Windows Setup project has no test project.
         Assert.Contains("enabled = true,", Read("src", "Axiom.Setup", "SetupDefaults.cs"), StringComparison.Ordinal);
 
-        Assert.DoesNotContain("Community Feed", Section(Privacy, "(Off by Default)**"), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Community Feed", Section(Privacy, "On by Default After a Complete or Light Install**"), StringComparison.Ordinal);
-        Assert.DoesNotContain("Starter feed is bundled and offline |", SecurityModel, StringComparison.Ordinal);
+        // The claim must be where it belongs, and in no item that is headed "Off by Default".
+        Assert.Contains(
+            "**Community Feed:** Setup saves the feed as enabled",
+            Section(Privacy, "On by Default After a Complete or Light Install**"),
+            StringComparison.Ordinal);
+        var offByDefault = Items(Privacy).Where(item => FirstLine(item).EndsWith("Off by Default)**", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, offByDefault.Count);
+        Assert.All(offByDefault, item => Assert.DoesNotContain("Community Feed", item, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            "| Community feed | **Enabled by a Complete or Light install**", SecurityModel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_check_default_and_interval_match_the_product()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Assert.True(new UpdateSettingsStore(missing).Load().CheckForUpdates);
+        var minutes = (int)UpdateCheckService.MinimumCheckInterval.TotalMinutes;
+        // The desktop shell's timer uses that same interval.
+        Assert.Contains(
+            "_updateTimer = timers.Create(UpdateCheckService.MinimumCheckInterval);",
+            Read("src", "Axiom.UI.Avalonia", "ShellViewModel.cs"),
+            StringComparison.Ordinal);
+
+        var item = Section(Privacy, "Release Update Checks (On by Default, Toggleable)**");
+        Assert.Contains($"on startup, every {minutes} minutes", item, StringComparison.Ordinal);
+        var row = Row(SecurityModel, "| Release update check |");
+        Assert.Contains("Enabled by default", row, StringComparison.Ordinal);
+        Assert.Contains($"on startup & every {minutes} min ", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blocklist_update_schedule_matches_the_product()
+    {
+        var profile = PrivacyShieldProvisioner.CompleteProfileSettings();
+        Assert.True(profile.AutoUpdateSources);
+        var hours = profile.AutoUpdateIntervalHours;
+        Assert.Equal(new PrivacyShieldSettings().AutoUpdateIntervalHours, hours);
+        Assert.Contains(
+            $"AutoUpdateIntervalHours = {hours},", Read("src", "Axiom.Setup", "SetupDefaults.cs"), StringComparison.Ordinal);
+
+        Assert.Contains(
+            $"updated automatically every {hours} hours",
+            Section(Privacy, "On by Default After a Complete or Light Install**"),
+            StringComparison.Ordinal);
+        Assert.Contains($"automatically every {hours} h", Row(SecurityModel, "| Blocklist update |"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,6 +130,16 @@ public sealed class PrivacyDocConsistencyTests
         Assert.Contains("process-spawn-audit.jsonl", retention, StringComparison.Ordinal);
         Assert.Contains("no retention limit", retention, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string Row(string document, string start) =>
+        Assert.Single(document.Split('\n'), line => line.StartsWith(start, StringComparison.Ordinal));
+
+    private static string FirstLine(string item) => item.Split('\n')[0].TrimEnd();
+
+    private static IEnumerable<string> Items(string document) =>
+        document.Split('\n')
+            .Where(line => System.Text.RegularExpressions.Regex.IsMatch(line, @"^\d+\. \*\*"))
+            .Select(line => Section(document, line.TrimEnd()));
 
     /// <summary>The numbered item whose title ends with <paramref name="title"/>, up to the next item or heading.</summary>
     private static string Section(string document, string title)

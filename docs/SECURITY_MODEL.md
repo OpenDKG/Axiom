@@ -45,7 +45,7 @@ Axiom's own database is not generally encrypted at rest. File ACLs, restricted s
 | Capability | Default / trigger | Typical outbound data | Notes |
 |---|---|---|---|
 | Core monitoring, local firewall | Local, no account needed | None required | Continues without DKG, Blackbox or internet |
-| Release update check | Enabled by default (*Settings -> Updates*) | HTTPS GET to `api.github.com/repos/OpenDKG/Axiom/releases/latest` on startup & every 30 min | Toggleable in Settings; no device/install ID sent |
+| Release update check | Enabled by default (*Settings -> Updates*) | HTTPS GET to `api.github.com/repos/OpenDKG/Axiom/releases/latest` on startup & every 15 min while the app runs | Toggleable in Settings; no device/install ID sent |
 | Verified Graph snapshot | Default Threat Intelligence initialization | Read-only HTTPS GET for signed snapshot (`github.com/a-51-50/axiom-verified-graph`) | ECDSA P-256 verified; disable via `AXIOM_GRAPH_SNAPSHOT_DISABLE=1` |
 | DNS resolution with Privacy Shield | **On after a Complete or Light install, which also points adapter DNS at `127.0.0.1`**; otherwise when the user enables it | Allowed DNS questions to the upstream DoH resolvers, by default both Cloudflare `1.1.1.1` and Quad9 `9.9.9.9` | Local blocked names receive NXDOMAIN; bypass/fallback can alter filtering |
 | Blocklist update | With Privacy Shield on: at install and automatically every 24 h; also when the user updates sources | HTTPS source requests | Existing local rules retained on failed source update |
