@@ -3,7 +3,6 @@ name: Release packages
 on:
   push:
     branches:
-      - codex/public-release-links
       - 'codex/release-*-linux-preview'
       - 'codex/release-*-macos-preview'
     tags:
@@ -22,7 +21,15 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
 
 jobs:
+  # The Windows package is built only after the complete Windows CI workflow passes for the same
+  # commit: locked restore, analyzer build, every test project in Axiom.sln with the strict
+  # pass/skip gate, the vulnerable-package check and the setup packaging check.
+  windows-ci:
+    if: ${{ !endsWith(github.ref_name, '-preview') }}
+    uses: ./.github/workflows/windows-ci.yml
+
   windows:
+    needs: windows-ci
     if: ${{ !endsWith(github.ref_name, '-preview') }}
     runs-on: windows-2025
     timeout-minutes: 30
@@ -31,24 +38,6 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - name: Run full Windows and core test suite
-        run: |
-          $testProjects = @(
-            'tests/Axiom.Contracts.Tests',
-            'tests/Axiom.Core.Tests',
-            'tests/Axiom.Persistence.Tests',
-            'tests/Axiom.Service.Tests',
-            'tests/Axiom.Service.Hosting.Tests',
-            'tests/Axiom.Infrastructure.Windows.Tests',
-            'tests/Axiom.Presentation.Tests',
-            'tests/Axiom.UI.Avalonia.Tests',
-            'tests/Axiom.UI.Tests',
-            'tests/Axiom.McpServer.Tests'
-          )
-          foreach ($project in $testProjects) {
-            dotnet test $project -c Release -p:RestoreLockedMode=true
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
       - name: Package Windows x64
         run: |
           ./scripts/build-release.ps1 -OutputDir "$PWD/release"
