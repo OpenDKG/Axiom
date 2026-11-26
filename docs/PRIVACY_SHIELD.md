@@ -20,7 +20,8 @@ does not change the hosts file, firewall rules, agent configuration or certifica
 - A loopback DNS proxy that:
   - accepts UDP and TCP DNS queries on `127.0.0.1` and, when available, `::1`;
   - returns NXDOMAIN for blocked questions before contacting an upstream;
-  - forwards allowed UDP queries over UDP and TCP queries over TCP, with bounded timeouts;
+  - forwards allowed queries with bounded timeouts: over DNS-over-HTTPS (DoH) to a DoH upstream, and
+    to a plain upstream over UDP for UDP queries and TCP for TCP queries (see *Upstream DNS* below);
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
@@ -134,14 +135,38 @@ If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover th
 Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
 the correct upstream explicitly on managed or corporate networks.
 
-Recommended explicit upstreams (plain DNS, one IP or `IP:port`; DoH/DoT are not supported):
+### Upstream DNS
 
-- `1.1.1.1` or `1.0.0.1` — Cloudflare; verified working with this resolver.
+The **Upstream DNS** field takes one or more entries, separated by commas or semicolons, which are
+tried in order:
+
+- A listed public resolver address (Cloudflare, Google, Quad9 or AdGuard, IPv4 or IPv6) without a
+  port, or with port 53, is used over **DoH**, with no plain-DNS fallback for that entry. Setup uses
+  `1.1.1.1, 9.9.9.9`, so after a Complete or Light install allowed queries go to Cloudflare and Quad9
+  over DoH.
+- An `https://` URL is a DoH endpoint; without a path, `/dns-query` is used. Prefer a URL with an IP
+  address or one of the names Axiom already has an address for (`cloudflare-dns.com`,
+  `one.one.one.one`, `dns.google`, `dns.quad9.net`, `dns.adguard-dns.com`, `dns.adguard.com`).
+  Another name has to be looked up with the system resolver, which can fail while the adapter points
+  at Axiom.
+- Any other address, or another port, is **plain DNS** (`IP` or `IP:port`). `udp://` or `tcp://`
+  before an address also forces plain DNS; either way Axiom forwards over the transport (UDP or TCP)
+  that the application used.
+- DNS-over-TLS and DNS-over-QUIC upstreams are not supported, and loopback addresses are rejected.
+
+Public resolvers that are used over DoH include:
+
+- `1.1.1.1` or `1.0.0.1` — Cloudflare.
 - `9.9.9.9` or `149.112.112.112` — Quad9.
 - `94.140.14.14` or `94.140.15.15` — AdGuard DNS.
 
-Use the DNS server provided by your VPN, corporate network or router when one is required. Leaving
-the field empty keeps the current Windows DNS servers. After enabling the resolver, verify with
+Use the DNS server provided by your VPN, corporate network or router when one is required, and enter
+it in the field. An empty field does not guarantee that the current Windows DNS servers are used.
+With **Encrypt upstream DNS via DoH** on (the default), Axiom uses those system resolvers only if
+they are listed public resolvers, and otherwise Cloudflare and Quad9 over DoH, so a router, VPN or
+corporate resolver is not used. With it off, Axiom uses the system resolvers (listed public ones
+still over DoH), or Cloudflare and Quad9 over DoH if it finds none. The checkbox affects only an
+empty field. After enabling the resolver, verify with
 `Resolve-DnsName example.com -Server 127.0.0.1`; a blocked catalogued domain should return
 “DNS name does not exist”.
 
