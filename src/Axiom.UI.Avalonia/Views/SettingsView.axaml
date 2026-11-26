@@ -85,7 +85,7 @@
             </StackPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding UpdateCheckStatusText}" FontSize="10.5"
                                                Foreground="{DynamicResource Axiom.TextSecondary}" TextWrapping="Wrap" />
-            <controls:AxiomSelectableTextBlock Text="Checks OpenDKG/Axiom for newer stable releases on startup and every 30 minutes."
+            <controls:AxiomSelectableTextBlock Text="Checks OpenDKG/Axiom for newer stable releases on startup and every 15 minutes."
                        FontSize="10" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
             <Border Height="1" Background="{DynamicResource Axiom.Border}" Margin="0,4,0,2" />
             <controls:AxiomSelectableTextBlock Text="Local data &amp; privacy" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />

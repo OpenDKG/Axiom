@@ -797,38 +797,6 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
 
         var adapterName = SelectedAdapter.Name;
-        var previousAlias = _preferredAdapterAlias;
-        var previousAutoPoint = AutoPointAdapterDns;
-        _preferredAdapterAlias = adapterName;
-        AutoPointAdapterDns = true;
-
-        if (CreateConfigureClient() is { } configureClient)
-        {
-            try
-            {
-                var status = await configureClient
-                    .SendAsync<PrivacyShieldStatus>(
-                        IpcCommandTypes.PrivacyConfigure,
-                        BuildSettings(),
-                        CancellationToken.None)
-                    .ConfigureAwait(true);
-                ApplyStatus(status);
-                RefreshAdapters();
-                var updatedAdapter = Adapters.FirstOrDefault(adapter =>
-                    string.Equals(adapter.Name, adapterName, StringComparison.OrdinalIgnoreCase));
-                if (updatedAdapter?.UsesResolver == true)
-                {
-                    SelectedAdapter = updatedAdapter;
-                    DnsHelperStatusText =
-                        $"Adapter '{adapterName}' now uses 127.0.0.1 and will stay configured across restarts and updates.";
-                    return;
-                }
-            }
-            catch (ServiceUnavailableException)
-            {
-            }
-        }
-
         var confirmed = await _ui.ConfirmAsync(
             "Change adapter DNS",
             $"Point adapter '{adapterName}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
@@ -840,19 +808,38 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
             CancellationToken.None).ConfigureAwait(true);
         if (!confirmed)
         {
-            _preferredAdapterAlias = previousAlias;
-            AutoPointAdapterDns = previousAutoPoint;
             DnsHelperStatusText = "Adapter DNS change cancelled.";
             return;
         }
 
+        var previousAlias = _preferredAdapterAlias;
+        var previousAutoPoint = AutoPointAdapterDns;
+        AutoPointAdapterDns = true;
+        _preferredAdapterAlias = adapterName;
+
+        if (await TryConfigureAsync().ConfigureAwait(true) is not null)
+        {
+            RefreshAdapters();
+            var updatedAdapter = Adapters.FirstOrDefault(adapter =>
+                string.Equals(adapter.Name, adapterName, StringComparison.OrdinalIgnoreCase));
+            if (updatedAdapter?.UsesResolver == true)
+            {
+                SelectedAdapter = updatedAdapter;
+                DnsHelperStatusText =
+                    $"Adapter '{adapterName}' now uses 127.0.0.1 and will stay configured across restarts and updates.";
+                return;
+            }
+        }
+
         DnsHelperStatusText = $"Waiting for {(OperatingSystem.IsWindows() ? "the Windows elevation prompt" : PlatformText.ElevationPrompt)}...";
+        var dnsEnabled = false;
         try
         {
             var exitCode = await _dnsHelper
                 .EnableAsync(adapterName, "127.0.0.1", CancellationToken.None)
                 .ConfigureAwait(true);
-            DnsHelperStatusText = exitCode == 0
+            dnsEnabled = exitCode == 0;
+            DnsHelperStatusText = dnsEnabled
                 ? $"Adapter '{adapterName}' now uses 127.0.0.1, with its previous DNS kept as fallback. Original settings were saved."
                 : $"The elevated DNS helper exited with code {exitCode}.";
         }
@@ -860,6 +847,13 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
                      System.ComponentModel.Win32Exception or InvalidOperationException or IOException or NotSupportedException)
         {
             DnsHelperStatusText = "Elevation was cancelled or the DNS helper failed: " + exception.Message;
+        }
+
+        if (!dnsEnabled)
+        {
+            AutoPointAdapterDns = previousAutoPoint;
+            _preferredAdapterAlias = previousAlias;
+            await TryConfigureAsync().ConfigureAwait(true);
         }
 
         RefreshAdapters();
@@ -1675,6 +1669,30 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         _client is ServicePipeClient
             ? new ServicePipeClient(requestTimeout: TimeSpan.FromSeconds(60))
             : _client;
+
+    private async Task<PrivacyShieldStatus?> TryConfigureAsync()
+    {
+        if (CreateConfigureClient() is not { } configureClient)
+        {
+            return null;
+        }
+
+        try
+        {
+            var status = await configureClient
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyConfigure,
+                    BuildSettings(),
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStatus(status);
+            return status;
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        }
+    }
 
     private void WarnIfSourcesDropped(PrivacyShieldSettings requested, PrivacyShieldStatus actual)
     {

@@ -64,11 +64,12 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <TextBlock Text="Provider" Style="{StaticResource Caption}" VerticalAlignment="Center" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider, Mode=TwoWay}" DisplayMemberPath="Label" Margin="0,0,0,8" />
             <TextBlock Grid.Row="1" Text="Endpoint" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsOpenCodeProvider}" Margin="0,0,0,8" ToolTip="Full chat-completions URL, or opencode://local for the built-in OpenChamber / OpenCode CLI provider." />
+            <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Endpoint, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsOpenCodeProvider}" Margin="0,0,0,8" ToolTip="Full chat-completions URL, or opencode://local for the local OpenCode CLI provider." />
             <TextBlock Grid.Row="2" Text="Model" Style="{StaticResource Caption}" VerticalAlignment="Center" />
             <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource FilterTextBox}" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
             <TextBlock Grid.Row="3" Text="API key" Style="{StaticResource Caption}" VerticalAlignment="Center" />
@@ -83,6 +84,7 @@
                          PasswordChanged="ApiKey_Changed"
                          ToolTip="Leave blank to keep the existing DPAPI-protected key." />
             <TextBlock Grid.Row="4" Text="{Binding CredentialsText}" Style="{StaticResource Caption}" Grid.Column="1" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="5" Text="{Binding ProviderComplianceText}" Style="{StaticResource Caption}" Grid.Column="1" TextWrapping="Wrap" Margin="0,4,0,0" />
           </Grid>
 
           <StackPanel Orientation="Horizontal" Margin="0,12,0,0">

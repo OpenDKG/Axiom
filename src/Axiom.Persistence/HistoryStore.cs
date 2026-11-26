@@ -15,7 +15,7 @@ namespace Axiom.Persistence;
 /// Local SQLite history of observed flows (FND-005). WAL, UTC timestamps, upsert by flow key,
 /// retention and time-window queries. Byte buckets are created for FND-004 but stay unused.
 /// </summary>
-public sealed class HistoryStore
+public sealed class HistoryStore : IDisposable
 {
     public const int SchemaVersion = 3;
 
@@ -109,6 +109,14 @@ public sealed class HistoryStore
 
     private readonly string _connectionString;
 
+    private readonly SemaphoreSlim _initGate = new(1, 1);
+
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
+
+    private volatile bool _initialized;
+
+    private bool _disposed;
+
     public HistoryStore(string databasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
@@ -130,25 +138,56 @@ public sealed class HistoryStore
 
     public string DatabasePath { get; }
 
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _initGate.Dispose();
+        _writeGate.Dispose();
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        var directory = Path.GetDirectoryName(DatabasePath);
-        if (!string.IsNullOrEmpty(directory))
+        if (_initialized)
         {
-            Directory.CreateDirectory(directory);
+            return;
         }
 
+        await _initGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await MigrateAsync(cancellationToken);
-        }
-        catch (SqliteException exception) when (exception.SqliteErrorCode == 26)
-        {
-            RecoverCorruptDatabase();
-            await MigrateAsync(cancellationToken);
-        }
+            if (_initialized)
+            {
+                return;
+            }
 
-        RestrictUnixPermissions();
+            var directory = Path.GetDirectoryName(DatabasePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            try
+            {
+                await MigrateAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode == 26)
+            {
+                RecoverCorruptDatabase();
+                await MigrateAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            RestrictUnixPermissions();
+            _initialized = true;
+        }
+        finally
+        {
+            _initGate.Release();
+        }
     }
 
     /// <summary>
@@ -185,8 +224,15 @@ public sealed class HistoryStore
     /// synchronous/journal settings per connection, so a pooled connection that was never
     /// configured would silently fall back to a full fsync on every commit.
     /// </summary>
-    private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    private async Task<SqliteConnection> OpenConnectionAsync(
+        CancellationToken cancellationToken,
+        bool ensureInitialized = true)
     {
+        if (ensureInitialized && !_initialized)
+        {
+            await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var connection = new SqliteConnection(_connectionString);
         try
         {
@@ -253,21 +299,29 @@ public sealed class HistoryStore
             }
         }
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        foreach (var (flow, _, _) in changed)
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            var key = AppKey(flow);
-            if (appIds[key] == 0)
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+            foreach (var (flow, _, _) in changed)
             {
-                appIds[key] = await UpsertAppAsync(connection, transaction, key, flow, now, cancellationToken);
+                var key = AppKey(flow);
+                if (appIds[key] == 0)
+                {
+                    appIds[key] = await UpsertAppAsync(connection, transaction, key, flow, now, cancellationToken);
+                }
+
+                await UpsertFlowAsync(connection, transaction, appIds[key], flow, now, cancellationToken);
             }
 
-            await UpsertFlowAsync(connection, transaction, appIds[key], flow, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
-
-        await transaction.CommitAsync(cancellationToken);
+        finally
+        {
+            _writeGate.Release();
+        }
 
         lock (_writtenFlows)
         {
@@ -426,29 +480,37 @@ public sealed class HistoryStore
             return;
         }
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        foreach (var bucket in buckets)
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = """
-                INSERT INTO throughput_buckets(bucket_start_unix, upload_bytes, download_bytes, measured_seconds)
-                VALUES ($bucket, $upload, $download, $measured)
-                ON CONFLICT(bucket_start_unix) DO UPDATE SET
-                    upload_bytes = excluded.upload_bytes,
-                    download_bytes = excluded.download_bytes,
-                    measured_seconds = excluded.measured_seconds;
-                """;
-            command.Parameters.AddWithValue("$bucket", bucket.StartUtc.ToUnixTimeSeconds());
-            command.Parameters.AddWithValue("$upload", bucket.UploadBytes);
-            command.Parameters.AddWithValue("$download", bucket.DownloadBytes);
-            command.Parameters.AddWithValue("$measured", bucket.MeasuredSeconds);
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        await transaction.CommitAsync(cancellationToken);
+            foreach (var bucket in buckets)
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = """
+                    INSERT INTO throughput_buckets(bucket_start_unix, upload_bytes, download_bytes, measured_seconds)
+                    VALUES ($bucket, $upload, $download, $measured)
+                    ON CONFLICT(bucket_start_unix) DO UPDATE SET
+                        upload_bytes = excluded.upload_bytes,
+                        download_bytes = excluded.download_bytes,
+                        measured_seconds = excluded.measured_seconds;
+                    """;
+                command.Parameters.AddWithValue("$bucket", bucket.StartUtc.ToUnixTimeSeconds());
+                command.Parameters.AddWithValue("$upload", bucket.UploadBytes);
+                command.Parameters.AddWithValue("$download", bucket.DownloadBytes);
+                command.Parameters.AddWithValue("$measured", bucket.MeasuredSeconds);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     /// <summary>
@@ -657,36 +719,44 @@ public sealed class HistoryStore
         var now = ToStorage(DateTimeOffset.UtcNow);
         var specJson = JsonSerializer.Serialize(rule.Spec, IpcJson.Options);
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        await using (var upsert = connection.CreateCommand())
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            upsert.Transaction = transaction;
-            upsert.CommandText = """
-                INSERT INTO firewall_rules(managed_rule_id, os_rule_name, spec_json, state,
-                                           last_verified_utc, last_error, updated_utc)
-                VALUES ($id, $name, $spec, $state, $verified, $error, $now)
-                ON CONFLICT(managed_rule_id) DO UPDATE SET
-                    os_rule_name = excluded.os_rule_name,
-                    spec_json = excluded.spec_json,
-                    state = excluded.state,
-                    last_verified_utc = excluded.last_verified_utc,
-                    last_error = excluded.last_error,
-                    updated_utc = excluded.updated_utc;
-                """;
-            upsert.Parameters.AddWithValue("$id", rule.ManagedRuleId.ToString("D"));
-            upsert.Parameters.AddWithValue("$name", rule.OsRuleName);
-            upsert.Parameters.AddWithValue("$spec", specJson);
-            upsert.Parameters.AddWithValue("$state", (int)rule.State);
-            upsert.Parameters.AddWithValue("$verified", (object?)ToStorageOrNull(rule.LastVerifiedUtc) ?? DBNull.Value);
-            upsert.Parameters.AddWithValue("$error", (object?)rule.LastErrorCode ?? DBNull.Value);
-            upsert.Parameters.AddWithValue("$now", now);
-            await upsert.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        await InsertAuditAsync(connection, transaction, rule.ManagedRuleId, actorSid, action, result, specJson, error, now, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await using (var upsert = connection.CreateCommand())
+            {
+                upsert.Transaction = transaction;
+                upsert.CommandText = """
+                    INSERT INTO firewall_rules(managed_rule_id, os_rule_name, spec_json, state,
+                                               last_verified_utc, last_error, updated_utc)
+                    VALUES ($id, $name, $spec, $state, $verified, $error, $now)
+                    ON CONFLICT(managed_rule_id) DO UPDATE SET
+                        os_rule_name = excluded.os_rule_name,
+                        spec_json = excluded.spec_json,
+                        state = excluded.state,
+                        last_verified_utc = excluded.last_verified_utc,
+                        last_error = excluded.last_error,
+                        updated_utc = excluded.updated_utc;
+                    """;
+                upsert.Parameters.AddWithValue("$id", rule.ManagedRuleId.ToString("D"));
+                upsert.Parameters.AddWithValue("$name", rule.OsRuleName);
+                upsert.Parameters.AddWithValue("$spec", specJson);
+                upsert.Parameters.AddWithValue("$state", (int)rule.State);
+                upsert.Parameters.AddWithValue("$verified", (object?)ToStorageOrNull(rule.LastVerifiedUtc) ?? DBNull.Value);
+                upsert.Parameters.AddWithValue("$error", (object?)rule.LastErrorCode ?? DBNull.Value);
+                upsert.Parameters.AddWithValue("$now", now);
+                await upsert.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await InsertAuditAsync(connection, transaction, rule.ManagedRuleId, actorSid, action, result, specJson, error, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     /// <summary>
@@ -705,36 +775,44 @@ public sealed class HistoryStore
 
         var now = ToStorage(DateTimeOffset.UtcNow);
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        await using (var update = connection.CreateCommand())
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            update.Transaction = transaction;
-            update.CommandText = """
-                UPDATE firewall_rules
-                SET state = $state, last_error = $error, updated_utc = $now
-                WHERE managed_rule_id = $id;
-                """;
-            update.Parameters.AddWithValue("$state", (int)RuleState.Failed);
-            update.Parameters.AddWithValue("$error", (object?)errorCode ?? DBNull.Value);
-            update.Parameters.AddWithValue("$now", now);
-            update.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
-            await update.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        await InsertAuditAsync(
-            connection,
-            transaction,
-            managedRuleId,
-            actorSid,
-            "rule.remove",
-            "failed",
-            newJson: null,
-            error: errorMessage ?? errorCode,
-            now,
-            cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await using (var update = connection.CreateCommand())
+            {
+                update.Transaction = transaction;
+                update.CommandText = """
+                    UPDATE firewall_rules
+                    SET state = $state, last_error = $error, updated_utc = $now
+                    WHERE managed_rule_id = $id;
+                    """;
+                update.Parameters.AddWithValue("$state", (int)RuleState.Failed);
+                update.Parameters.AddWithValue("$error", (object?)errorCode ?? DBNull.Value);
+                update.Parameters.AddWithValue("$now", now);
+                update.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
+                await update.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await InsertAuditAsync(
+                connection,
+                transaction,
+                managedRuleId,
+                actorSid,
+                "rule.remove",
+                "failed",
+                newJson: null,
+                error: errorMessage ?? errorCode,
+                now,
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public async Task DeleteFirewallRuleAsync(
@@ -748,19 +826,27 @@ public sealed class HistoryStore
 
         var now = ToStorage(DateTimeOffset.UtcNow);
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        await using (var delete = connection.CreateCommand())
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM firewall_rules WHERE managed_rule_id = $id;";
-            delete.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
-            await delete.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        await InsertAuditAsync(connection, transaction, managedRuleId, actorSid, "rule.remove", result, null, error, now, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await using (var delete = connection.CreateCommand())
+            {
+                delete.Transaction = transaction;
+                delete.CommandText = "DELETE FROM firewall_rules WHERE managed_rule_id = $id;";
+                delete.Parameters.AddWithValue("$id", managedRuleId.ToString("D"));
+                await delete.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await InsertAuditAsync(connection, transaction, managedRuleId, actorSid, "rule.remove", result, null, error, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public async Task<IReadOnlyList<ManagedRule>> ListFirewallRulesAsync(CancellationToken cancellationToken = default)
@@ -812,49 +898,58 @@ public sealed class HistoryStore
 
         var cutoff = ToStorage(nowUtc.Subtract(retention));
 
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        int deleted;
-
-        await using (var deleteFlows = connection.CreateCommand())
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            deleteFlows.CommandText = "DELETE FROM flows WHERE last_seen_utc < $cutoff;";
-            deleteFlows.Parameters.AddWithValue("$cutoff", cutoff);
-            deleted = await deleteFlows.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        await using (var deleteApps = connection.CreateCommand())
-        {
-            deleteApps.CommandText = "DELETE FROM apps WHERE id NOT IN (SELECT DISTINCT app_id FROM flows);";
-            await deleteApps.ExecuteNonQueryAsync(cancellationToken);
-        }
+            int deleted;
 
-        await using (var deleteThroughput = connection.CreateCommand())
-        {
-            deleteThroughput.CommandText =
-                "DELETE FROM throughput_buckets WHERE bucket_start_unix < $cutoff;";
-            deleteThroughput.Parameters.AddWithValue(
-                "$cutoff",
-                nowUtc.Subtract(retention).ToUnixTimeSeconds());
-            await deleteThroughput.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using (var deleteFlows = connection.CreateCommand())
+            {
+                deleteFlows.CommandText = "DELETE FROM flows WHERE last_seen_utc < $cutoff;";
+                deleteFlows.Parameters.AddWithValue("$cutoff", cutoff);
+                deleted = await deleteFlows.ExecuteNonQueryAsync(cancellationToken);
+            }
 
-        // Reclaim WAL growth and shrink the database file once substantial dead pages accumulate.
-        await ExecuteAsync(connection, "PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken);
-        var freelistText = await ExecuteScalarAsync(connection, "PRAGMA freelist_count;", cancellationToken);
-        if (long.TryParse(freelistText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var freelistPages) &&
-            freelistPages >= 1024)
-        {
-            await ExecuteAsync(connection, "VACUUM;", cancellationToken);
+            await using (var deleteApps = connection.CreateCommand())
+            {
+                deleteApps.CommandText = "DELETE FROM apps WHERE id NOT IN (SELECT DISTINCT app_id FROM flows);";
+                await deleteApps.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using (var deleteThroughput = connection.CreateCommand())
+            {
+                deleteThroughput.CommandText =
+                    "DELETE FROM throughput_buckets WHERE bucket_start_unix < $cutoff;";
+                deleteThroughput.Parameters.AddWithValue(
+                    "$cutoff",
+                    nowUtc.Subtract(retention).ToUnixTimeSeconds());
+                await deleteThroughput.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // Reclaim WAL growth and shrink the database file once substantial dead pages accumulate.
             await ExecuteAsync(connection, "PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken);
-        }
+            var freelistText = await ExecuteScalarAsync(connection, "PRAGMA freelist_count;", cancellationToken);
+            if (long.TryParse(freelistText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var freelistPages) &&
+                freelistPages >= 1024)
+            {
+                await ExecuteAsync(connection, "VACUUM;", cancellationToken);
+                await ExecuteAsync(connection, "PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken);
+            }
 
-        return deleted;
+            return deleted;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     private async Task MigrateAsync(CancellationToken cancellationToken)
     {
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken, ensureInitialized: false)
+            .ConfigureAwait(false);
 
         await ExecuteAsync(connection, "PRAGMA journal_mode=WAL;", cancellationToken);
         await ExecuteAsync(connection, "PRAGMA foreign_keys=ON;", cancellationToken);

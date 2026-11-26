@@ -1445,58 +1445,45 @@ internal sealed class SetupNativeWindow : IDisposable
 
     private bool EnsureAxiomClosedForSetup(string actionLabel, bool autoClose = false)
     {
-        var running = Process.GetProcessesByName("Axiom.Desktop")
-            .Concat(Process.GetProcessesByName("Netpetra.Desktop"))
+        var running = SetupProcessCloser.DesktopProcessNames
+            .SelectMany(Process.GetProcessesByName)
             .ToArray();
-        if (running.Length == 0)
+        var hasRunning = running.Length > 0;
+        foreach (var proc in running)
+        {
+            proc.Dispose();
+        }
+
+        if (!hasRunning)
         {
             return true;
         }
 
-        try
+        if (!autoClose)
         {
-            if (!autoClose)
+            int ans = NativeMethods.MessageBox(
+                _hwnd,
+                $"Axiom is currently running.\n\nClose Axiom now so Setup can {actionLabel}?",
+                "Axiom Setup",
+                MbYesNo | MbIconQuestion);
+            if (ans != IdYes)
             {
-                int ans = NativeMethods.MessageBox(
-                    _hwnd,
-                    $"Axiom is currently running.\n\nClose Axiom now so Setup can {actionLabel}?",
-                    "Axiom Setup",
-                    MbYesNo | MbIconQuestion);
-                if (ans != IdYes)
-                {
-                    return false;
-                }
-            }
-
-            foreach (var proc in running)
-            {
-                try
-                {
-                    if (!proc.HasExited)
-                    {
-                        _ = proc.CloseMainWindow();
-                        if (!proc.WaitForExit(2000))
-                        {
-                            proc.Kill(entireProcessTree: true);
-                            _ = proc.WaitForExit(2000);
-                        }
-                    }
-                }
-                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-                {
-                }
-            }
-
-            Thread.Sleep(250);
-            return true;
-        }
-        finally
-        {
-            foreach (var proc in running)
-            {
-                proc.Dispose();
+                return false;
             }
         }
+
+        if (!SetupProcessCloser.CloseDesktopProcesses(report: null))
+        {
+            _ = NativeMethods.MessageBox(
+                _hwnd,
+                "Axiom is still running and could not be closed automatically.\n\n" +
+                "Right-click the Axiom tray icon, choose Exit, then click the button again.",
+                "Axiom Setup",
+                MbOk | MbIconWarning);
+            return false;
+        }
+
+        return true;
     }
 
     private int CountSelectedComponents() =>
@@ -1753,24 +1740,26 @@ internal sealed class SetupNativeWindow : IDisposable
 
         if (result is { Success: true })
         {
-            _currentStepText = "Completed.";
+            _currentStepText = result.PartialSuccess
+                ? "Completed with warnings."
+                : "Completed.";
             InvalidateWindow();
 
             // Fresh Install & Update/Upgrade: SetupInstaller launches Axiom when StartAfterInstall
-            // is enabled; close the installer automatically so user transitions straight into Axiom.
-            if (!_lastOperationWasRepair)
+            // is enabled and no warnings occurred; close automatically so the user transitions straight into Axiom.
+            if (!_lastOperationWasRepair && !result.PartialSuccess && _startAfterInstall)
             {
                 _ = NativeMethods.PostMessage(_hwnd, WmClose, 0, 0);
                 return;
             }
 
-            if (_startAfterInstall)
-            {
-                _ = NativeMethods.PostMessage(_hwnd, WmClose, 0, 0);
-                return;
-            }
-
-            _ = NativeMethods.MessageBox(_hwnd, result.Message, "Axiom Setup", MbOk | MbIconInformation);
+            string body = string.IsNullOrWhiteSpace(result.Warning)
+                ? result.Message
+                : $"{result.Message}\n\n{result.Warning}";
+            uint icon = result.PartialSuccess || !string.IsNullOrWhiteSpace(result.Warning)
+                ? MbIconWarning
+                : MbIconInformation;
+            _ = NativeMethods.MessageBox(_hwnd, body, "Axiom Setup", MbOk | icon);
             return;
         }
 

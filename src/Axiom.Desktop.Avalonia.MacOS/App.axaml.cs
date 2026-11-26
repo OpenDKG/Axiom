@@ -20,6 +20,10 @@ public partial class App : Application
     private MainWindow? _window;
     private TrayIcon? _tray;
     private MacSingleInstance? _singleInstance;
+
+    /// <summary>Lock taken by <see cref="Program.Main"/> before Avalonia starts; owned (disposed) by the app.</summary>
+    internal static MacSingleInstance? SingleInstance { get; set; }
+
     private MacProtectionSetup? _protection;
     private IDisposable? _storageMaintenance;
     private NativeMenuItem? _daemonStatusItem;
@@ -56,16 +60,25 @@ public partial class App : Application
             "startup",
             $"Axiom {typeof(App).Assembly.GetName().Version} pid={Environment.ProcessId} base={AppContext.BaseDirectory}");
 
-        // Lock and show-socket first, before anything heavy, so a second launch finds the socket
-        // as early as possible; the second launch retries once after 300 ms for the remaining gap.
-        _singleInstance = new MacSingleInstance();
-        if (!_singleInstance.TryAcquire())
+        // The lock was taken in Program.Main; bind the show socket first, before anything heavy,
+        // so a second launch finds it as early as possible (it retries once after 300 ms).
+        if (SingleInstance is not null)
         {
-            var delivered = _singleInstance.SignalExistingAsync(MacSingleInstance.SignalRetryDelay).GetAwaiter().GetResult();
-            StartupLog.Write("startup", $"Another Axiom instance is running; show signal delivered={delivered}.");
-            _singleInstance = null;
-            desktop.Shutdown();
-            return;
+            _singleInstance = SingleInstance;
+            SingleInstance = null;
+        }
+        else
+        {
+            _singleInstance = new MacSingleInstance();
+            if (!_singleInstance.TryAcquire())
+            {
+                var delivered = _singleInstance.SignalExistingAsync(MacSingleInstance.SignalRetryDelay).GetAwaiter().GetResult();
+                StartupLog.Write("startup", $"Another Axiom instance is running; show signal delivered={delivered}.");
+                _singleInstance.Dispose();
+                _singleInstance = null;
+                desktop.Shutdown();
+                return;
+            }
         }
 
         _singleInstance.Listen(ShowWindow);

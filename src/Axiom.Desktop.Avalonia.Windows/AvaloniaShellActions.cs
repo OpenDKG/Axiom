@@ -5,7 +5,7 @@ using Axiom.Presentation;
 namespace Axiom.Desktop.Avalonia.Windows;
 
 /// <summary>Restart and shutdown are host actions; the portable page only requests them.</summary>
-public sealed class AvaloniaShellActions(Action shutdown) : IShellActions
+public sealed class AvaloniaShellActions(Action shutdown, Action? prepareRestart = null) : IShellActions
 {
     public void Restart()
     {
@@ -15,18 +15,21 @@ public sealed class AvaloniaShellActions(Action shutdown) : IShellActions
             return;
         }
 
-        var arguments = Environment.GetCommandLineArgs()
-            .Skip(1)
-            .Select(QuoteArgument);
-        Process.Start(new ProcessStartInfo(executable, string.Join(' ', arguments))
+        var startInfo = new ProcessStartInfo(executable)
         {
             UseShellExecute = true,
-        });
+        };
+        foreach (var argument in Environment.GetCommandLineArgs().Skip(1))
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        // Release the single-instance mutex before spawning the replacement process so it does not
+        // collide with this dying instance, signal it, and exit without starting.
+        prepareRestart?.Invoke();
+        using var started = Process.Start(startInfo);
         shutdown();
     }
 
     public void Shutdown() => shutdown();
-
-    private static string QuoteArgument(string value) =>
-        $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 }

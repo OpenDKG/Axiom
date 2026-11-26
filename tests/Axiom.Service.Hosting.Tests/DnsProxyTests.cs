@@ -402,6 +402,31 @@ public sealed class DnsProxyTests
         Assert.Equal(3, reply.Buffer[3] & 0x0F);
     }
 
+    [Fact]
+    public async Task Proxy_updates_doh_bootstrap_map_when_targets_change()
+    {
+        using var handler = new FakeDohHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var initial = new DnsUpstreamTarget(
+            PlainEndpoint: null,
+            DohUri: new Uri("https://initial.example/dns-query"),
+            BootstrapAddress: IPAddress.Parse("192.0.2.1"));
+        var updated = new DnsUpstreamTarget(
+            PlainEndpoint: null,
+            DohUri: new Uri("https://updated.example/dns-query"),
+            BootstrapAddress: IPAddress.Parse("198.51.100.2"));
+
+        await using var server = new DnsProxyServer(
+            PrivacyShieldPolicy.Create(new PrivacyShieldSettings { Categories = PrivacyCategory.None }),
+            [initial],
+            port: 0,
+            dohHandler: handler);
+
+        server.UpdateTargets([updated]);
+
+        Assert.Single(server.Targets);
+        Assert.Equal(IPAddress.Parse("198.51.100.2"), server.Targets[0].BootstrapAddress);
+    }
+
     private sealed class FakeDohHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {

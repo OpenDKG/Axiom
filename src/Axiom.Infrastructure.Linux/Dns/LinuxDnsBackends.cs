@@ -249,14 +249,56 @@ public sealed class NetworkManagerDnsBackend : ILinuxDnsBackend
         var connections = new List<(string, string, string, string)>();
         foreach (var raw in output.Split('\n'))
         {
-            var parts = raw.Trim().Split(':');
-            if (parts.Length >= 4 && parts[1].Length > 0)
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            var parts = SplitNmcliTerseLine(trimmed);
+            if (parts.Count >= 4 && parts[1].Length > 0)
             {
                 connections.Add((parts[0], parts[1], parts[2], parts[3]));
             }
         }
 
         return connections;
+    }
+
+    private static List<string> SplitNmcliTerseLine(string line)
+    {
+        var fields = new List<string>();
+        var current = new System.Text.StringBuilder(line.Length);
+        var escaped = false;
+        foreach (var ch in line)
+        {
+            if (escaped)
+            {
+                current.Append(ch);
+                escaped = false;
+            }
+            else if (ch == '\\')
+            {
+                escaped = true;
+            }
+            else if (ch == ':')
+            {
+                fields.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(ch);
+            }
+        }
+
+        if (escaped)
+        {
+            current.Append('\\');
+        }
+
+        fields.Add(current.ToString());
+        return fields;
     }
 
     /// <summary>Four <c>-g</c> lines: ipv4.dns, ipv4.ignore-auto-dns, ipv6.dns, ipv6.ignore-auto-dns → explicit servers.</summary>

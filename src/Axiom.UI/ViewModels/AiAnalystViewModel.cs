@@ -47,17 +47,6 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     private string _apiKey = string.Empty;
     private bool _apiKeyDirty;
 
-    private static readonly Dictionary<AiProviderKind, (string Endpoint, string Model)> ProviderPresets =
-        new Dictionary<AiProviderKind, (string Endpoint, string Model)>
-        {
-            [AiProviderKind.OpenChamberLocal] = ("opencode://local", "opencode-go/deepseek-v4.1-flash"),
-            [AiProviderKind.OpenAi] = ("https://api.openai.com/v1/chat/completions", "gpt-5.1"),
-            [AiProviderKind.Anthropic] = ("https://api.anthropic.com/v1/messages", "claude-sonnet-4-5"),
-            [AiProviderKind.DeepSeek] = ("https://api.deepseek.com/chat/completions", "deepseek-chat"),
-            [AiProviderKind.Zai] = ("https://api.z.ai/api/paas/v4/chat/completions", "glm-5.3"),
-            [AiProviderKind.OpenCodeZen] = ("https://opencode.ai/zen/v1/chat/completions", "deepseek-v4.1-flash"),
-        };
-
     public AiAnalystViewModel(ConnectionMonitor monitor, ServicePipeClient? serviceClient = null)
         : base("AI Analyst", "Optional, evidence-based investigation with no enforcement", "\uE9D9")
     {
@@ -65,14 +54,8 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         _serviceClient = serviceClient;
         Providers =
         [
-            new(AiProviderKind.OpenChamberLocal, "OpenChamber / OpenCode (no install, uses your login)"),
-            new(AiProviderKind.OpenAiCompatible, "OpenAI-compatible / cloud (custom)"),
-            new(AiProviderKind.LocalOpenAiCompatible, "OpenAI-compatible / local (Ollama, LM Studio)"),
-            new(AiProviderKind.OpenAi, "OpenAI (api.openai.com)"),
-            new(AiProviderKind.Anthropic, "Anthropic Claude"),
-            new(AiProviderKind.DeepSeek, "DeepSeek"),
-            new(AiProviderKind.Zai, "Z.ai (GLM)"),
-            new(AiProviderKind.OpenCodeZen, "OpenCode Zen (cloud)"),
+            .. AiProviderCompliancePolicy.GetPresets()
+                .Select(preset => new AiProviderOption(preset.Kind, preset.Label)),
         ];
 
         _autoTimer.Tick += (_, _) => _ = AutomaticTickAsync();
@@ -84,11 +67,12 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         Endpoint = settings.Endpoint;
         Model = settings.Model;
         if (settings.Provider == AiProviderKind.OpenChamberLocal &&
-            !Endpoint.StartsWith("opencode://", StringComparison.OrdinalIgnoreCase))
+            !Endpoint.StartsWith("opencode://", StringComparison.OrdinalIgnoreCase) &&
+            AiProviderCompliancePolicy.TryGetPreset(AiProviderKind.OpenChamberLocal, out var openCodePreset))
         {
-            Endpoint = ProviderPresets[AiProviderKind.OpenChamberLocal].Endpoint;
+            Endpoint = openCodePreset.Endpoint;
             Model = string.IsNullOrWhiteSpace(Model)
-                ? ProviderPresets[AiProviderKind.OpenChamberLocal].Model
+                ? openCodePreset.DefaultModel
                 : Model;
         }
         RedactPaths = settings.RedactPaths;
@@ -135,10 +119,14 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         : string.Empty;
 
     public string CredentialsText => IsOpenCodeProvider
-        ? "Uses the OpenChamber/OpenCode CLI already signed in on this PC; no separate API key is needed."
+        ? "Uses your authorized OpenCode CLI setup. Third-party consumer logins (Claude Pro/Max, Antigravity, Gemini CLI, Copilot) are blocked to protect your accounts."
         : string.IsNullOrWhiteSpace(_apiKey)
             ? "No API key stored. A local endpoint may not require one."
             : "API key is stored with Windows DPAPI; it is never shown or logged.";
+
+    public string ProviderComplianceText => Provider is { } selected
+        ? AiProviderCompliancePolicy.GetComplianceNote(selected.Value)
+        : string.Empty;
 
     public string PrivacyText =>
         "Evidence is bounded and contains process names, PIDs, parent process chains, executable " +
@@ -158,6 +146,8 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOpenCodeProvider))]
     [NotifyPropertyChangedFor(nameof(IsConfigured))]
+    [NotifyPropertyChangedFor(nameof(CredentialsText))]
+    [NotifyPropertyChangedFor(nameof(ProviderComplianceText))]
     private AiProviderOption _provider;
 
     [ObservableProperty]
@@ -206,13 +196,12 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
 
     partial void OnProviderChanged(AiProviderOption value)
     {
-        if (ProviderPresets.TryGetValue(value.Value, out var preset))
+        if (value is not null && AiProviderCompliancePolicy.TryGetPreset(value.Value, out var preset))
         {
             Endpoint = preset.Endpoint;
-            Model = preset.Model;
+            Model = preset.DefaultModel;
         }
 
-        UpdateCredentialsText();
         UpdateStatus();
     }
 
@@ -293,8 +282,12 @@ public sealed partial class AiAnalystViewModel : PageViewModel, IActivatablePage
         }
 
         _apiKeyDirty = false;
-        SettingsStatus = "Settings saved locally. The API key is protected with Windows DPAPI.";
+        SettingsStatus = settings.Enabled &&
+                         !AiProviderCompliancePolicy.ValidateRequest(settings, _apiKey, out var complianceError)
+            ? $"Settings saved locally. Compliance check: {complianceError}"
+            : "Settings saved locally. The API key is protected with Windows DPAPI.";
         UpdateCredentialsText();
+        OnPropertyChanged(nameof(ProviderComplianceText));
         UpdateStatus();
         StartAutomaticTimer();
     }

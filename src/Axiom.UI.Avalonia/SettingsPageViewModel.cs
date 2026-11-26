@@ -331,7 +331,7 @@ public sealed partial class SettingsPageViewModel : PageViewModel, IDisposable
             if (found)
             {
                 UpdateCheckStatusText =
-                    $"Update available: v{_updateChecker.LatestVersion}. Click the download icon in the title bar to view what's new.";
+                    $"Axiom v{_updateChecker.LatestVersion} is available. Click the update icon in the top bar to review and install.";
             }
             else if (_updateChecker.LastCheckSucceeded)
             {

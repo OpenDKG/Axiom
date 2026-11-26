@@ -201,9 +201,9 @@ public sealed class PrivacyShieldSourceUpdater : IDisposable
                     Error: null));
                 succeededCount++;
             }
-            catch (Exception exception) when (exception is
-                         HttpRequestException or IOException or InvalidDataException or
-                         TaskCanceledException or ArgumentException)
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested &&
+                                              exception is HttpRequestException or IOException or InvalidDataException or
+                                              TaskCanceledException or ArgumentException)
             {
                 failedSources.Add(source.Id);
                 statuses.Add(new PrivacyShieldSourceStatus(

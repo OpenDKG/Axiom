@@ -13,6 +13,19 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+        {
+            if (eventArgs.ExceptionObject is Exception exception)
+            {
+                StartupLog.Write("fatal", exception);
+            }
+        };
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            StartupLog.Write("fatal", eventArgs.Exception);
+            eventArgs.SetObserved();
+        };
+
         DistributionContext.ConfigureForProcess(false);
         try
         {
@@ -21,7 +34,27 @@ internal static class Program
                 return setupExitCode;
             }
 
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            // Single instance before any Avalonia initialisation so a second launch exits before
+            // spinning up Cocoa/AppKit or calling Shutdown() inside OnFrameworkInitializationCompleted.
+            var instance = new MacSingleInstance();
+            if (!instance.TryAcquire())
+            {
+                var delivered = instance.SignalExistingAsync(MacSingleInstance.SignalRetryDelay).GetAwaiter().GetResult();
+                StartupLog.Write("startup", $"Another Axiom instance is running; show signal delivered={delivered}.");
+                instance.Dispose();
+                return 0;
+            }
+
+            App.SingleInstance = instance;
+            try
+            {
+                return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            }
+            finally
+            {
+                App.SingleInstance?.Dispose();
+                App.SingleInstance = null;
+            }
         }
         catch (Exception exception)
         {

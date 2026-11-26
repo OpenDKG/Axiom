@@ -308,6 +308,119 @@ public sealed class AiAnalystTests
         });
     }
 
+    [Fact]
+    public async Task GoogleGemini_uses_bearer_auth_and_parses_response()
+    {
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"choices":[{"message":{"content":"{\"status\":\"LOW_OBSERVED_RISK\",\"severity\":\"low\",\"confidence\":\"medium\",\"summary\":\"gemini ok\"}"}}]}""",
+                Encoding.UTF8,
+                "application/json"),
+        });
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var settings = NewSettings() with
+        {
+            Provider = AiProviderKind.GoogleGemini,
+            Endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            Model = "gemini-2.5-flash",
+        };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, "AIzaSyTestKey", evidence, CancellationToken.None);
+
+        Assert.Null(finding.Error);
+        Assert.Equal("LOW_OBSERVED_RISK", finding.Status);
+        Assert.Equal("Bearer AIzaSyTestKey", handler.Authorization);
+        Assert.Equal("gemini-2.5-flash", finding.Model);
+    }
+
+    [Fact]
+    public async Task OpenRouter_sends_attribution_headers_and_parses_response()
+    {
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"choices":[{"message":{"content":"{\"status\":\"SUSPICIOUS\",\"severity\":\"medium\",\"confidence\":\"low\",\"summary\":\"openrouter ok\"}"}}]}""",
+                Encoding.UTF8,
+                "application/json"),
+        });
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var settings = NewSettings() with
+        {
+            Provider = AiProviderKind.OpenRouter,
+            Endpoint = "https://openrouter.ai/api/v1/chat/completions",
+            Model = "google/gemini-2.5-flash",
+        };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, "sk-or-v1-test", evidence, CancellationToken.None);
+
+        Assert.Null(finding.Error);
+        Assert.Equal("SUSPICIOUS", finding.Status);
+        Assert.Equal("Bearer sk-or-v1-test", handler.Authorization);
+        Assert.Equal("https://github.com/OpenDKG/Axiom", handler.HttpReferer);
+        Assert.Equal("Axiom Firewall", handler.XTitle);
+    }
+
+    [Theory]
+    [InlineData(AiProviderKind.Anthropic, "https://api.anthropic.com/v1/messages", "claude-sonnet-4-5", "sk-ant-oat01-blocked")]
+    [InlineData(AiProviderKind.GoogleGemini, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-2.5-flash", "ya29.blocked")]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://cloudcode-pa.googleapis.com/v1internal", "gemini-2.5-pro", "AIzaSyTest")]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://claude.ai/api/organizations", "claude-sonnet-4-5", "secret")]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://chatgpt.com/backend-api/conversation", "gpt-5", "secret")]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://api.githubcopilot.com/chat/completions", "gpt-4o", "secret")]
+    public async Task Blocked_oauth_tokens_and_endpoints_are_rejected_before_http_send(
+        AiProviderKind provider,
+        string endpoint,
+        string model,
+        string apiKey)
+    {
+        var handler = new CaptureHandler(_ => throw new InvalidOperationException("HTTP should not be invoked."));
+        using var http = new HttpClient(handler);
+        using var client = new AiAnalystClient(http);
+        var settings = NewSettings() with
+        {
+            Provider = provider,
+            Endpoint = endpoint,
+            Model = model,
+        };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, apiKey, evidence, CancellationToken.None);
+
+        Assert.Equal(0, handler.CallCount);
+        Assert.Equal("INSUFFICIENT_DATA", finding.Status);
+        Assert.False(string.IsNullOrWhiteSpace(finding.Error));
+    }
+
+    [Theory]
+    [InlineData("anthropic/claude-sonnet-4-5", "")]
+    [InlineData("antigravity/gemini-2.5-pro", "")]
+    [InlineData("opencode/free", "")]
+    [InlineData("opencode-go/deepseek-v4.1-flash", "github-copilot/gpt-4o")]
+    public async Task Blocked_opencode_models_are_rejected_before_spawning_opencode(
+        string model,
+        string verifierModel)
+    {
+        using var client = new AiAnalystClient();
+        var settings = NewSettings() with
+        {
+            Provider = AiProviderKind.OpenChamberLocal,
+            Endpoint = "opencode://local",
+            Model = model,
+            VerifierModel = verifierModel,
+        };
+        var evidence = AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true);
+
+        var finding = await client.AnalyzeAsync(settings, string.Empty, evidence, CancellationToken.None);
+
+        Assert.Equal("INSUFFICIENT_DATA", finding.Status);
+        Assert.Contains("ToS", finding.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AiAnalystSettings NewSettings() => new()
     {
         Enabled = true,
@@ -343,21 +456,34 @@ public sealed class AiAnalystTests
 
     private sealed class CaptureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
+        public int CallCount { get; private set; }
+
         public string? Body { get; private set; }
 
         public string? ApiKey { get; private set; }
 
         public string? Authorization { get; private set; }
 
+        public string? HttpReferer { get; private set; }
+
+        public string? XTitle { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            CallCount++;
             Body = request.Content is null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             ApiKey = request.Headers.TryGetValues("x-api-key", out var keys) ? keys.FirstOrDefault() : null;
             Authorization = request.Headers.Authorization?.ToString();
+            HttpReferer = request.Headers.TryGetValues("HTTP-Referer", out var referers)
+                ? referers.FirstOrDefault()
+                : null;
+            XTitle = request.Headers.TryGetValues("X-Title", out var titles)
+                ? titles.FirstOrDefault()
+                : null;
             return respond(request);
         }
     }

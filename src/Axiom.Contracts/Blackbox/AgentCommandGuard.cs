@@ -333,7 +333,7 @@ public static class AgentCommandGuard
             text = _normalize_command(command)
             words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
             tokens = _protected_tokens(protected)
-            return any(word in tokens for word in words) or _glob_hits(text, tokens)
+            return any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens)
 
 
         def _hidden_path_read(command: str, protected) -> bool:
@@ -472,41 +472,53 @@ public static class AgentCommandGuard
 
         def _protected_tokens(protected) -> list:
             # Tokens that identify a protected path inside a shell command. A trailing * uses its
-            # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a file pattern keeps
-            # its leading dot (.env, .pem) so short names do not match unrelated binaries.
+            # parent directory (~/.ssh/* -> .ssh, C:\Lab\samples\* -> samples); a leading wildcard
+            # extension (*.pem -> .pem) keeps its leading dot so short names do not match unrelated binaries.
             tokens = []
             for pattern in protected or ():
                 normalized = str(pattern).replace("~", "").replace("/", "\\").strip()
-                parts = [part for part in normalized.split("\\") if part and part != "*"]
+                parts = [part for part in normalized.split("\\") if part]
                 if not parts:
                     continue
                 tail = parts[-1]
                 if tail == "*":
-                    if len(parts) >= 2:
+                    if len(parts) >= 2 and parts[-2] != "*":
                         tokens.append(parts[-2].lower())
                     continue
-                token = tail.rstrip("*").rstrip(".").lower()
-                if token:
+                if ("*" in tail or "?" in tail) and len(parts) >= 2 and parts[-2] != "*":
+                    tokens.append(parts[-2].lower())
+                token = tail.lstrip("*").rstrip("*").rstrip(".").lower()
+                if token and not any(ch in token for ch in "*?"):
                     tokens.append(token)
             return [token for token in tokens if token]
 
 
+        def _word_matches_token(word: str, token: str) -> bool:
+            if token.startswith(".") and "." not in token[1:]:
+                return word == token or word.endswith(token)
+            return word == token
+
+
         def _hits_protected(command: str, protected) -> bool:
+            import re as _re
             text = _normalize_command(command)
             tokens = _protected_tokens(protected)
-            return any(token in text for token in tokens) or _glob_hits(text, tokens)
+            words = [w for w in _re.split(r'[\s\\/"\'=:@,;()]+', text) if w]
+            return any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens)
 
 
         def _executes_protected(command: str, protected) -> bool:
             # An agent must not launch a file that lives in a protected path: reading and copying
             # are covered by Blackbox, but Start-Process/&/cmd on the same file was allowed.
+            import re as _re
             text = " ".join((command or "").lower().split())
             if not _hits_protected(text, protected):
                 return False
             verbs = ("start-process", "invoke-item", "cmd /c", "cmd.exe /c", "powershell", "pwsh",
-                     "rundll32", "regsvr32", "mshta", "wmic process call create", "schtasks /run",
-                     "& ", "&& ")
-            return any(verb in text for verb in verbs)
+                     "rundll32", "regsvr32", "mshta", "wmic process call create", "schtasks /run")
+            if any(verb in text for verb in verbs):
+                return True
+            return _re.search(r"(?:^|[;|]\s*|&&\s*)&\s+\S", text) is not None
 
 
         def _exfiltrates_protected(command: str, protected) -> bool:
@@ -830,7 +842,7 @@ public static class AgentCommandGuard
                 norm_arg = _normalize_command(arg_path)
                 tokens = _protected_tokens(protected)
                 words = norm_arg.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
-                if any(word in tokens for word in words) or _glob_hits(norm_arg, tokens):
+                if any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(norm_arg, tokens):
                     return ("protected-path", "Blackbox blocked this call: it accesses a protected path.")
             if not command_text:
                 return None

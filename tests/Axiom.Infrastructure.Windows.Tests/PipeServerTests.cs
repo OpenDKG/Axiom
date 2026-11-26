@@ -329,6 +329,27 @@ public sealed class PipeServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Pipe_server_handles_more_than_four_concurrent_connections_without_blackout()
+    {
+        _host = await ServerHost.StartAsync();
+
+        using var idlePipe1 = new NamedPipeClientStream(".", _host.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var idlePipe2 = new NamedPipeClientStream(".", _host.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var idlePipe3 = new NamedPipeClientStream(".", _host.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var idlePipe4 = new NamedPipeClientStream(".", _host.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await Task.WhenAll(
+            idlePipe1.ConnectAsync(3000, timeout.Token),
+            idlePipe2.ConnectAsync(3000, timeout.Token),
+            idlePipe3.ConnectAsync(3000, timeout.Token),
+            idlePipe4.ConnectAsync(3000, timeout.Token));
+
+        var fifth = await SendAsync(_host.PipeName, IpcCommandTypes.ServiceHealth);
+        Assert.True(fifth.Ok);
+    }
+
+    [Fact]
     public async Task Capabilities_advertise_enforcement_commands_when_handlers_are_registered()
     {
         var pipeName = $"Axiom.Test.{Guid.NewGuid():N}";

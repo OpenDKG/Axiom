@@ -29,6 +29,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    private readonly SemaphoreSlim _sourceUpdateGate = new(1, 1);
+
     private readonly SemaphoreSlim _sourceSyncSignal = new(0, 1);
 
     private readonly object _rulesGate = new();
@@ -384,10 +386,24 @@ public sealed class PrivacyShieldController : IAsyncDisposable
     /// </summary>
     public void EnsureConfiguredAdapterDns()
     {
-        var adapterError = _dns.EnsureConfiguredAdapterDns(_server is not null, _settings);
-        if (!string.IsNullOrWhiteSpace(adapterError) && string.IsNullOrWhiteSpace(_lastError))
+        bool resolverRunning;
+        PrivacyShieldSettings settings;
+        lock (_statusGate)
         {
-            _lastError = adapterError;
+            resolverRunning = _server is not null;
+            settings = _settings;
+        }
+
+        var adapterError = _dns.EnsureConfiguredAdapterDns(resolverRunning, settings);
+        if (!string.IsNullOrWhiteSpace(adapterError))
+        {
+            lock (_statusGate)
+            {
+                if (string.IsNullOrWhiteSpace(_lastError))
+                {
+                    _lastError = adapterError;
+                }
+            }
         }
     }
 
@@ -407,63 +423,84 @@ public sealed class PrivacyShieldController : IAsyncDisposable
 
     public async Task<PrivacyShieldStatus> UpdateSourcesAsync(CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _sourceUpdateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            IReadOnlyList<string> enabledSourceIds;
+            lock (_statusGate)
+            {
+                enabledSourceIds = _settings.EnabledSourceIds;
+            }
+
             var selected = PrivacyShieldSourceCatalog.All
-                .Where(source => _settings.EnabledSourceIds.Contains(
+                .Where(source => enabledSourceIds.Contains(
                     source.Id,
                     StringComparer.OrdinalIgnoreCase))
                 .ToArray();
 
             var result = await _sourceUpdater.UpdateAsync(selected, cancellationToken).ConfigureAwait(false);
-            lock (_statusGate)
-            {
-                _sourceErrors.Clear();
-                foreach (var source in result.Sources.Where(source => source.Error is not null))
-                {
-                    _sourceErrors[source.Id] = source.Error!;
-                }
-            }
 
-            if (result.Success)
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                if (!_ruleStore.Save(result.Rules))
+                lock (_statusGate)
                 {
-                    lock (_statusGate)
+                    _sourceErrors.Clear();
+                    foreach (var source in result.Sources.Where(source => source.Error is not null))
                     {
-                        _lastError = "Could not write the compiled Privacy Shield ruleset.";
+                        _sourceErrors[source.Id] = source.Error!;
+                    }
+                }
+
+                if (result.Success)
+                {
+                    if (!_ruleStore.Save(result.Rules))
+                    {
+                        lock (_statusGate)
+                        {
+                            _lastError = "Could not write the compiled Privacy Shield ruleset.";
+                        }
+                    }
+                    else
+                    {
+                        SetRules(result.Rules);
+                        lock (_statusGate)
+                        {
+                            _lastError = result.Error;
+                        }
+
+                        result = null;
+                        CompactMemory();
+                        bool enabled;
+                        lock (_statusGate)
+                        {
+                            enabled = _settings.Enabled;
+                        }
+
+                        if (enabled)
+                        {
+                            await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
+                        }
                     }
                 }
                 else
                 {
-                    SetRules(result.Rules);
                     lock (_statusGate)
                     {
-                        _lastError = result.Error;
-                    }
-
-                    result = null;
-                    CompactMemory();
-                    if (_settings.Enabled)
-                    {
-                        await StartServerLockedAsync(cancellationToken).ConfigureAwait(false);
+                        _lastError = result.Error ?? "The blocklist update failed; the previous ruleset was kept.";
                     }
                 }
+
+                return CreateStatus();
             }
-            else
+            finally
             {
-                lock (_statusGate)
-                {
-                    _lastError = result.Error ?? "The blocklist update failed; the previous ruleset was kept.";
-                }
+                _gate.Release();
             }
-
-            return CreateStatus();
         }
         finally
         {
-            _gate.Release();
+            _sourceUpdateGate.Release();
         }
     }
 
@@ -478,6 +515,8 @@ public sealed class PrivacyShieldController : IAsyncDisposable
         {
             _gate.Release();
             _gate.Dispose();
+            _sourceUpdateGate.Dispose();
+            _sourceSyncSignal.Dispose();
             _blockedHistory.Dispose();
             _sourceUpdater.Dispose();
         }

@@ -70,6 +70,10 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
     public bool HasOnlineApps => TopApps.Count > 0;
 
+    public string OnlineAppsSummaryText => HasOnlineApps
+        ? $"{Overview.ConnectionsText} active connection(s) · ↓ {Overview.DownloadText} · ↑ {Overview.UploadText}"
+        : "No applications have open internet sockets right now.";
+
     public bool HasAgentActivity => RecentAgentActivity.Count > 0;
 
     public bool IsShieldActive => Firewall.ProtectionKnown && Firewall.ShieldEnabled;
@@ -257,6 +261,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
     private void OnTopAppsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasOnlineApps));
+        OnPropertyChanged(nameof(OnlineAppsSummaryText));
     }
 
     private void OnAgentActivityCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -297,6 +302,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         OnPropertyChanged(nameof(PrivacyStatusText));
         OnPropertyChanged(nameof(PrivacyActionText));
         OnPropertyChanged(nameof(CanTogglePrivacy));
+        OnPropertyChanged(nameof(OnlineAppsSummaryText));
         OnPropertyChanged(nameof(AiGuardSummaryText));
         OnPropertyChanged(nameof(AgentGuardBadgeText));
         OnPropertyChanged(nameof(AgentGuardStatusText));

@@ -165,6 +165,44 @@ public sealed class LifecycleAndSetupRegressionTests
         Assert.False(File.Exists(tempFile));
     }
 
+    [Fact]
+    public void Setup_process_closer_terminates_a_running_child_process()
+    {
+        var setupAssemblyPath = SetupBuildConfigurations
+            .Select(config => Path.Combine(FindRepoRoot(), "src", "Axiom.Setup", "bin", config, "net10.0-windows", "Axiom.Setup.dll"))
+            .FirstOrDefault(File.Exists);
+        if (setupAssemblyPath is null)
+        {
+            return;
+        }
+
+        var setupAssembly = Assembly.LoadFrom(setupAssemblyPath);
+        var closerType = setupAssembly.GetType("Axiom.Setup.SetupProcessCloser", throwOnError: true)!;
+        var terminate = closerType.GetMethod("TerminateProcess", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        using var target = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "ping.exe",
+            Arguments = "-n 30 127.0.0.1",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
+        Assert.NotNull(target);
+        try
+        {
+            Assert.False(target.HasExited);
+            terminate.Invoke(null, [target]);
+            Assert.True(target.HasExited);
+        }
+        finally
+        {
+            if (!target.HasExited)
+            {
+                target.Kill(entireProcessTree: true);
+            }
+        }
+    }
+
     private static string FindRepoRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

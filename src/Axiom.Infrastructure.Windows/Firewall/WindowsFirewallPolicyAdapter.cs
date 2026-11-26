@@ -353,7 +353,14 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
 
             if (FindRule(policy, name) is not null)
             {
-                policy.Rules.Remove(name);
+                try
+                {
+                    policy.Rules.Remove(name);
+                }
+                catch (COMException)
+                {
+                    // Read-back below reports failure if the rule is still present.
+                }
             }
 
             if (FindRule(policy, legacyName) is not null)
@@ -479,7 +486,7 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
     {
         var policy = CreatePolicy();
         var name = OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction);
-        var rule = FindRule(policy, name);
+        var rule = FindRule(policy, name) ?? FindRule(policy, OwnedRuleName.ToLegacyName(name));
         if (rule is null)
         {
             return new EffectiveRuleReport
@@ -580,7 +587,10 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
             _ => NetFwProtocolAny,
         };
 
-        return string.Equals((string?)rule.Name, OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction), StringComparison.Ordinal)
+        return string.Equals(
+                OwnedRuleName.ToDisplayName((string?)rule.Name ?? string.Empty),
+                OwnedRuleName.Create(spec.ManagedRuleId, spec.Direction),
+                StringComparison.Ordinal)
             && string.Equals((string?)rule.ApplicationName, spec.AppPath, StringComparison.OrdinalIgnoreCase)
             && (int)rule.Action == (spec.Action == FirewallAction.Block ? NetFwActionBlock : NetFwActionAllow)
             && (int)rule.Direction == expectedDirection

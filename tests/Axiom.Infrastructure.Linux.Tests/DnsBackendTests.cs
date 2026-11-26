@@ -63,6 +63,20 @@ public sealed class DnsBackendTests
     }
 
     [Fact]
+    public void NetworkManagerParseActiveConnectionsHandlesEscapedColonsAndBackslashes()
+    {
+        const string output =
+            "My\\:WiFi\\:5G:11111111-2222-3333-4444-555555555555:wlan0:802-11-wireless\n" +
+            "corp\\\\:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:eth0:802-3-ethernet\n";
+
+        var parsed = NetworkManagerDnsBackend.ParseActiveConnections(output);
+
+        Assert.Equal(2, parsed.Count);
+        Assert.Equal(("My:WiFi:5G", "11111111-2222-3333-4444-555555555555", "wlan0", "802-11-wireless"), parsed[0]);
+        Assert.Equal(("corp\\", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "eth0", "802-3-ethernet"), parsed[1]);
+    }
+
+    [Fact]
     public void ResolvConfRedirectAndRestoreRoundTripTheFile()
     {
         using var temp = new TempDirectory();

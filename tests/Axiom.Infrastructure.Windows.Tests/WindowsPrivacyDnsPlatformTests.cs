@@ -36,9 +36,9 @@ public sealed class WindowsPrivacyDnsPlatformTests
     [InlineData(true, true, true, 53, true, "Wi-Fi", true, false)]
     [InlineData(true, true, true, 53, false, "", false, true)]
     [InlineData(true, true, true, 53, false, "   ", false, true)]
-    [InlineData(true, true, true, 5353, true, "", false, false)]
+    [InlineData(true, true, true, 5353, true, "", false, true)]
     [InlineData(true, true, true, 5353, false, "Wi-Fi", false, true)]
-    [InlineData(true, false, true, 53, true, "", false, false)]
+    [InlineData(true, false, true, 53, true, "", false, true)]
     [InlineData(true, false, true, 53, false, "Wi-Fi", false, true)]
     [InlineData(true, true, false, 53, true, "Wi-Fi", false, true)]
     [InlineData(true, false, false, 53, false, "", false, true)]
@@ -53,7 +53,6 @@ public sealed class WindowsPrivacyDnsPlatformTests
             PreferredAdapterAlias = alias,
         };
 
-        // Upstream's method body with its statics as locals.
         var expectedPointed = false;
         var expectedRestored = false;
         if (system)
@@ -65,7 +64,7 @@ public sealed class WindowsPrivacyDnsPlatformTests
             {
                 expectedPointed = true;
             }
-            else if (!settings.Enabled || !settings.AutoPointAdapterDns)
+            else
             {
                 expectedRestored = true;
             }

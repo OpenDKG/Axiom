@@ -150,7 +150,7 @@ public partial class App : Application
                 protector,
                 new WindowsDnsAdapterHelper(),
                 new AvaloniaSecurityDialogs(() => window),
-                new AvaloniaShellActions(() => desktop.Shutdown()),
+                new AvaloniaShellActions(() => desktop.Shutdown(), ReleaseSingleInstance),
                 new AvaloniaBlackboxDialogs(() => window),
                 new Axiom.Persistence.AgentSessionReader(),
                 visualEffects,
@@ -371,12 +371,18 @@ public partial class App : Application
         }
     }
 
+    private void ReleaseSingleInstance()
+    {
+        SingleInstance?.Dispose();
+        SingleInstance = null;
+        _ownedFallbackInstance?.Dispose();
+        _ownedFallbackInstance = null;
+    }
+
     private void Cleanup()
     {
         _exiting = true;
-        SingleInstance?.Dispose();
-        _ownedFallbackInstance?.Dispose();
-        _ownedFallbackInstance = null;
+        ReleaseSingleInstance();
 
         if (_tray is not null)
         {

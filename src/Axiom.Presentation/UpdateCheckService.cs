@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -10,7 +11,7 @@ using Axiom.Contracts;
 namespace Axiom.Presentation;
 
 /// <summary>
-/// Checks GitHub Releases on startup and at most once every 30 minutes when opted in, and exposes
+/// Checks GitHub Releases on startup and at most once every 15 minutes when opted in, and exposes
 /// whether a newer stable release is available. Installer downloads require an explicit user action.
 /// </summary>
 public sealed class UpdateCheckService : IDisposable
@@ -19,7 +20,7 @@ public sealed class UpdateCheckService : IDisposable
     private const string RepositoryWebPrefix = DefaultReleasesPageUrl + "/tag/";
     private const string WindowsInstallerName = "Axiom-Setup.exe";
     private const long MaxInstallerBytes = 512L * 1024 * 1024;
-    public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan MinimumCheckInterval = TimeSpan.FromMinutes(15);
 
     private readonly Version _currentVersion;
     private readonly UpdateSettingsStore _settingsStore;
@@ -36,7 +37,8 @@ public sealed class UpdateCheckService : IDisposable
     private string _summaryText = string.Empty;
     private string _releaseNotesText = string.Empty;
     private string _releaseUrl = DefaultReleasesPageUrl;
-    private InstallerAsset? _windowsInstaller;
+    private InstallerAsset? _platformInstaller;
+    private string? _lastEtag;
     private bool _isUpdateAvailable;
     private bool _lastCheckSucceeded;
     private bool _disposed;
@@ -81,18 +83,33 @@ public sealed class UpdateCheckService : IDisposable
 
     public bool LastCheckSucceeded => _lastCheckSucceeded;
 
-    private sealed record InstallerAsset(Uri DownloadUri, long Size, string Sha256);
+    public bool HasDirectInstaller => _platformInstaller is not null;
 
-    /// <summary>Downloads the exact Windows asset for the detected release and verifies its GitHub digest.</summary>
-    public async Task<string> DownloadWindowsInstallerAsync(
+    private sealed record InstallerAsset(string FileName, Uri DownloadUri, long Size, string Sha256);
+
+    /// <summary>Downloads the verified Windows installer for the detected release.</summary>
+    public Task<string> DownloadWindowsInstallerAsync(
+        CancellationToken cancellationToken,
+        IProgress<int>? progress = null) =>
+        DownloadPlatformInstallerAsync(cancellationToken, progress);
+
+    /// <summary>Downloads the verified platform release package (Windows EXE, Ubuntu DEB, or macOS ZIP).</summary>
+    public async Task<string> DownloadPlatformInstallerAsync(
         CancellationToken cancellationToken,
         IProgress<int>? progress = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var asset = _windowsInstaller;
+        var asset = _platformInstaller;
         if (!_isUpdateAvailable || asset is null)
         {
-            throw new InvalidOperationException("This release does not provide a verifiable Windows installer.");
+            throw new InvalidOperationException("This release does not provide a verifiable package for this platform.");
+        }
+
+        var safeFileName = Path.GetFileName(asset.FileName);
+        if (string.IsNullOrWhiteSpace(safeFileName) ||
+            !string.Equals(safeFileName, asset.FileName, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("The release asset file name is invalid.");
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -101,7 +118,7 @@ public sealed class UpdateCheckService : IDisposable
         var settingsDirectory = Path.GetDirectoryName(Path.GetFullPath(_settingsStore.SettingsPath))!;
         var directory = Path.Combine(settingsDirectory, "updates");
         Directory.CreateDirectory(directory);
-        var installerPath = Path.Combine(directory, WindowsInstallerName);
+        var installerPath = Path.Combine(directory, safeFileName);
         var partialPath = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".partial");
         progress?.Report(0);
         try
@@ -261,12 +278,27 @@ public sealed class UpdateCheckService : IDisposable
             request.Headers.UserAgent.Clear();
             request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Axiom", FormatVersion(_currentVersion)));
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            if (!force && !string.IsNullOrWhiteSpace(_lastEtag))
+            {
+                request.Headers.TryAddWithoutValidation("If-None-Match", _lastEtag);
+            }
 
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
                 .ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.NotModified)
+            {
+                _lastCheckSucceeded = true;
+                return _isUpdateAvailable;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 return false;
+            }
+
+            if (response.Headers.ETag?.Tag is { Length: > 0 } etag)
+            {
+                _lastEtag = etag;
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -423,7 +455,7 @@ public sealed class UpdateCheckService : IDisposable
         _summaryText = summary;
         _releaseNotesText = releaseNotes;
         _releaseUrl = htmlUrl;
-        _windowsInstaller = ReadWindowsInstaller(root, tagName!);
+        _platformInstaller = ReadPlatformInstaller(root, tagName!);
         _isUpdateAvailable = (_checkForUpdates || force) &&
                              !string.Equals(_dismissedVersion, formattedRemote, StringComparison.Ordinal);
 
@@ -440,32 +472,69 @@ public sealed class UpdateCheckService : IDisposable
         _summaryText = string.Empty;
         _releaseNotesText = string.Empty;
         _releaseUrl = DefaultReleasesPageUrl;
-        _windowsInstaller = null;
+        _platformInstaller = null;
+        _lastEtag = null;
         if (changed)
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
-    private static InstallerAsset? ReadWindowsInstaller(JsonElement release, string tag)
+    internal static bool IsMatchingPlatformAsset(
+        string? assetName,
+        bool isWindows,
+        bool isLinux,
+        bool isMacOS)
+    {
+        if (string.IsNullOrWhiteSpace(assetName))
+        {
+            return false;
+        }
+
+        if (isWindows)
+        {
+            return string.Equals(assetName, WindowsInstallerName, StringComparison.Ordinal);
+        }
+
+        if (isLinux)
+        {
+            return assetName.StartsWith("axiom-firewall_", StringComparison.Ordinal) &&
+                   assetName.EndsWith("_amd64.deb", StringComparison.Ordinal);
+        }
+
+        if (isMacOS)
+        {
+            return assetName.StartsWith("Axiom-", StringComparison.Ordinal) &&
+                   assetName.EndsWith("-osx-x64-adhoc.zip", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static InstallerAsset? ReadPlatformInstaller(JsonElement release, string tag)
     {
         if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
-        var downloadUri = new Uri(
-            $"{DefaultReleasesPageUrl}/download/{Uri.EscapeDataString(tag)}/{WindowsInstallerName}");
         foreach (var asset in assets.EnumerateArray())
         {
             if (asset.ValueKind != JsonValueKind.Object ||
-                !asset.TryGetProperty("name", out var name) ||
-                name.ValueKind != JsonValueKind.String ||
-                !string.Equals(name.GetString(), WindowsInstallerName, StringComparison.Ordinal))
+                !asset.TryGetProperty("name", out var nameProp) ||
+                nameProp.ValueKind != JsonValueKind.String ||
+                nameProp.GetString() is not { } assetName ||
+                !IsMatchingPlatformAsset(
+                    assetName,
+                    OperatingSystem.IsWindows(),
+                    OperatingSystem.IsLinux(),
+                    OperatingSystem.IsMacOS()))
             {
                 continue;
             }
 
+            var downloadUri = new Uri(
+                $"{DefaultReleasesPageUrl}/download/{Uri.EscapeDataString(tag)}/{Uri.EscapeDataString(assetName)}");
             if (!asset.TryGetProperty("browser_download_url", out var url) ||
                 url.ValueKind != JsonValueKind.String ||
                 !string.Equals(url.GetString(), downloadUri.AbsoluteUri, StringComparison.Ordinal) ||
@@ -481,7 +550,7 @@ public sealed class UpdateCheckService : IDisposable
                 return null;
             }
 
-            return new InstallerAsset(downloadUri, size, digestText[7..]);
+            return new InstallerAsset(assetName, downloadUri, size, digestText[7..]);
         }
 
         return null;
@@ -528,18 +597,19 @@ public sealed class UpdateCheckService : IDisposable
             return string.Empty;
         }
 
-        const int maxLength = 2400;
-        var lines = new List<string>();
+        const int maxBullets = 6;
+        const int maxBulletLength = 190;
+        const int maxTotalLength = 1600;
+        var items = new List<string>();
+        var bulletCount = 0;
+
         foreach (var rawLine in body.Split(['\r', '\n']))
         {
+            var isIndented = rawLine.StartsWith("  ", StringComparison.Ordinal) ||
+                             rawLine.StartsWith('\t');
             var trimmed = rawLine.Trim();
             if (string.IsNullOrWhiteSpace(trimmed))
             {
-                if (lines.Count > 0 && lines[^1].Length > 0)
-                {
-                    lines.Add(string.Empty);
-                }
-
                 continue;
             }
 
@@ -549,42 +619,179 @@ public sealed class UpdateCheckService : IDisposable
                 continue;
             }
 
-            string formatted;
+            var isBullet = trimmed.StartsWith("- ", StringComparison.Ordinal) ||
+                           trimmed.StartsWith("* ", StringComparison.Ordinal);
+            if (isIndented && isBullet)
+            {
+                continue;
+            }
+
             if (trimmed.StartsWith('#'))
             {
-                formatted = trimmed.TrimStart('#').Trim();
+                var heading = StripIssueRefs(StripMarkdownLinks(trimmed.TrimStart('#').Trim())).Trim();
+                if (heading.StartsWith("Downloads", StringComparison.OrdinalIgnoreCase) ||
+                    heading.StartsWith("Assets", StringComparison.OrdinalIgnoreCase) ||
+                    heading.StartsWith("Checksums", StringComparison.OrdinalIgnoreCase) ||
+                    heading.StartsWith("SHA-256", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                if (items.Count == 0 &&
+                    (heading.StartsWith("Axiom ", StringComparison.OrdinalIgnoreCase) ||
+                     heading.Equals("What's New", StringComparison.OrdinalIgnoreCase) ||
+                     heading.Equals("Highlights", StringComparison.OrdinalIgnoreCase) ||
+                     heading.Equals("Release Notes", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(heading))
+                {
+                    items.Add(heading);
+                }
+
+                continue;
             }
-            else if (trimmed.StartsWith("- ", StringComparison.Ordinal) ||
-                     trimmed.StartsWith("* ", StringComparison.Ordinal))
+
+            var text = isBullet
+                ? trimmed[2..].Trim()
+                : trimmed.StartsWith("> ", StringComparison.Ordinal)
+                    ? trimmed[2..].Trim()
+                    : trimmed;
+
+            text = text.Replace("**", string.Empty, StringComparison.Ordinal)
+                       .Replace("__", string.Empty, StringComparison.Ordinal)
+                       .Replace("`", string.Empty, StringComparison.Ordinal);
+            text = StripMarkdownLinks(text);
+            text = StripIssueRefs(text);
+            if (isBullet && text.EndsWith(':'))
             {
-                formatted = "• " + trimmed[2..].Trim();
+                text = text[..^1].TrimEnd();
             }
-            else if (trimmed.StartsWith("> ", StringComparison.Ordinal))
+
+            if (string.IsNullOrWhiteSpace(text))
             {
-                formatted = trimmed[2..].Trim();
+                continue;
+            }
+
+            if (isBullet)
+            {
+                if (bulletCount >= maxBullets)
+                {
+                    continue;
+                }
+
+                text = ShortenBullet(text, maxBulletLength);
+                items.Add("• " + text);
+                bulletCount++;
             }
             else
             {
-                formatted = trimmed;
-            }
-
-            formatted = formatted.Replace("**", string.Empty, StringComparison.Ordinal)
-                                 .Replace("__", string.Empty, StringComparison.Ordinal)
-                                 .Replace("`", string.Empty, StringComparison.Ordinal);
-            if (!string.IsNullOrWhiteSpace(formatted))
-            {
-                lines.Add(formatted);
+                items.Add(ShortenBullet(text, maxBulletLength));
             }
         }
 
-        while (lines.Count > 0 && lines[^1].Length == 0)
+        if (items.Count == 0)
         {
-            lines.RemoveAt(lines.Count - 1);
+            return string.Empty;
         }
 
-        var joined = string.Join(Environment.NewLine, lines);
-        return joined.Length <= maxLength
+        var separator = items.Any(item => item.Length > 85)
+            ? Environment.NewLine + Environment.NewLine
+            : Environment.NewLine;
+        var joined = string.Join(separator, items);
+        return joined.Length <= maxTotalLength
             ? joined
-            : joined[..(maxLength - 3)].TrimEnd() + "...";
+            : joined[..(maxTotalLength - 1)].TrimEnd() + "…";
+    }
+
+    private static string ShortenBullet(string text, int maxLength)
+    {
+        if (text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        var sentenceEnd = text.IndexOf(". ", 50, StringComparison.Ordinal);
+        if (sentenceEnd >= 50 && sentenceEnd < maxLength)
+        {
+            return text[..(sentenceEnd + 1)];
+        }
+
+        var cut = text.LastIndexOf(' ', maxLength - 1);
+        return (cut > 40 ? text[..cut] : text[..(maxLength - 1)]).TrimEnd(' ', ',', ';') + "…";
+    }
+
+    private static string StripMarkdownLinks(string text)
+    {
+        if (!text.Contains('[', StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        var sb = new System.Text.StringBuilder(text.Length);
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '[')
+            {
+                var closeBracket = text.IndexOf("](", i + 1, StringComparison.Ordinal);
+                if (closeBracket > i + 1)
+                {
+                    var closeParen = text.IndexOf(')', closeBracket + 2);
+                    if (closeParen > closeBracket + 2)
+                    {
+                        sb.Append(text, i + 1, closeBracket - i - 1);
+                        i = closeParen + 1;
+                        continue;
+                    }
+                }
+            }
+
+            sb.Append(text[i]);
+            i++;
+        }
+
+        return sb.ToString();
+    }
+
+    private static string StripIssueRefs(string text)
+    {
+        var result = text;
+        while (true)
+        {
+            var start = result.IndexOf(" (#", StringComparison.Ordinal);
+            if (start < 0)
+            {
+                break;
+            }
+
+            var end = result.IndexOf(')', start + 3);
+            if (end < 0)
+            {
+                break;
+            }
+
+            var validRef = true;
+            for (var k = start + 2; k < end; k++)
+            {
+                var c = result[k];
+                if (!char.IsAsciiDigit(c) && c != '#' && c != ',' && c != ' ')
+                {
+                    validRef = false;
+                    break;
+                }
+            }
+
+            if (!validRef)
+            {
+                break;
+            }
+
+            result = string.Concat(result.AsSpan(0, start), result.AsSpan(end + 1));
+        }
+
+        return result.Trim();
     }
 }
