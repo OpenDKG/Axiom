@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+using System.Text.RegularExpressions;
 using Axiom.Contracts.Monitoring;
 using Xunit;
 
@@ -8,6 +9,28 @@ namespace Axiom.Contracts.Tests;
 public sealed class CommandLineSanitizerTests
 {
     private static readonly string Filler = new('a', 36);
+
+    // No time limit, so that a busy machine cannot change what these tests see.
+    private static string Sanitise(string? commandLine, string? homeDirectory = null) =>
+        CommandLineSanitizer.Sanitize(commandLine, homeDirectory, Regex.InfiniteMatchTimeout);
+
+    [Fact]
+    public void A_timed_out_pattern_leaves_the_placeholder_instead_of_any_part_of_the_line()
+    {
+        var sanitised = CommandLineSanitizer.Sanitize(
+            "app --password hunter2", "/home/al", Regex.InfiniteMatchTimeout,
+            () => throw new RegexMatchTimeoutException());
+
+        Assert.Equal("[sanitiser timeout]", sanitised);
+        Assert.Equal(CommandLineSanitizer.TimeoutPlaceholder, sanitised);
+        Assert.Equal(sanitised, Sanitise(sanitised));
+    }
+
+    [Fact]
+    public void The_default_call_and_a_chosen_timeout_mask_the_same_way() =>
+        Assert.Equal(
+            Sanitise("run now"),
+            CommandLineSanitizer.Sanitize("run now", null, TimeSpan.FromMinutes(1)));
 
     [Theory]
     [InlineData("curl -H \"Authorization: Bearer abc123\" https://host/", "abc123")]
@@ -46,11 +69,11 @@ public sealed class CommandLineSanitizerTests
     [InlineData("tool set client-secret-value abc123", "abc123")]
     public void Sensitive_values_are_masked_and_a_second_pass_changes_nothing(string commandLine, string value)
     {
-        var sanitised = CommandLineSanitizer.Sanitize(commandLine);
+        var sanitised = Sanitise(commandLine);
 
         Assert.DoesNotContain(value, sanitised, StringComparison.Ordinal);
         Assert.Contains("***", sanitised, StringComparison.Ordinal);
-        Assert.Equal(sanitised, CommandLineSanitizer.Sanitize(sanitised));
+        Assert.Equal(sanitised, Sanitise(sanitised));
     }
 
     [Theory]
@@ -63,7 +86,7 @@ public sealed class CommandLineSanitizerTests
     [InlineData("xoxa-")]
     public void Recognised_token_shapes_are_masked_without_a_flag(string prefix)
     {
-        var sanitised = CommandLineSanitizer.Sanitize($"run {prefix}{Filler} now");
+        var sanitised = Sanitise($"run {prefix}{Filler} now");
 
         Assert.Equal("run *** now", sanitised);
     }
@@ -74,7 +97,7 @@ public sealed class CommandLineSanitizerTests
         var accessKeyId = "AKIA" + new string('Q', 16);
         var webToken = "eyJ" + Filler + ".eyJ" + Filler + "." + Filler;
 
-        Assert.Equal("run *** ***", CommandLineSanitizer.Sanitize($"run {accessKeyId} {webToken}"));
+        Assert.Equal("run *** ***", Sanitise($"run {accessKeyId} {webToken}"));
     }
 
     [Theory]
@@ -90,7 +113,7 @@ public sealed class CommandLineSanitizerTests
     [InlineData("git config set user.name alice")]
     [InlineData("offset token_count 5")]
     public void Ordinary_command_lines_are_unchanged(string commandLine) =>
-        Assert.Equal(commandLine, CommandLineSanitizer.Sanitize(commandLine));
+        Assert.Equal(commandLine, Sanitise(commandLine));
 
     [Theory]
     [InlineData("/home/al/bin/app --config /home/al/.app", "/home/al", "~/bin/app --config ~/.app")]
@@ -99,10 +122,10 @@ public sealed class CommandLineSanitizerTests
     [InlineData("ls /etc", "/", "ls /etc")]
     public void Home_directory_is_shortened_only_at_path_boundaries(string commandLine, string home, string expected)
     {
-        var sanitised = CommandLineSanitizer.Sanitize(commandLine, home);
+        var sanitised = Sanitise(commandLine, home);
 
         Assert.Equal(expected, sanitised);
-        Assert.Equal(sanitised, CommandLineSanitizer.Sanitize(sanitised, home));
+        Assert.Equal(sanitised, Sanitise(sanitised, home));
     }
 
     [Fact]
@@ -110,11 +133,11 @@ public sealed class CommandLineSanitizerTests
     {
         for (var padding = 480; padding <= 520; padding++)
         {
-            var sanitised = CommandLineSanitizer.Sanitize(new string('x', padding) + " --password=hunter2 tail");
+            var sanitised = Sanitise(new string('x', padding) + " --password=hunter2 tail");
 
             Assert.True(sanitised.Length <= CommandLineSanitizer.MaxLength + 1, $"padding {padding}");
             Assert.DoesNotContain("hunter", sanitised, StringComparison.Ordinal);
-            Assert.Equal(sanitised, CommandLineSanitizer.Sanitize(sanitised));
+            Assert.Equal(sanitised, Sanitise(sanitised));
         }
     }
 
@@ -134,5 +157,5 @@ public sealed class CommandLineSanitizerTests
     [InlineData(null)]
     [InlineData("   ")]
     public void Empty_input_gives_empty_output(string? commandLine) =>
-        Assert.Equal(string.Empty, CommandLineSanitizer.Sanitize(commandLine));
+        Assert.Equal(string.Empty, Sanitise(commandLine));
 }

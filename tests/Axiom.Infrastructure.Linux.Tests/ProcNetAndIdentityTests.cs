@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using Axiom.Contracts.Monitoring;
 using Axiom.Infrastructure.Linux.Dns;
 using Axiom.Infrastructure.Linux.Monitoring;
@@ -98,7 +99,7 @@ public sealed class ProcNetAndIdentityTests
         Assert.Equal(4242, sockets.Single(socket => socket.Inode == 67890).ProcessId);
         Assert.Equal(0, sockets.Single(socket => socket.Inode == 12345).ProcessId);
 
-        var source = new LinuxConnectionSource(() => sockets, new ProcProcessIdentityResolver(proc, TimeProvider.System), TimeProvider.System, privileged: false);
+        var source = new LinuxConnectionSource(() => sockets, new ProcProcessIdentityResolver(proc, TimeProvider.System, sanitiserTimeout: Regex.InfiniteMatchTimeout), TimeProvider.System, privileged: false);
         var snapshot = source.Capture(CancellationToken.None);
 
         Assert.Equal(LinuxConnectionSource.SourceName, snapshot.SourceName);
@@ -120,7 +121,7 @@ public sealed class ProcNetAndIdentityTests
         Assert.Contains(snapshot.Limitations, limitation => limitation.Contains("not root", StringComparison.Ordinal));
         Assert.Equal(1, snapshot.ProcessCount);
 
-        var lookup = new LinuxDnsProcessLookup(new ProcSocketScanner(() => sockets, TimeProvider.System), new ProcProcessIdentityResolver(proc, TimeProvider.System));
+        var lookup = new LinuxDnsProcessLookup(new ProcSocketScanner(() => sockets, TimeProvider.System), new ProcProcessIdentityResolver(proc, TimeProvider.System, sanitiserTimeout: Regex.InfiniteMatchTimeout));
         Assert.Equal(4242, lookup.FindOwningProcess(new IPEndPoint(IPAddress.Parse("15.0.0.10"), 41394), tcp: true));
         Assert.Equal(0, lookup.FindOwningProcess(new IPEndPoint(IPAddress.Loopback, 53), tcp: true));
         Assert.Equal(("curl", string.Empty), lookup.Describe(4242));
@@ -143,7 +144,7 @@ public sealed class ProcNetAndIdentityTests
         var passwd = Path.Combine(temp.Path, "passwd");
         File.WriteAllText(passwd, "root:x:0:0:root:/root:/bin/sh\ntester:x:1000:1000::/home/tester:/bin/sh\n");
 
-        var identity = new ProcProcessIdentityResolver(proc, TimeProvider.System, passwd).Resolve(4242, null);
+        var identity = new ProcProcessIdentityResolver(proc, TimeProvider.System, passwd, Regex.InfiniteMatchTimeout).Resolve(4242, null);
 
         Assert.Equal(
             "~/app --password *** --token *** --secret=*** -H \"Authorization: Bearer ***\"",
@@ -168,7 +169,7 @@ public sealed class ProcNetAndIdentityTests
         var passwd = Path.Combine(temp.Path, "passwd");
         File.WriteAllText(passwd, "tester:x:1000:1000::/home/first:/bin/sh\n");
         var time = new FakeTime(DateTimeOffset.UnixEpoch);
-        var resolver = new ProcProcessIdentityResolver(proc, time, passwd);
+        var resolver = new ProcProcessIdentityResolver(proc, time, passwd, Regex.InfiniteMatchTimeout);
         Assert.Equal("app ~/a /home/second/b", resolver.Resolve(100, null).CommandLine);
 
         File.Delete(passwd);
