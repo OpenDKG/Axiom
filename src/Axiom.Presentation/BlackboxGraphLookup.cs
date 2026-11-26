@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 
 namespace Axiom.Presentation;
@@ -215,9 +216,11 @@ public sealed class BlackboxGraphLookup : IDisposable
                 return Unknown(identifier, $"The dashboard answered HTTP {(int)response.StatusCode}.");
             }
 
-            var body = await response.Content
-                .ReadAsStringAsync(timeout.Token)
-                .ConfigureAwait(false);
+            var body = await ReadBoundedAsync(response, timeout.Token).ConfigureAwait(false);
+            if (body is null)
+            {
+                return Unknown(identifier, "The dashboard response exceeded the size limit.");
+            }
             return Parse(identifier, tier, body);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -228,6 +231,31 @@ public sealed class BlackboxGraphLookup : IDisposable
         {
             return Unknown(identifier, "The dashboard lookup failed: " + exception.Message);
         }
+    }
+
+    private const int MaxResponseBytes = 2 * 1024 * 1024;
+
+    private static async Task<string?> ReadBoundedAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = await response.Content
+            .ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[8192];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length + read > MaxResponseBytes)
+            {
+                return null;
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     private GraphLookupResult Parse(string identifier, string requestedTier, string body)

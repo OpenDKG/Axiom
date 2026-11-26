@@ -37,6 +37,9 @@ File protection for an agent that runs as the signed-in user is enforced at the 
 (`HOST_DENY_VERIFIED`); the network boundary is enforced by the OS (`OS_DENY_VERIFIED`). The UI names
 the difference instead of claiming a boundary that does not exist.
 
+**Scope of the command check:** the guard inspects local shell text; it is not a sandbox; remote
+commands (for example `ssh`), script files and interpreters fed from files are out of scope.
+
 ## Why Blackbox and DKG are part of Axiom
 
 **Agent Blackbox** is the decision engine: a portable, local guard with a ruleset, hooks for many

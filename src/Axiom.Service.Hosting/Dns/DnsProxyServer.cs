@@ -78,6 +78,9 @@ public sealed class DnsProxyServer : IAsyncDisposable
 
     private long _upstreamFailureStreak;
 
+    /// <summary>DoH host to bootstrap address map currently used by the DoH connect callback.</summary>
+    public IReadOnlyDictionary<string, IPAddress> CurrentDohBootstrapAddresses => _bootstrapByHost;
+
     public DnsProxyServer(
         PrivacyShieldPolicy policy,
         IReadOnlyList<IPEndPoint> upstreams,
