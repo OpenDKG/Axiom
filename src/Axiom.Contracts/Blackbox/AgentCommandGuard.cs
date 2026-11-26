@@ -528,8 +528,8 @@ public static class AgentCommandGuard
         @_remembered
         def _redirections_apart(text: str, escapes: bool = True) -> str:
             # The same commands with each redirection moved, as its own words, to the end of its command.
-            # A shell reads it the same way wherever it stands: rm a>log, >log rm a and rm>log a all
-            # remove a. A command whose redirections already stand alone after its words stays as written.
+            # A shell reads a redirection the same way wherever it stands. A command whose redirections
+            # already stand alone after its words stays as written.
             # Quotes and substitutions stay as written too; their texts are read on their own.
             import re as _re
             if "<" not in text and ">" not in text:
@@ -601,7 +601,7 @@ public static class AgentCommandGuard
                     del command[start:]
                     descriptor = before if before.isdigit() else ""
                     misplaced = misplaced or not descriptor
-                # Written against a word, as in a>log.
+                # Written against a word.
                 misplaced = misplaced or bool(command) and command[-1] not in " \t"
                 target_start = redirection.end()
                 while target_start < n and text[target_start] in " \t":
@@ -641,8 +641,6 @@ public static class AgentCommandGuard
 
 
         def _segment_spellings(segment: str) -> list:
-            # A segment that starts with // or # runs no command. Source files written through a heredoc
-            # are full of such lines, with tags like <c>, so they get no other spelling.
             if segment.split(None, 1)[:1] in (["//"], ["///"], ["#"]):
                 return []
             return _redirection_spellings(segment)
@@ -2193,7 +2191,7 @@ public static class AgentCommandGuard
 
 
         def _text_as_read(command: str) -> str:
-            # The command as written, then the segments that its redirections hid a word in.
+            # The command as written, then the other spellings of its segments.
             spelled = [spelling for segment in _split_shell_segments(command) if segment != _UNINSPECTABLE_SEGMENT
                        for spelling in _segment_spellings(segment)]
             return " ; ".join(" ".join(text.lower().split()) for text in [command or ""] + list(dict.fromkeys(spelled)))
