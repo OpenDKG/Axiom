@@ -163,11 +163,12 @@ def verdict(command):
 
 failures = []
 for leaf, wrapper in (("rm -rf /home/x/protected", "sh -c"), ("del /f /q /home/x/protected", "cmd /c")):
+    for nest, levels, expected in ((escaped, 9, "nesting"), (unescaped, 3, "nesting"), (unescaped, 9, "nesting"),
+                                   (escaped, 3, "delete")):  # escaped quoting can be followed to the command
+        got = verdict(nest(leaf, levels, wrapper))
+        if got != expected:
+            failures.append(f"{nest.__name__} {wrapper} x{levels}: {got}")
     for nest in (escaped, unescaped):
-        for levels in (3, 9):
-            got = verdict(nest(leaf, levels, wrapper))
-            if got != "nesting":
-                failures.append(f"{nest.__name__} {wrapper} x{levels}: {got}")
         for levels in (1, 2):
             got = verdict(nest(leaf, levels, wrapper))
             if got != "delete":
@@ -177,6 +178,18 @@ for command in ('bash -c "echo hi"', 'grep -r "bash -c" .', 'echo "sh -c sh -c"'
                 "sh -c 'sh -c \"echo ok\"'", 'bash -c bash', 'sh -c a && sh -c b && sh -c c'):
     if verdict(command) != "allowed":
         failures.append(f"false positive: {command}: {verdict(command)}")
+
+# Two wrappers with escaped quotes around a command, in every combination.
+wrappers = ("sh -c", "bash -c", "cmd /c", "powershell -Command", "pwsh -c", "zsh -c", "python -c")
+for leaf in ("rm -rf /home/x/protected", "cat /home/x/protected/id", "sc stop axiom.service",
+             "net stop axiom.service", "taskkill /f /im axiom.service", "systemctl stop axiomd",
+             "systemctl disable axiomd"):
+    if verdict(leaf) == "allowed":
+        failures.append(f"direct form not blocked: {leaf}")
+    for outer in wrappers:
+        for inner in wrappers:
+            if verdict(escaped(escaped(leaf, 1, inner), 1, outer)) == "allowed":
+                failures.append(f"{outer} > {inner}: {leaf} allowed")
 
 # The recursion limit itself fails closed.
 if _UNINSPECTABLE_SEGMENT not in _split_shell_segments('sh -c "echo ok"', _MAX_SHELL_UNWRAP_DEPTH):
@@ -203,6 +216,145 @@ print("PY_NESTING_OK")
 
         Assert.True(proc.ExitCode == 0, $"python failed ({proc.ExitCode}): {stderr}\n{stdout}");
         Assert.Contains("PY_NESTING_OK", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>Commands judged against the protected path ~/.ssh/*: true must be blocked.</summary>
+    public static TheoryData<string, bool> WrappedShellForms => new()
+    {
+        { @"bash -lc ""rm -rf ~/.ssh""", true },
+        { @"bash -ic ""rm -rf ~/.ssh""", true },
+        { @"sh -ec ""rm -rf ~/.ssh""", true },
+        { @"dash -c ""rm -rf ~/.ssh""", true },
+        { @"/bin/bash -lc ""rm -rf ~/.ssh""", true },
+        { @"zsh -c ""rm -rf ~/.ssh""", true },
+        { @"ksh -c ""rm -rf ~/.ssh""", true },
+        { @"mksh -c ""rm -rf ~/.ssh""", true },
+        { @"fish -c ""rm -rf ~/.ssh""", true },
+        { @"busybox sh -c ""rm -rf ~/.ssh""", true },
+        { @"bash -o pipefail -c ""rm -rf ~/.ssh""", true },
+        { @"sudo sh -c ""rm -rf ~/.ssh""", true },
+        { @"sudo -u root bash -c ""rm -rf ~/.ssh""", true },
+        { @"sudo sh -c sh -c ""rm -rf ~/.ssh""", true },
+        { @"sudo -E -u root -- bash -lc ""rm -rf ~/.ssh""", true },
+        { @"eval ""rm -rf ~/.ssh""", true },
+        { @"eval 'rm -rf ~/.ssh'", true },
+        { @"echo `rm -rf ~/.ssh`", true },
+        { @"echo ""$(rm -rf ~/.ssh)""", true },
+        { @"r\m -rf ~/.ssh", true },
+        { @"find ~/.ssh -delete", true },
+        { @"find ~/.ssh -type f -exec rm {} +", true },
+        { @"shred -u ~/.ssh/id_rsa", true },
+        { @"truncate -s 0 ~/.ssh/id_rsa", true },
+        { @"rsync -a --delete /tmp/empty/ ~/.ssh/", true },
+        { @"python3 -c ""import shutil; shutil.rmtree('/home/u/.ssh')""", true },
+        { @"python3 -c ""import os; os.remove('/home/u/.ssh/id_rsa')""", true },
+        { @"node -e ""require('fs').rmSync('/home/u/.ssh', {recursive: true})""", true },
+        { @"ruby -e ""require 'fileutils'; FileUtils.rm_rf('/home/u/.ssh')""", true },
+        { @"perl -e ""unlink('/home/u/.ssh/id_rsa')""", true },
+        { @"bash -lc ""cat ~/.ssh/id_rsa""", true },
+        { @"bash -lc ""systemctl stop axiomd""", true },
+        { @"eval ""systemctl stop axiomd""", true },
+        { @"doas sh -c 'rm -rf ~/.ssh'", true },
+        { @"nice -n 5 bash -lc 'rm -rf ~/.ssh'", true },
+        { @"env FOO=1 bash -c 'rm -rf ~/.ssh'", true },
+        { @"timeout -s KILL 5 sh -c 'rm -rf ~/.ssh'", true },
+        { @"nohup stdbuf -oL ionice -c 3 chrt -i 0 taskset -c 0 time exec rm -rf ~/.ssh", true },
+        { @"command builtin rm -rf ~/.ssh", true },
+        { @"ls | xargs -I {} -P 4 sh -c 'rm -rf ~/.ssh'", true },
+        { @"env -S 'rm -rf ~/.ssh'", true },
+        { @"sudo --unknown-option sh -c ""echo hi""", true },
+        { @"pwsh -Command:""Remove-Item ~/.ssh -Recurse""", true },
+        { @"powershell -NoProfile -ExecutionPolicy Bypass -Com ""Remove-Item ~/.ssh -Recurse""", true },
+        { @"powershell -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAfgAvAC4AcwBzAGgAIAAtAFIAZQBjAHUAcgBzAGUA", true },
+        { @"pwsh -e UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAfgAvAC4AcwBzAGgAIAAtAFIAZQBjAHUAcgBzAGUA", true },
+        { @"powershell -EncodedCommand UgBlAG0AbwB2AGUALQBJAHQAZQBtACAAfgAvAC4AcwBzAGgAIAAtAFIAZQBjAHUAcgBzAGUA", true },
+        { @"powershell -enc not*base64", true },
+        { @"cmd /k ""del /f /q C:\Users\u\.ssh""", true },
+        { @"cmd /d /r del C:\Users\u\.ssh", true },
+        { @"bash -lc ""$(printf 'rm -rf x')""", true },
+        { @"bash -c ""$CMD""", true },
+        { @"bash -c", true },
+        { @"echo $(rm -rf ~/.ssh", true },
+        { @"echo `date", true },
+        { @"bash -lc ""npm test""", false },
+        { @"sudo apt-get update", false },
+        { @"eval ""$(ssh-agent -s)""", false },
+        { @"find . -name '*.log' -delete", false },
+        { @"echo `date`", false },
+        { @"bash -c ""echo \""hello world\""""", false },
+        { @"sh -c ""sh -c \""echo ok\""""", false },
+        { @"cmd /c ""dir \Users"" /b", false },
+        { @"grep -r ""bash -c"" .", false },
+        { @"echo ""sh -c sh -c""", false },
+        { @"bash -c bash", false },
+        { @"sh -c a && sh -c b && sh -c c", false },
+        { @"sudo -n -E env PATH=/usr/bin make build", false },
+        { @"timeout 30 npm run build", false },
+        { @"nice -n 10 make -j4", false },
+        { @"xargs -0 -n 1 echo", false },
+        { @"command -v git", false },
+        { @"time -p cargo test", false },
+        { @"env", false },
+        { @"sudo -v", false },
+        { @"bash script.sh --clean", false },
+        { @"bash -o pipefail -c ""npm test | tee log""", false },
+        { @"python3 -c ""print(1)""", false },
+        { @"python3 -m pytest -q", false },
+        { @"node -e ""console.log(1)""", false },
+        { @"pwsh -NoProfile -File build.ps1", false },
+        { @"powershell -Command ""Get-ChildItem C:\Temp""", false },
+        { @"powershell -Command ""Write-Host 'a`tb'""", false },
+        { @"echo ""$(date) $(whoami)""", false },
+        { @"echo '$(not run'", false },
+        { @"rsync -a src/ dst/", false },
+        { @"find . -name ""*.tmp"" -exec rm {} \;", false },
+        { @"cat README.md", false },
+        { @"type C:\Temp\notes.txt", false },
+        { @"git commit -m ""describe the sh -c handling""", false },
+        { @"sh -c ""sh -c \""rm -rf ~/.ssh\""""", true }, // three levels, escaped quotes
+        { "Write-Output \"a`tb\"", false },
+        { "Get-ChildItem C:\\src `\n  -Recurse", false },
+        { "cat > notes.md <<'EOF'\nit's one ` backtick and $( open\nEOF", false },
+    };
+
+    [Theory]
+    [MemberData(nameof(WrappedShellForms))]
+    public async Task Guard_inspects_wrapped_shell_forms(string command, bool blocked)
+    {
+        var pythonExe = FindPython();
+        if (pythonExe is null)
+        {
+            return;
+        }
+
+        var scriptPath = Path.Combine(_tempDir, "test_wrapped.py");
+        var script = "import os\nimport sys\nfrom pathlib import Path\n\n"
+            + AgentCommandGuard.PythonHelpers.Replace("\r\n", "\n", StringComparison.Ordinal)
+            + """
+
+result = _check_command_safety({"command": sys.argv[1]}, ["~/.ssh/*"])
+print("BLOCKED " + result[0] if result else "ALLOWED")
+""";
+        await File.WriteAllTextAsync(scriptPath, script, Encoding.UTF8);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add(scriptPath);
+        psi.ArgumentList.Add(command);
+        using var proc = Process.Start(psi)!;
+        var stdout = await proc.StandardOutput.ReadToEndAsync();
+        var stderr = await proc.StandardError.ReadToEndAsync();
+        await proc.WaitForExitAsync();
+
+        Assert.True(proc.ExitCode == 0, $"python failed ({proc.ExitCode}): {stderr}");
+        Assert.Empty(stderr.Trim()); // hooks must stay quiet
+        Assert.StartsWith(blocked ? "BLOCKED" : "ALLOWED", stdout, StringComparison.Ordinal);
     }
 
     private static string? FindPython()

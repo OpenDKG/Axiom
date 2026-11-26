@@ -10,18 +10,234 @@ public static class AgentCommandGuard
 {
     public const string PythonHelpers = """
         _MAX_SHELL_UNWRAP_DEPTH = 8
-        _SHELL_WRAPPERS = ("cmd", "bash", "sh", "zsh", "powershell", "pwsh", "python", "python3")
-        _SHELL_COMMAND_FLAGS = ("/c", "-c", "-command")
-        # Stands for a nested command that was not inspected. _check_command_safety blocks on it.
+        _MAX_NESTED_COMMANDS = 512
+        _POSIX_SHELLS = ("sh", "bash", "zsh", "dash", "ksh", "mksh", "fish")
+        _POWERSHELLS = ("powershell", "pwsh")
+        _POWERSHELL_CMDLET = (r"(?:add|clear|compress|convertfrom|convertto|copy|expand|export|foreach|format|get|import|"
+                              r"invoke|join|measure|move|new|out|remove|rename|resolve|select|set|sort|split|start|"
+                              r"stop|test|where|write)-[a-z]+")
+        _CODE_INTERPRETERS = ("python", "python3", "node", "perl", "ruby")
+        _SHELL_WRAPPERS = _POSIX_SHELLS + ("cmd",) + _POWERSHELLS + _CODE_INTERPRETERS
+        # Stands for a command that was not inspected. _check_command_safety blocks on it.
         _UNINSPECTABLE_SEGMENT = "__axiom_uninspectable_nested_command__"
+        # Commands that run another command: (short flags, short flags that take a value,
+        # long flags, long flags that take a value, operands before the command).
+        _COMMAND_PREFIXES = {
+            "sudo": ("AbBEeHiKklNnPSsVv", "ugCDhpRrtTU",
+                     ("askpass", "background", "bell", "edit", "help", "list", "login", "non-interactive",
+                      "no-update", "preserve-env", "preserve-groups", "remove-timestamp", "reset-timestamp",
+                      "set-home", "shell", "stdin", "validate", "version"),
+                     ("chdir", "chroot", "close-from", "command-timeout", "group", "host", "other-user",
+                      "prompt", "role", "type", "user"), 0),
+            "doas": ("Lns", "aCu", (), (), 0),
+            "env": ("0iv", "CSu", ("debug", "help", "ignore-environment", "null", "version"),
+                    ("chdir", "split-string", "unset"), 0),
+            "nice": ("0123456789", "n", ("help", "version"), ("adjustment",), 0),
+            "nohup": ("", "", ("help", "version"), (), 0),
+            "timeout": ("fpv", "ks", ("foreground", "help", "preserve-status", "verbose", "version"),
+                        ("kill-after", "signal"), 1),
+            "stdbuf": ("", "eio", ("help", "version"), ("error", "input", "output"), 0),
+            "ionice": ("thV", "cnPpu", ("help", "ignore", "version"),
+                       ("class", "classdata", "pgid", "pid", "uid"), 0),
+            "chrt": ("abdfhimoRrvV", "DPT",
+                     ("all-tasks", "batch", "deadline", "fifo", "help", "idle", "max", "other", "pid",
+                      "reset-on-fork", "rr", "verbose", "version"),
+                     ("sched-deadline", "sched-period", "sched-runtime"), 1),
+            "taskset": ("achpV", "", ("all-tasks", "cpu-list", "help", "pid", "version"), (), 1),
+            "command": ("pVv", "", (), (), 0),
+            "builtin": ("", "", (), (), 0),
+            "exec": ("cl", "a", (), (), 0),
+            "time": ("apqvV", "fo", ("append", "help", "portability", "quiet", "verbose", "version"),
+                     ("format", "output"), 0),
+            "xargs": ("0oprtx", "adEILnPs",
+                      ("exit", "help", "interactive", "no-run-if-empty", "null", "open-tty", "verbose", "version"),
+                      ("arg-file", "delimiter", "eof", "max-args", "max-chars", "max-lines", "max-procs",
+                       "process-slot-var", "replace"), 0),
+        }
 
 
-        def _split_shell_segments(command: str, _depth: int = 0) -> list:
-            # Split compound shell commands on unquoted operators (;, &&, ||, |, newline)
-            # and unwrap nested `cmd /c "..."` or `bash/sh/powershell/pwsh -c "..."` up to _MAX_SHELL_UNWRAP_DEPTH.
-            raw = command or ""
-            if not raw.strip():
-                return []
+        def _command_name(token: str) -> str:
+            name = (token or "").lower().replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+            return name.removesuffix(".exe")
+
+
+        def _strip_prefixes(tokens):
+            # Skips assignments and commands such as sudo or timeout, with their options. Returns the
+            # index of the real command, False for an option it does not know, and any command string
+            # carried by an option (env -S).
+            import re as _re
+            idx = 0
+            carried = []
+            count = len(tokens)
+            while idx < count:
+                word, quoted = tokens[idx]
+                if word == "&" or (not quoted and _re.match(r"[A-Za-z_][A-Za-z0-9_]*\+?=", word)):
+                    idx += 1
+                    continue
+                name = _command_name(word)
+                if name not in _COMMAND_PREFIXES:
+                    break
+                flags, valued, long_flags, long_valued, operands = _COMMAND_PREFIXES[name]
+                idx += 1
+                while idx < count:
+                    option = tokens[idx][0]
+                    if option == "--":
+                        idx += 1
+                        break
+                    if name == "env" and option == "-":
+                        idx += 1
+                        continue
+                    if not option.startswith("-") or option == "-":
+                        break
+                    idx += 1
+                    if option.startswith("--"):
+                        key, equals, value = option[2:].partition("=")
+                        if key in long_valued:
+                            if not equals:
+                                value = tokens[idx][0] if idx < count else ""
+                                idx += 1
+                            if key == "split-string":
+                                carried.append(value)
+                        elif key not in long_flags:
+                            return idx, False, carried
+                        continue
+                    for position in range(1, len(option)):
+                        char = option[position]
+                        if char in valued:
+                            value = option[position + 1:]
+                            if not value:
+                                value = tokens[idx][0] if idx < count else ""
+                                idx += 1
+                            if name == "env" and char == "S":
+                                carried.append(value)
+                            break
+                        if name == "xargs" and char in "eil":
+                            break
+                        if char not in flags:
+                            return idx, False, carried
+                idx += operands
+            return min(idx, count), True, carried
+
+
+        def _join_words(words) -> str:
+            if len(words) == 1:
+                return words[0]
+            joined = []
+            for word in words:
+                if word and not any(ch.isspace() for ch in word):
+                    joined.append(word)
+                elif '"' in word:
+                    joined.append("'" + word + "'")
+                else:
+                    joined.append('"' + word + '"')
+            return " ".join(joined)
+
+
+        def _decode_powershell(value: str):
+            import base64 as _base64
+            try:
+                return _base64.b64decode((value or "").strip(), validate=True).decode("utf-16-le")
+            except (ValueError, UnicodeDecodeError):
+                return None
+
+
+        def _wrapper_arguments(name: str, words):
+            # The command strings an interpreter call carries, as (commands, parsed, index of the first
+            # word of the command). parsed is False when a command is announced but cannot be read.
+            import re as _re
+            count = len(words)
+            idx = 1
+            if name in _POSIX_SHELLS:
+                while idx < count:
+                    word = words[idx]
+                    if word.startswith("--command="):
+                        return [word[10:]], True, idx
+                    if word == "--command" or _re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", word):
+                        after = idx + 1
+                        if _re.fullmatch(r"-[A-Za-z]*[oO]", word):
+                            after += 1
+                        while after < count and len(words[after]) > 1 and words[after][0] in "-+":
+                            after += 2 if _re.fullmatch(r"[-+][A-Za-z]*[oO]", words[after]) else 1
+                        if after >= count:
+                            return [], False, idx
+                        return [words[after]], True, after
+                    if _re.fullmatch(r"[-+][A-Za-z]*[oO]", word):
+                        idx += 2
+                    elif word != "--" and word[:1] in ("-", "+"):
+                        idx += 1
+                    else:
+                        break
+                return [], True, idx
+            if name == "cmd":
+                for idx in range(1, count):
+                    flag = words[idx].lower()
+                    if flag[:2] in ("/c", "/k", "/r"):
+                        rest = ([words[idx][2:]] if len(flag) > 2 else []) + list(words[idx + 1:])
+                        if not rest:
+                            return [], False, idx
+                        commands = [_join_words(rest)]
+                        if len(rest) > 1 and any(ch.isspace() for ch in rest[0]):
+                            commands.append(rest[0])
+                        return commands, True, idx + 1
+                return [], True, count
+            if name in _POWERSHELLS:
+                takes_value = ("executionpolicy", "windowstyle", "workingdirectory", "version", "inputformat",
+                               "outputformat", "configurationname", "psconsolefile", "settingsfile",
+                               "custompipename")
+                while idx < count:
+                    word = words[idx]
+                    if not (word.startswith("-") and len(word) > 1):
+                        return [_join_words(words[idx:])], True, idx
+                    option, colon, value = word.lstrip("-").partition(":")
+                    option = option.lower()
+                    if option and "command".startswith(option):
+                        rest = ([value] if value else []) + list(words[idx + 1:])
+                        if not rest or rest == ["-"]:
+                            return [], False, idx
+                        return [_join_words(rest)], True, idx + 1
+                    if option and (option == "ec" or "encodedcommand".startswith(option)):
+                        encoded = value or (words[idx + 1] if idx + 1 < count else "")
+                        decoded = _decode_powershell(encoded)
+                        if not decoded:
+                            return [], False, idx
+                        return [decoded], True, idx + 1
+                    if option and "file".startswith(option):
+                        return [], True, idx
+                    if option == "ep" or (option and any(full.startswith(option) for full in takes_value)):
+                        idx += 1 if value else 2
+                    else:
+                        idx += 1
+                return [], True, idx
+            if name in ("python", "python3"):
+                pattern = r"-[A-Za-z]*c"
+            elif name == "node":
+                pattern = r"-[pe]+|--eval|--print"
+            elif name == "perl":
+                pattern = r"-[A-Za-z]*[eE]"
+            else:
+                pattern = r"-[A-Za-z]*e"
+            while idx < count:
+                word = words[idx]
+                if _re.fullmatch(pattern, word):
+                    if idx + 1 >= count:
+                        return [], False, idx
+                    return [words[idx + 1]], True, idx + 1
+                if name == "node" and word.startswith(("--eval=", "--print=")):
+                    return [word.split("=", 1)[1]], True, idx
+                if name.startswith("python") and word.startswith("-c") and len(word) > 2:
+                    return [word[2:]], True, idx
+                if word in ("-W", "-X"):
+                    idx += 2
+                elif word.startswith("-") and word != "-m":
+                    idx += 1
+                else:
+                    break
+            return [], True, idx
+
+
+        def _split_operators(raw: str, escapes: bool) -> list:
+            # Splits on unquoted ;, &&, ||, | and newlines. With escapes, a backslash also protects a
+            # quote or operator, as in a POSIX shell; without, backslashes are plain (Windows paths).
             segments = []
             buf = []
             quote = ""
@@ -29,6 +245,11 @@ public static class AgentCommandGuard
             n = len(raw)
             while i < n:
                 ch = raw[i]
+                if escapes and ch == "\\" and quote != "'" and i + 1 < n:
+                    if raw[i + 1] in ('"\\' if quote else "\"'\\;&|`$ "):
+                        buf.append(raw[i:i + 2])
+                        i += 2
+                        continue
                 if quote:
                     buf.append(ch)
                     if ch == quote:
@@ -40,65 +261,270 @@ public static class AgentCommandGuard
                     buf.append(ch)
                     i += 1
                     continue
-                if ch == "\n" or ch == "\r" or ch == ";":
-                    part = "".join(buf).strip()
-                    if part:
-                        segments.append(part)
+                if ch in "\n\r;|" or raw.startswith("&&", i):
+                    segments.append("".join(buf).strip())
                     buf = []
-                    i += 1
-                    continue
-                if raw.startswith("&&", i) or raw.startswith("||", i):
-                    part = "".join(buf).strip()
-                    if part:
-                        segments.append(part)
-                    buf = []
-                    i += 2
-                    continue
-                if ch == "|":
-                    part = "".join(buf).strip()
-                    if part:
-                        segments.append(part)
-                    buf = []
-                    i += 1
+                    i += 2 if raw.startswith(("&&", "||"), i) else 1
                     continue
                 buf.append(ch)
                 i += 1
-            tail = "".join(buf).strip()
-            if tail:
-                segments.append(tail)
+            segments.append("".join(buf).strip())
+            return [segment for segment in segments if segment]
 
-            expanded = []
-            for seg in segments:
-                expanded.append(seg)
-                tokens = _tokenize_segment(seg)
-                if len(tokens) >= 3:
-                    head = os.path.basename(tokens[0][0].lower()).removesuffix(".exe")
-                    if head in _SHELL_WRAPPERS:
-                        for idx in range(1, len(tokens) - 1):
-                            flag = tokens[idx][0].lower()
-                            if flag in _SHELL_COMMAND_FLAGS and not tokens[idx][1]:
-                                inner = tokens[idx + 1][0]
-                                if inner:
-                                    # Fail closed: at the depth limit, or when the inner command
-                                    # cannot be followed, nothing below this level gets checked.
-                                    if _depth >= _MAX_SHELL_UNWRAP_DEPTH or _nesting_is_lost(inner, tokens[idx + 2:]):
-                                        expanded.append(_UNINSPECTABLE_SEGMENT)
-                                    else:
-                                        expanded.extend(_split_shell_segments(inner, _depth + 1))
+
+        def _substitutions(raw: str, backticks: bool):
+            # Bodies of $(...) and backtick substitutions outside single quotes, and False when one
+            # is never closed.
+            bodies = []
+            quote = ""
+            i = 0
+            n = len(raw)
+            while i < n:
+                ch = raw[i]
+                if quote == "'":
+                    if ch == "'":
+                        quote = ""
+                    i += 1
+                    continue
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == '"':
+                    quote = "" if quote else '"'
+                elif ch == "'" and not quote:
+                    quote = "'"
+                elif raw.startswith("$(", i):
+                    depth = 1
+                    inner = ""
+                    j = i + 2
+                    while j < n:
+                        current = raw[j]
+                        if current == "\\" and inner != "'":
+                            j += 2
+                            continue
+                        if inner:
+                            if current == inner:
+                                inner = ""
+                        elif current in ("'", '"'):
+                            inner = current
+                        elif current == "(":
+                            depth += 1
+                        elif current == ")":
+                            depth -= 1
+                            if depth == 0:
                                 break
-            return expanded
+                        j += 1
+                    if depth:
+                        return bodies, False
+                    bodies.append(raw[i + 2:j])
+                    i = j + 1
+                    continue
+                elif ch == "`" and backticks:
+                    j = i + 1
+                    while j < n and raw[j] != "`":
+                        j += 2 if raw[j] == "\\" else 1
+                    if j >= n:
+                        return bodies, False
+                    bodies.append(raw[i + 1:j].replace("\\`", "`"))
+                    i = j + 1
+                    continue
+                i += 1
+            return bodies, True
+
+
+        def _unescape_unquoted(segment: str) -> str:
+            # r\m runs rm. Removes such backslashes outside quotes, keeping Windows paths and commands.
+            import re as _re
+            tokens = _tokenize_segment(segment)
+            if "\\" not in segment or not tokens or _command_name(tokens[0][0]) in ("cmd",) + _POWERSHELLS:
+                return segment
+            out = []
+            quote = ""
+            word_start = 0
+            i = 0
+            n = len(segment)
+            while i < n:
+                ch = segment[i]
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch.isspace():
+                    out.append(ch)
+                    i += 1
+                    word_start = len(out)
+                    continue
+                elif ch == "\\" and i + 1 < n:
+                    word = "".join(out[word_start:])
+                    if not _re.match(r"[A-Za-z]:|\\\\|%|\.\\|~\\|\\", word + (segment[i:i + 2] if not word else "")):
+                        out.append(segment[i + 1])
+                        i += 2
+                        continue
+                out.append(ch)
+                i += 1
+            return "".join(out)
+
+
+        def _collect_segments(command: str, depth: int, powershell: bool, found: list, code: list, seen: dict) -> None:
+            import re as _re
+            raw = command or ""
+            if not raw.strip() or seen.get((raw, powershell), _MAX_SHELL_UNWRAP_DEPTH + 1) <= depth:
+                return
+            seen[(raw, powershell)] = depth
+            if len(seen) > _MAX_NESTED_COMMANDS:
+                found.append(_UNINSPECTABLE_SEGMENT)
+                return
+
+            def descend(inner: str, inner_powershell: bool) -> None:
+                # Fail closed at the limit: nothing below it gets checked.
+                if depth >= _MAX_SHELL_UNWRAP_DEPTH:
+                    found.append(_UNINSPECTABLE_SEGMENT)
+                else:
+                    _collect_segments(inner, depth + 1, inner_powershell, found, code, seen)
+
+            first = _tokenize_segment(raw.lstrip()[:200])
+            head = _command_name(first[0][0]) if first else ""
+            # In PowerShell a backtick is an escape or a line continuation, not a substitution.
+            in_powershell = powershell or head in _POWERSHELLS or bool(
+                _re.fullmatch(_POWERSHELL_CMDLET, head))
+            bodies, closed = _substitutions(raw, backticks=not in_powershell)
+            if not closed:
+                found.append(_UNINSPECTABLE_SEGMENT)
+            for body in bodies:
+                descend(body, in_powershell)
+
+            # Both readings are inspected, so neither one's blind spot hides a command.
+            for segment in dict.fromkeys(_split_operators(raw, False) + _split_operators(raw, True)):
+                found.append(segment)
+                plain = _unescape_unquoted(segment)
+                if plain != segment:
+                    found.append(plain)
+                literal = _tokenize_segment(segment)
+                readings = [literal]
+                shell_like = _tokenize_posix(segment)
+                if shell_like != literal:
+                    readings.append(shell_like)
+                for tokens in readings:
+                    start, known, carried = _strip_prefixes(tokens)
+                    if not known:
+                        found.append(_UNINSPECTABLE_SEGMENT)
+                    for inner in carried:
+                        descend(inner, in_powershell)
+                    words = [word for word, _ in tokens[start:]]
+                    if not words:
+                        continue
+                    if start:
+                        found.append(_join_words(words))
+                    name = _command_name(words[0])
+                    if name == "busybox" and len(words) > 1:
+                        words = words[1:]
+                        name = _command_name(words[0])
+                        found.append(_join_words(words))
+                    if name in ("eval", "source") or words[0] == ".":
+                        if len(words) > 1:
+                            descend(" ".join(words[1:]), False)
+                        continue
+                    if name not in _SHELL_WRAPPERS:
+                        continue
+                    inners, parsed, position = _wrapper_arguments(name, words)
+                    if not parsed:
+                        found.append(_UNINSPECTABLE_SEGMENT)
+                    for inner in inners:
+                        if name in _CODE_INTERPRETERS:
+                            code.append(inner)
+                        elif _re.match(r"\s*(?:\$\(|`|\$\{?[A-Za-z_]\w*\}?\s*$)", inner):
+                            # The command itself is only known at run time.
+                            found.append(_UNINSPECTABLE_SEGMENT)
+                        if tokens is literal and '\\"' not in segment and _nesting_is_lost(inner, words[position + 1:]):
+                            found.append(_UNINSPECTABLE_SEGMENT)
+                        descend(inner, name in _POWERSHELLS)
+
+
+        _expansions = {}
+
+
+        def _expand_command(command: str):
+            # Every segment of a command and of the commands nested in it, and inline interpreter
+            # code. Each check asks again, so recent results are kept.
+            cached = _expansions.get(command)
+            if cached is None:
+                found = []
+                code = []
+                _collect_segments(command, 0, False, found, code, {})
+                if len(_expansions) >= 64:
+                    _expansions.clear()
+                cached = _expansions[command] = (tuple(dict.fromkeys(found)), tuple(code))
+            return cached
+
+
+        def _split_shell_segments(command: str, _depth: int = 0) -> list:
+            if not _depth:
+                return list(_expand_command(command or "")[0])
+            found = []
+            _collect_segments(command, _depth, False, found, [], {})
+            return list(dict.fromkeys(found))
 
 
         def _nesting_is_lost(inner: str, rest) -> bool:
-            # The tokenizer does not follow backslash-escaped or reused quotes. Then the argument
-            # to unwrap stops at the next shell's name, and that shell's command lies in the rest.
+            # Reused quotes: the argument to unwrap stops at the next shell's name, and that shell's
+            # command lies in the words after it.
             def bare(token: str) -> str:
                 return token.lower().strip("\\\"'^")
 
             words = inner.split()
-            if not words or os.path.basename(bare(words[-1])).removesuffix(".exe") not in _SHELL_WRAPPERS:
+            if not words or _command_name(bare(words[-1])) not in _POSIX_SHELLS + ("cmd",) + _POWERSHELLS + ("python", "python3"):
                 return False
-            return any(bare(token) in _SHELL_COMMAND_FLAGS for token, _ in rest)
+            return any(bare(token) in ("/c", "-c", "-command") for token in rest)
+
+
+        def _tokenize_posix(segment: str) -> list:
+            # Like _tokenize_segment, reading backslashes as a POSIX shell does. A word that starts
+            # like a Windows path keeps them.
+            import re as _re
+            tokens = []
+            buf = []
+            quote = ""
+            had_quote = False
+            in_tok = False
+            text = segment or ""
+            n = len(text)
+            i = 0
+            while i < n:
+                ch = text[i]
+                following = text[i + 1] if i + 1 < n else ""
+                if ch == "\\" and quote != "'" and following:
+                    if quote:
+                        escapes = following in '"\\$`'
+                    else:
+                        escapes = not _re.match(r"[A-Za-z]:|\\\\|%|\.\\|~\\", "".join(buf)) and not (not buf and following == "\\")
+                    if escapes:
+                        buf.append(following)
+                        in_tok = True
+                        i += 2
+                        continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                    else:
+                        buf.append(ch)
+                elif ch in ("'", '"'):
+                    quote = ch
+                    had_quote = True
+                    in_tok = True
+                elif ch.isspace():
+                    if in_tok:
+                        tokens.append(("".join(buf), had_quote))
+                        buf = []
+                        had_quote = False
+                        in_tok = False
+                else:
+                    buf.append(ch)
+                    in_tok = True
+                i += 1
+            if in_tok:
+                tokens.append(("".join(buf), had_quote))
+            return tokens
 
 
         def _tokenize_segment(segment: str) -> list:
@@ -141,15 +567,7 @@ public static class AgentCommandGuard
             verbs = set()
             unquoted_words = []
             first_word = ""
-            skip_wrappers = {"sudo", "env", "command", "nohup", "&"}
-            idx = 0
-            while idx < len(tokens):
-                tok, quoted = tokens[idx]
-                low = tok.lower()
-                if not quoted and (low in skip_wrappers or ("=" in low and not low.startswith("-") and idx == 0)):
-                    idx += 1
-                    continue
-                break
+            idx = _strip_prefixes(tokens)[0]
             if idx < len(tokens):
                 head = os.path.basename(tokens[idx][0].lower())
                 first_word = head
@@ -281,7 +699,10 @@ public static class AgentCommandGuard
                 "agent blackbox", "axiom-blackbox", "blackbox",
             )
             if _has_command_verb(command, service_verbs):
-                unquoted = " ".join(w for seg in _split_shell_segments(norm) for w, q in _tokenize_segment(seg) if not q)
+                # Unwrap the command as written too: rewriting "/" breaks flags such as cmd /c.
+                segments = _split_shell_segments(norm) + [
+                    _normalize_command(seg).replace("/", "\\") for seg in _split_shell_segments(command)]
+                unquoted = " ".join(w for seg in segments for w, q in _tokenize_segment(seg) if not q)
                 words = set(unquoted.replace('"', " ").replace("'", " ").split())
                 if "axiom" in words or any(t in unquoted for t in service_targets):
                     return True
@@ -340,10 +761,39 @@ public static class AgentCommandGuard
         def _deletes_protected(command: str, protected) -> bool:
             verbs = ("del", "erase", "rm", "rmdir", "remove-item", "unlink",
                      "move", "move-item", "ren", "rename", "rename-item", "mv",
-                     "shutil.rmtree", "os.remove", "os.unlink")
-            if not _has_command_verb(command, verbs):
+                     "shred", "truncate", "shutil.rmtree", "os.remove", "os.unlink")
+            if _deletes_inline(command, protected):
+                return True
+            if not (_has_command_verb(command, verbs) or _has_delete_form(command)):
                 return False
             return _hits_protected(command, protected)
+
+
+        def _has_delete_form(command: str) -> bool:
+            # find -delete, find -exec rm and rsync --delete remove files without a delete verb first.
+            for segment in _split_shell_segments(command):
+                tokens = _tokenize_posix(segment)
+                words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                if not words:
+                    continue
+                name = _command_name(words[0])
+                if name == "find" and ("-delete" in words or any(
+                        flag in ("-exec", "-execdir", "-ok", "-okdir")
+                        and _command_name(target) in ("rm", "rmdir", "unlink", "shred", "truncate")
+                        for flag, target in zip(words, words[1:]))):
+                    return True
+                if name == "rsync" and any(word.startswith("--delete") or word == "--remove-source-files" for word in words):
+                    return True
+            return False
+
+
+        def _deletes_inline(command: str, protected) -> bool:
+            # Delete calls inside python, node, ruby or perl code passed on the command line.
+            calls = ("rmtree(", "os.remove(", "os.rmdir(", "unlink(", "unlinksync(", "fs.rm", "rmsync(",
+                     "rmdirsync(", "fileutils.rm", "file.delete(", "dir.delete(")
+            return any(
+                any(call in source.lower() for call in calls) and _text_hits_protected(source, protected)
+                for source in _expand_command(command)[1])
 
 
         def _reads_protected(command: str, protected) -> bool:
@@ -354,10 +804,13 @@ public static class AgentCommandGuard
                      "gpg", "age", "makecab", "expand", "esentutl", "ssh -i", "split", "csplit")
             if not _has_command_verb(command, verbs):
                 return False
-            text = _normalize_command(command)
-            words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
             tokens = _protected_tokens(protected)
-            return any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens)
+            for candidate in _inspected_texts(command):
+                text = _normalize_command(candidate)
+                words = text.replace("\\", " ").replace("/", " ").replace('"', " ").replace("'", " ").split()
+                if any(_word_matches_token(word, token) for word in words for token in tokens) or _glob_hits(text, tokens):
+                    return True
+            return False
 
 
         def _hidden_path_read(command: str, protected) -> bool:
@@ -523,7 +976,17 @@ public static class AgentCommandGuard
             return word == token
 
 
+        def _inspected_texts(command: str) -> list:
+            # The command as written, then each segment of it and of the commands nested in it,
+            # which may be spelled out only after unwrapping or decoding.
+            return [command] + [segment for segment in _split_shell_segments(command) if segment != _UNINSPECTABLE_SEGMENT]
+
+
         def _hits_protected(command: str, protected) -> bool:
+            return any(_text_hits_protected(text, protected) for text in _inspected_texts(command))
+
+
+        def _text_hits_protected(command: str, protected) -> bool:
             import re as _re
             text = _normalize_command(command)
             tokens = _protected_tokens(protected)
@@ -891,7 +1354,7 @@ public static class AgentCommandGuard
             if not command_text:
                 return None
             if _UNINSPECTABLE_SEGMENT in _split_shell_segments(command_text):
-                return ("nesting", "Blackbox blocked this call: it nests shell commands more deeply than the guard can inspect.")
+                return ("nesting", "Blackbox blocked this call: it contains a nested command that the guard cannot inspect.")
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):
