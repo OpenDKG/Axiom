@@ -41,7 +41,11 @@ the difference instead of claiming a boundary that does not exist.
 commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
 files are out of scope. Values on the command line that name a command to run on this computer are
 checked: `rsync -e`; the `ssh`, `scp` and `sftp` options `ProxyCommand`, `LocalCommand` and
-`KnownHostsCommand`; and git's `-c core.sshCommand` and `GIT_SSH_COMMAND`. A delete whose command names no protected path, such as
+`KnownHostsCommand`; git settings given with `-c` or `git config` that name a command
+(`core.sshCommand`, `core.pager`, `core.editor`, `sequence.editor`, `core.fsmonitor`, `core.gitProxy`,
+`diff.external`, and `alias.*` or `credential.helper` values that start with `!`); and `GIT_SSH_COMMAND`,
+`GIT_PAGER`, `PAGER`, `GIT_EDITOR`, `GIT_EXTERNAL_DIFF` and `GIT_PROXY_COMMAND`. `GIT_SSH` and the `-S`
+option of `scp` and `sftp` name only a program to run, and their values are not checked this way. A delete whose command names no protected path, such as
 `find / -name id_rsa -execdir rm {} \;`, is not detected.
 Permission changes through a pipe are judged the same way, by what the earlier command names:
 `find ~/.ssh | xargs chmod` is blocked, while `find . | xargs chmod` on project files is allowed by

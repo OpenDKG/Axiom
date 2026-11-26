@@ -63,6 +63,63 @@ public static class AgentCommandGuard
                        "process-slot-var", "replace"), 0),
         }
 
+        # Further programs that run the command given after their options. An option that is not listed here
+        # is read as a flag, so a newer one does not make an ordinary call uninspectable.
+        _LAUNCHER_PREFIXES = {
+            "setsid": ("cfwhV", "", (), (), 0),
+            "sshpass": ("hvV", "fdpP", (), (), 0),
+            "ssh-agent": ("cdDksTUx", "aEOPt", (), (), 0),
+            "unshare": ("cCfhimnprTuUV", "GRSw", (),
+                        ("boottime", "map-group", "map-groups", "map-user", "map-users", "monotonic",
+                         "propagation", "root", "setgid", "setgroups", "setuid", "wd"), 0),
+            "nsenter": ("aCeFhimnprTuUVwZGS", "tW", (), ("target", "wdns"), 0),
+            "chroot": ("", "", (), ("groups", "userspec"), 1),
+            "xvfb-run": ("ahl", "efnpsw", (),
+                         ("auth-file", "auth-protocol", "error-file", "server-args", "server-num", "wait",
+                          "xauth-protocol"), 0),
+            "dbus-run-session": ("", "", (), ("config-file", "dbus-daemon"), 0),
+            "systemd-run": ("dGhPqrSt", "EHMpu", (),
+                            ("description", "gid", "host", "machine", "nice", "on-active", "on-boot",
+                             "on-calendar", "on-startup", "on-unit-active", "on-unit-inactive", "path-property",
+                             "property", "service-type", "setenv", "slice", "socket-property", "timer-property",
+                             "uid", "unit", "working-directory"), 0),
+            "pkexec": ("", "u", (), ("user",), 0),
+            "strace": ("ACcdDfFhiknqrtTvVwxyYzZ", "abeEIoOpPsSuUX", (),
+                       ("abbrev", "attach", "columns", "detach-on", "env", "fault", "inject", "output", "raw",
+                        "read", "signal", "status", "string-limit", "summary-columns", "summary-sort-by",
+                        "trace", "trace-path", "user", "write"), 0),
+            "ltrace": ("bcCfhiLrStTV", "aADeFlnopsuwx", (),
+                       ("align", "config", "debug", "indent", "library", "output", "where"), 0),
+            "valgrind": ("dhqv", "", (), (), 0),
+            "faketime": ("fhm", "p", (), ("date-prog",), 1),
+            "fakeroot": ("huv", "bils", (), ("faked", "fd-base", "lib"), 0),
+            "proot": ("0hHV", "bikmqrRSvw", (),
+                      ("bind", "change-id", "cwd", "kernel-release", "mount", "pwd", "qemu", "rootfs", "verbose"), 0),
+            "firejail": ("", "", (), (), 0),
+            "catchsegv": ("", "", (), (), 0),
+            "eatmydata": ("", "", (), (), 0),
+            "torsocks": ("dhiq", "aPpu", (), ("address", "pass", "port", "user"), 0),
+            "proxychains": ("q", "f", (), (), 0),
+            "proxychains4": ("q", "f", (), (), 0),
+            "tsocks": ("", "", (), (), 0),
+            "daemonize": ("av", "ceElopu", (), (), 0),
+        }
+        # Short options whose value, when there is one, is attached to them.
+        _ATTACHED_VALUES = {"xargs": "eil", "nsenter": "CGimnprSTuUw", "unshare": "CimnpTuU", "sshpass": "e"}
+        # bwrap options take a fixed number of values; those not listed take none.
+        _BWRAP_VALUES = {name: count for count, names in (
+            (1, "add-seccomp-fd args argv0 block-fd cap-add cap-drop chdir dev dir exec-label file-label gid "
+                "hostname info-fd json-status-fd lock-file mqueue perms pidns proc remount-ro seccomp size sync-fd "
+                "tmpfs uid unsetenv userns userns-block-fd userns2 overlay-src tmp-overlay ro-overlay"),
+            (2, "bind bind-data bind-fd bind-try chmod dev-bind dev-bind-try file ro-bind ro-bind-data "
+                "ro-bind-fd ro-bind-try setenv symlink"),
+            (3, "overlay"),
+        ) for name in names.split()}
+        # Programs whose own command does not simply follow their options.
+        _SPECIAL_LAUNCHERS = ("bwrap", "entr", "flock", "gdb", "parallel", "script", "start-stop-daemon")
+        # These read the pipe as a list of arguments or files, not as input to the command they run.
+        _LIST_READERS = ("xargs", "parallel", "entr")
+
 
         def _remembered(function):
             # Keeps recent results of a pure parsing helper: each check parses the same segments again.
@@ -89,6 +146,116 @@ public static class AgentCommandGuard
             return name.removesuffix(".exe")
 
 
+        def _launcher_options(words: list, idx: int, flags: str, valued: str, long_valued) -> tuple:
+            # Reads options from idx. Returns the index of the first operand and the (name, value) pairs of
+            # the options that take a value. An unknown option is read as a flag.
+            taken = []
+            count = len(words)
+            while idx < count:
+                option = words[idx]
+                if option == "--":
+                    return idx + 1, taken
+                if len(option) < 2 or not option.startswith("-"):
+                    break
+                idx += 1
+                if option.startswith("--"):
+                    key, equals, value = option[2:].partition("=")
+                    if key in long_valued:
+                        if not equals:
+                            value = words[idx] if idx < count else ""
+                            idx += 1
+                        taken.append((key, value))
+                    continue
+                for position in range(1, len(option)):
+                    if option[position] in valued:
+                        value = option[position + 1:]
+                        if not value:
+                            value = words[idx] if idx < count else ""
+                            idx += 1
+                        taken.append((option[position], value))
+                        break
+            return idx, taken
+
+
+        def _special_launch(name: str, words: list, idx: int):
+            # For a launcher whose options are not enough: (index of the command it runs, command texts it
+            # hands to a shell), or None when this call runs no command of its own.
+            count = len(words)
+            if name == "gdb":
+                try:
+                    return words.index("--args", idx) + 1, []
+                except ValueError:
+                    return None
+            if name == "bwrap":
+                while idx < count and words[idx].startswith("--"):
+                    if words[idx] == "--":
+                        return idx + 1, []
+                    idx += 1 + _BWRAP_VALUES.get(words[idx][2:], 0)
+                return min(idx, count), []
+            if name == "flock":
+                idx, taken = _launcher_options(words, idx, "", "cEw", ("command", "conflict-exit-code", "timeout"))
+                scripts = [value for key, value in taken if key in ("c", "command")]
+                idx += 1  # the lock file or descriptor
+                rest, taken = _launcher_options(words, idx, "", "c", ("command",))
+                scripts += [value for _, value in taken]
+                return (count, scripts) if scripts else (min(rest, count), [])
+            if name == "entr":
+                start, _ = _launcher_options(words, idx, "", "", ())
+                shell = any(word.startswith("-") and "s" in word for word in words[idx:start])
+                if shell and start < count:
+                    return count, [words[start]]
+                return start, []
+            if name == "parallel":
+                idx, _ = _launcher_options(words, idx, "", "aCdEIjLnNPSsW",
+                                           ("arg-file", "colsep", "delay", "delimiter", "halt", "jobs", "joblog",
+                                            "load", "max-args", "memfree", "nice", "results", "retries", "sshlogin",
+                                            "sshloginfile", "tagstring", "timeout", "tmpdir", "wd", "workdir"))
+                if idx < count and words[idx] == ":::":
+                    # With no command of its own, each argument is a command.
+                    return count, [word for word in words[idx + 1:] if word not in (":::", "::::")]
+                if idx < count and any(char.isspace() for char in words[idx]):
+                    return count, [words[idx]]
+                return idx, []
+            if name == "script":
+                # Options may follow the file name. -c gives the command; in the BSD form it follows the file.
+                scripts = []
+                operands = []
+                while idx < count:
+                    idx, taken = _launcher_options(words, idx, "", "BcEImOoT",
+                                                   ("command", "echo", "log-in", "log-io", "log-out", "log-timing",
+                                                    "logging-format", "output-limit"))
+                    scripts += [value for key, value in taken if key in ("c", "command")]
+                    if idx < count:
+                        if "<" not in words[idx] and ">" not in words[idx]:
+                            operands.append(idx)
+                        idx += 1
+                if scripts:
+                    return count, scripts
+                return (operands[1] if len(operands) > 1 else count), []
+            # start-stop-daemon names the program with --exec or --startas; its arguments follow --.
+            try:
+                end = words.index("--", idx)
+            except ValueError:
+                end = count
+            own = words[idx:end]
+            if any(word in ("--stop", "--status", "-K", "-T") for word in own):
+                return None
+            programs = {}
+            position = 0
+            while position < len(own):
+                following, taken = _launcher_options(own, position, "", "acdgIkNnOPprRsux",
+                                                     ("chdir", "chroot", "chuid", "exec", "group", "name", "nicelevel",
+                                                      "output", "pid", "pidfile", "ppid", "retry", "signal", "startas",
+                                                      "umask", "user"))
+                programs.update(taken)
+                position = max(following, position + 1)
+            # --startas wins over --exec, which then only identifies a running copy.
+            program = next((programs[key] for key in ("a", "startas", "x", "exec") if programs.get(key)), "")
+            if not program:
+                return None
+            return count, [_join_words([program] + words[end + 1:])]
+
+
         def _strip_prefixes(tokens):
             # Skips assignments and commands such as sudo or timeout, with their options. Returns the
             # index of the real command, False for an option it does not know, and any command string
@@ -96,6 +263,7 @@ public static class AgentCommandGuard
             import re as _re
             idx = 0
             carried = []
+            spoken = None
             count = len(tokens)
             while idx < count:
                 word, quoted = tokens[idx]
@@ -103,9 +271,19 @@ public static class AgentCommandGuard
                     idx += 1
                     continue
                 name = _command_name(word)
-                if name not in _COMMAND_PREFIXES:
+                if name in _SPECIAL_LAUNCHERS:
+                    spoken = spoken or [token for token, _ in tokens]
+                    launched = _special_launch(name, spoken, idx + 1)
+                    if launched is None:
+                        break
+                    idx = launched[0]
+                    carried.extend(launched[1])
+                    continue
+                known_only = name in _COMMAND_PREFIXES
+                if not known_only and name not in _LAUNCHER_PREFIXES:
                     break
-                flags, valued, long_flags, long_valued, operands = _COMMAND_PREFIXES[name]
+                flags, valued, long_flags, long_valued, operands = (
+                    _COMMAND_PREFIXES[name] if known_only else _LAUNCHER_PREFIXES[name])
                 idx += 1
                 while idx < count:
                     option = tokens[idx][0]
@@ -126,7 +304,7 @@ public static class AgentCommandGuard
                                 idx += 1
                             if key == "split-string":
                                 carried.append(value)
-                        elif key not in long_flags:
+                        elif known_only and key not in long_flags:
                             return idx, False, carried
                         continue
                     for position in range(1, len(option)):
@@ -139,9 +317,9 @@ public static class AgentCommandGuard
                             if name == "env" and char == "S":
                                 carried.append(value)
                             break
-                        if name == "xargs" and char in "eil":
+                        if char in _ATTACHED_VALUES.get(name, ""):
                             break
-                        if char not in flags:
+                        if known_only and char not in flags:
                             return idx, False, carried
                 idx += operands
             return min(idx, count), True, carried
@@ -757,7 +935,7 @@ public static class AgentCommandGuard
                     tokens = _tokenize_posix(text)
                     start = _strip_prefixes(tokens)[0]
                     # xargs takes the pipe, not the command it runs.
-                    reads = reads or (not any(_command_name(word) == "xargs" for word, _ in tokens[:start])
+                    reads = reads or (not any(_command_name(word) in _LIST_READERS for word, _ in tokens[:start])
                                       and _reads_commands_from_stdin([word for word, _ in tokens[start:]]))
                 if not reads:
                     continue
@@ -1635,13 +1813,13 @@ public static class AgentCommandGuard
         def _pipes_protected_into(command: str, protected, changers) -> bool:
             # find, ls or echo naming a protected path, piped to xargs and one of the changers.
             for script in _scripts_as_read(command):
-                if "xargs" not in script:
+                if "xargs" not in script and "parallel" not in script:
                     continue
                 for pipeline in _pipelines(script):
                     sources = []
                     for words in pipeline:
                         name, arguments = _stage_command(words)
-                        if name in changers and any(_command_name(word) == "xargs" for word in words) and any(
+                        if name in changers and any(_command_name(word) in ("xargs", "parallel") for word in words) and any(
                                 _text_hits_protected(source, protected) for source in dict.fromkeys(sources)):
                             return True
                         if name == "find":
@@ -2630,6 +2808,12 @@ public static class AgentCommandGuard
                     for (token, quoted), found in zip(tokens, words)]
 
 
+        # git settings whose value is a command, those where it is one only after !, and the variables.
+        _GIT_COMMAND_KEYS = (r"core\.(?:sshcommand|pager|editor|fsmonitor|gitproxy)|sequence\.editor|diff\.external")
+        _GIT_BANG_KEYS = r"alias\.[\w-]+|credential(?:\.[^=\s]+)?\.helper"
+        _COMMAND_VARIABLES = "git_ssh_command|git_pager|pager|git_editor|git_external_diff|git_proxy_command"
+
+
         def _ssh_option_commands(words: list) -> list:
             # words start at ssh, scp or sftp. Returns the commands its -o options name. ssh also reads
             # options after the host, up to the remote command, which does not run on this computer.
@@ -2657,28 +2841,73 @@ public static class AgentCommandGuard
             return [command for command in found if command]
 
 
-        def _git_ssh_settings(words: list) -> list:
-            # words start at git. The values of core.sshCommand given with -c or --config.
+        def _git_setting_command(key: str, value: str) -> str:
+            # The command that a git setting names, or "". An alias or credential helper is one only after !.
+            import re as _re
+            if _re.fullmatch(_GIT_COMMAND_KEYS, key, _re.IGNORECASE):
+                return value
+            command = value.lstrip()
+            if _re.fullmatch(_GIT_BANG_KEYS, key, _re.IGNORECASE) and command.startswith("!"):
+                return command[1:]
+            return ""
+
+
+        def _git_config_command(words: list) -> str:
+            # words start at git. The command that git config [--global|--file F] <key> <value> stores.
+            idx = 1
+            while idx < len(words) and words[idx].startswith("-"):
+                idx += 2 if words[idx] in ("-C", "-c", "--config-env", "--git-dir", "--namespace", "--work-tree") else 1
+            if words[idx:idx + 1] != ["config"]:
+                return ""
+            operands = []
+            idx += 1
+            while idx < len(words) and len(operands) < 2:
+                word = words[idx]
+                if word in ("--edit", "--get", "--get-all", "--get-color", "--get-regexp", "--get-urlmatch", "--list",
+                            "--remove-section", "--rename-section", "--unset", "--unset-all", "-e", "-l"):
+                    return ""
+                if word in ("--blob", "--comment", "--default", "--file", "--type", "-f"):
+                    idx += 1
+                elif not word.startswith("-") or operands:
+                    if not operands and word in ("edit", "get", "list", "remove-section", "rename-section", "unset"):
+                        return ""
+                    if operands or word != "set":
+                        operands.append(word)
+                idx += 1
+            return _git_setting_command(operands[0], operands[1]) if len(operands) == 2 else ""
+
+
+        def _git_settings(words: list) -> list:
+            # words start at git. The commands named by settings given with -c or --config, or stored with
+            # git config.
             import re as _re
             option_name = r"-[A-Za-z]*c|--con(?:f(?:ig?)?)?"
+            keys = "(?i:" + _GIT_COMMAND_KEYS + "|" + _GIT_BANG_KEYS + ")"
             found = []
             for index in range(1, len(words)):
-                setting = _re.fullmatch(r"(-[A-Za-z]*c|--con(?:f(?:ig?)?)?=)?(?i:core\.sshcommand)=(.*)",
+                setting = _re.fullmatch(r"(-[A-Za-z]*c|--con(?:f(?:ig?)?)?=)?(" + keys + r")=(.*)",
                                         words[index], _re.DOTALL)
                 if setting and (setting.group(1) or _re.fullmatch(option_name, words[index - 1])):
-                    found.append(setting.group(2))
+                    found.append(_git_setting_command(setting.group(2), setting.group(3)))
+            found.append(_git_config_command(words))
             return found
 
 
-        def _git_ssh_variables(words: list) -> list:
-            # The values given to GIT_SSH_COMMAND, in the shell, PowerShell and cmd forms.
+        def _command_variables(words: list) -> list:
+            # The values given to variables that git, or a program that pages, runs as a command, in the
+            # shell, PowerShell and cmd forms.
             import re as _re
             found = []
             for index, word in enumerate(words):
-                variable = _re.fullmatch(r"(\$env:)?git_ssh_command(?:\+?=(.*))?", word, _re.IGNORECASE | _re.DOTALL)
+                variable = _re.fullmatch(r"(\$env:)?(" + _COMMAND_VARIABLES + r")(?:\+?=(.*))?", word,
+                                         _re.IGNORECASE | _re.DOTALL)
                 if not variable:
                     continue
-                value = variable.group(2)
+                # A shell tells pager from PAGER; PowerShell and cmd do not.
+                if (variable.group(2).lower() == "pager" and variable.group(2) != "PAGER"
+                        and not variable.group(1) and words[0].lower() != "set"):
+                    continue
+                value = variable.group(3)
                 following = words[index + 1:index + 3]
                 if variable.group(1) and not value:
                     # $env:GIT_SSH_COMMAND = "value", with or without the spaces.
@@ -2696,8 +2925,9 @@ public static class AgentCommandGuard
             return found
 
 
+
         def _ssh_and_git_commands(command: str) -> list:
-            # Commands that ssh, scp, sftp and git run on this computer to reach the other side.
+            # Values that ssh, scp, sftp, git and pagers run as commands on this computer.
             values = []
             for segment in _stages_as_run(command):
                 # With escaped quotes only the POSIX reading finds where a value ends.
@@ -2706,7 +2936,7 @@ public static class AgentCommandGuard
                     readings.append(_tokenize_segment(segment))
                 for tokens in readings:
                     tokens = _quoted_assignments(segment, tokens)
-                    values.extend(_git_ssh_variables([word for word, _ in tokens]))
+                    values.extend(_command_variables([word for word, _ in tokens]))
                     words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
                     if not words:
                         continue
@@ -2714,7 +2944,7 @@ public static class AgentCommandGuard
                     if name in ("ssh", "scp", "sftp"):
                         values.extend(_ssh_option_commands(words))
                     elif name == "git":
-                        values.extend(_git_ssh_settings(words))
+                        values.extend(_git_settings(words))
             return [value for value in dict.fromkeys(values) if value.strip()]
 
 
@@ -2750,19 +2980,19 @@ public static class AgentCommandGuard
 
 
         def _check_transports(command: str, protected, depth: int):
-            # rsync, ssh, scp, sftp and git run some values as commands on this computer, so those get the
-            # same checks as any command. Quotes and escapes inside a name do not change it.
+            # rsync, ssh, scp, sftp, git and pagers run some values as commands on this computer, so those get
+            # the same checks as any command. Quotes and escapes inside a name do not change it.
             import re as _re
             plain = _re.sub("[\"'\\\\`^]", "", command).lower()
             values = []
             if "rsync" in plain:
                 values += _rsync_transports(command)
-            if any(name in plain for name in ("proxycommand", "localcommand", "knownhostscommand",
-                                              "core.sshcommand", "git_ssh_command")):
+            if any(name in plain for name in ("proxycommand", "localcommand", "knownhostscommand", "core.", "alias.",
+                                              ".helper", "sequence.editor", "diff.external", "git_", "pager")):
                 values += _ssh_and_git_commands(command)
             texts = [text for value in dict.fromkeys(values) for text in _transport_checks(value)]
             texts = [text for text in dict.fromkeys(texts) if text.strip() not in ("", "ssh")]
-            if texts and (depth >= 3 or len(texts) > 16):
+            if texts and (depth >= 3 or len(texts) > 64):
                 return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
             for text in texts:
                 result = _check_command_safety({"command": text}, protected, depth + 1)
