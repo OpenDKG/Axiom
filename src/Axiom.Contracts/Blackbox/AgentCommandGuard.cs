@@ -1381,8 +1381,10 @@ public static class AgentCommandGuard
             for segment in _split_shell_segments(command):
                 if segment == _UNINSPECTABLE_SEGMENT:
                     continue
+                # A ) or } left over from a group would otherwise read as the destination.
+                segment = _without_stray_closers(segment)
                 for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
-                    words = _past_keywords(tokens)
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
                     if not words or _command_name(words[0]) != "rsync":
                         continue
                     operands = _copy_operands("rsync", _split_redirections(words[1:])[0])
@@ -2326,19 +2328,10 @@ public static class AgentCommandGuard
 
 
         def _stages_as_run(command: str) -> list:
-            # The pipeline stages of every command text the shell would run, without the derived
-            # spellings that the segment list adds.
-            return [segment for script in _expand_command(command)[2] for _, segment in _split_stages(script, True)]
-
-
-        def _past_keywords(tokens) -> list:
-            # The words of a command after shell keywords, grouping, assignments and prefixes.
-            words = [word for word, _ in tokens]
-            while words and words[0] in ("do", "then", "else", "elif", "while", "until", "if", "!", "{", "("):
-                words.pop(0)
-            if words:
-                words[0] = words[0].lstrip("({")
-            return words[_strip_prefixes([(word, False) for word in words])[0]:]
+            # The pipeline stages of every command text the shell would run, and the bare commands
+            # inside them, without the other derived spellings that the segment list adds.
+            return [candidate for script in _expand_command(command)[2] for _, segment in _split_stages(script, True)
+                    for candidate in [segment] + _bare_commands(segment)]
 
 
         def _rsync_transports(command: str) -> list:
@@ -2353,7 +2346,7 @@ public static class AgentCommandGuard
                     readings.append(_tokenize_segment(segment))
                 for tokens in readings:
                     values.extend(word[10:] for word, _ in tokens if word.startswith("RSYNC_RSH="))
-                    words = _past_keywords(tokens)
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
                     if not words or _command_name(words[0]) != "rsync":
                         continue
                     idx = 1
