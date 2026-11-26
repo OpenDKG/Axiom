@@ -46,6 +46,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Use a short temp directory for macOS Unix sockets
+        if: runner.os == 'macOS'
+        run: |
+          # macOS Unix domain socket paths are limited to 104 characters; the runner
+          # temp path is longer, which breaks the IPC tests (same fix as macos-port.yml).
+          mkdir -p /tmp/axiom-ci
+          echo "TMPDIR=/tmp/axiom-ci" >> "$GITHUB_ENV"
+
       - name: Restore portable solution (locked mode)
         run: dotnet restore Axiom.Portable.slnx --locked-mode
 
