@@ -277,6 +277,11 @@ public sealed partial class MiniHomePageViewModel : PageViewModel, IActivatableP
 
         foreach (var rule in Firewall.Rules)
         {
+            if (rule is null || !rule.HasRuleSpec)
+            {
+                continue;
+            }
+
             if (!rule.IsBlock || !seen.Add(rule.Application + "|" + rule.DirectionText))
             {
                 continue;

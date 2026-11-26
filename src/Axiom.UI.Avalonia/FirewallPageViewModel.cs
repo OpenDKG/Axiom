@@ -24,6 +24,9 @@ public sealed class FirewallRuleRow(ManagedRule rule, bool lastKnown = false)
 
     public bool IsLastKnown => lastKnown;
 
+    /// <summary>False for a row built from a malformed service snapshot (null rule or spec).</summary>
+    public bool HasRuleSpec => rule?.Spec is not null;
+
     public Guid ManagedRuleId => rule.ManagedRuleId;
 
     public string OsRuleName => rule.OsRuleName;
@@ -1902,6 +1905,12 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             _ownedRules.Clear();
             foreach (var rule in snapshot.Rules)
             {
+                // A malformed service snapshot (JSON null / missing spec) must not crash the UI.
+                if (rule?.Spec is null)
+                {
+                    continue;
+                }
+
                 Rules.Add(new FirewallRuleRow(rule));
                 _ownedRules.Add(rule);
             }
