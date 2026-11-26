@@ -235,14 +235,23 @@ public static class AgentCommandGuard
             return [], True, idx
 
 
-        def _split_operators(raw: str, escapes: bool) -> list:
-            # Splits on unquoted ;, &&, ||, | and newlines. With escapes, a backslash also protects a
+        def _split_stages(raw: str, escapes: bool) -> list:
+            # (piped, segment) pairs, split on unquoted ;, &&, ||, | and newlines. piped is True when
+            # the segment reads the previous one's output. With escapes, a backslash also protects a
             # quote or operator, as in a POSIX shell; without, backslashes are plain (Windows paths).
-            segments = []
+            stages = []
             buf = []
             quote = ""
+            piped = False
             i = 0
             n = len(raw)
+
+            def close():
+                segment = "".join(buf).strip()
+                if segment:
+                    stages.append((piped, segment))
+                return bool(segment)
+
             while i < n:
                 ch = raw[i]
                 if escapes and ch == "\\" and quote != "'" and i + 1 < n:
@@ -261,15 +270,26 @@ public static class AgentCommandGuard
                     buf.append(ch)
                     i += 1
                     continue
+                if ch == "|" and buf and buf[-1] == ">":
+                    buf.append(ch)  # >| is a redirection
+                    i += 1
+                    continue
                 if ch in "\n\r;|" or raw.startswith("&&", i):
-                    segments.append("".join(buf).strip())
+                    pipe = ch == "|" and not raw.startswith("||", i)
+                    ended = close()
+                    # A newline right after a pipe continues the pipeline.
+                    piped = pipe or (piped and not ended and ch in "\n\r")
                     buf = []
-                    i += 2 if raw.startswith(("&&", "||"), i) else 1
+                    i += 2 if raw.startswith(("&&", "||", "|&"), i) else 1
                     continue
                 buf.append(ch)
                 i += 1
-            segments.append("".join(buf).strip())
-            return [segment for segment in segments if segment]
+            close()
+            return stages
+
+
+        def _split_operators(raw: str, escapes: bool) -> list:
+            return [segment for _, segment in _split_stages(raw, escapes)]
 
 
         def _substitutions(raw: str, backticks: bool):
@@ -394,6 +414,26 @@ public static class AgentCommandGuard
             for body in bodies:
                 descend(body, in_powershell)
 
+            # What each shell or interpreter that reads stdin is fed through a pipe. Pipelines are
+            # read as a POSIX shell splits them.
+            stages = _split_stages(raw, True)
+            for position, (piped, segment) in enumerate(stages):
+                if not piped or position == 0:
+                    continue
+                tokens = _tokenize_posix(segment)
+                start = _strip_prefixes(tokens)[0]
+                if any(_command_name(word) == "xargs" for word, _ in tokens[:start]):
+                    continue  # xargs takes the pipe, not the command it runs
+                if not _reads_commands_from_stdin([word for word, _ in tokens[start:]]):
+                    continue
+                before = _tokenize_posix(stages[position - 1][1])
+                literal = _literal_output([word for word, _ in before[_strip_prefixes(before)[0]:]])
+                if literal is None:
+                    found.append(_UNINSPECTABLE_SEGMENT)
+                    continue
+                for text in dict.fromkeys([" ".join(literal)] + literal):
+                    descend(text, False)
+
             # Both readings are inspected, so neither one's blind spot hides a command.
             for segment in dict.fromkeys(_split_operators(raw, False) + _split_operators(raw, True)):
                 found.append(segment)
@@ -421,6 +461,37 @@ public static class AgentCommandGuard
                         words = words[1:]
                         name = _command_name(words[0])
                         found.append(_join_words(words))
+                    arguments, here = _split_redirections(words[1:])
+                    if "<<<" in words[0]:
+                        # bash<<<"..." with no space.
+                        command_word, _, attached = words[0].partition("<<<")
+                        name = _command_name(command_word)
+                        here = attached or (arguments.pop(0) if arguments else "")
+                        words = [command_word] + words[1:]
+                    if here is not None and _reads_commands_from_stdin([words[0]] + arguments):
+                        if "$" in here or "`" in here:
+                            found.append(_UNINSPECTABLE_SEGMENT)
+                        else:
+                            descend(here, False)
+                    if name in ("su", "runuser"):
+                        argv, inner, parsed = _su_command(name, words)
+                        if not parsed:
+                            found.append(_UNINSPECTABLE_SEGMENT)
+                        if argv:
+                            descend(_join_words(argv), False)
+                        if inner is not None:
+                            descend(inner, False)
+                        continue
+                    if name == "watch":
+                        inner, parsed = _watched_command(words)
+                        if not parsed:
+                            found.append(_UNINSPECTABLE_SEGMENT)
+                        descend(inner, False)
+                        continue
+                    if name == "find":
+                        for argv in _find_exec_commands(words):
+                            descend(_join_words(argv), False)
+                        continue
                     if name in ("eval", "source") or words[0] == ".":
                         if len(words) > 1:
                             descend(" ".join(words[1:]), False)
@@ -442,6 +513,195 @@ public static class AgentCommandGuard
 
 
         _expansions = {}
+
+
+        def _split_redirections(words):
+            # Separates redirections from arguments: (arguments, here-string word or None).
+            import re as _re
+            arguments = []
+            here = None
+            idx = 0
+            while idx < len(words):
+                word = words[idx]
+                if "<<<" in word:
+                    before, _, after = word.partition("<<<")
+                    if before and not before.isdigit():
+                        arguments.append(before)
+                    if not after:
+                        idx += 1
+                        after = words[idx] if idx < len(words) else ""
+                    here = after
+                elif _re.fullmatch(r"(?:\d*|&)(?:>>?\|?|<<?-?)", word):
+                    idx += 1
+                elif not _re.match(r"(?:\d*|&)[<>]", word):
+                    arguments.append(word)
+                idx += 1
+            return arguments, here
+
+
+        def _reads_commands_from_stdin(words) -> bool:
+            # True for a shell or interpreter call that takes what it runs from standard input.
+            import re as _re
+            if not words:
+                return False
+            name = _command_name(words[0])
+            arguments = _split_redirections(words[1:])[0]
+            if name in ("su", "runuser"):
+                _, command, parsed = _su_command(name, [words[0]] + arguments)
+                return parsed and command is None
+            if name not in _SHELL_WRAPPERS:
+                return False
+            if name == "cmd":
+                return not any(word.lower()[:2] in ("/c", "/k", "/r") for word in arguments)
+            idx = 0
+            while idx < len(arguments):
+                word = arguments[idx]
+                lowered = word.lower()
+                if name in _POSIX_SHELLS:
+                    if word == "--command" or word.startswith("--command=") or _re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", word):
+                        return False
+                    if _re.fullmatch(r"-[A-Za-z]*s[A-Za-z]*", word):
+                        return True
+                    if _re.fullmatch(r"[-+][A-Za-z]*[oO]", word):
+                        idx += 2
+                        continue
+                elif name in _POWERSHELLS:
+                    option = lowered.lstrip("-").partition(":")[0]
+                    if lowered.startswith("-") and option:
+                        if "command".startswith(option):
+                            return arguments[idx + 1:] == ["-"]
+                        if option == "ec" or "encodedcommand".startswith(option) or "file".startswith(option):
+                            return False
+                        if option == "ep" or any(full.startswith(option) for full in ("executionpolicy", "windowstyle", "workingdirectory", "version")):
+                            idx += 2
+                            continue
+                else:
+                    if lowered in ("-c", "-m", "-e", "-p", "--eval", "--print", "--version", "-v", "--help", "-h"):
+                        return False
+                    if word in ("-W", "-X"):
+                        idx += 2
+                        continue
+                if word == "-":
+                    return True
+                if not word.startswith(("-", "+")):
+                    return False  # a script file
+                idx += 1
+            return True
+
+
+        def _literal_output(words):
+            # The literal arguments of echo or printf, or None when the text cannot be known.
+            if not words or _command_name(words[0]) not in ("echo", "printf"):
+                return None
+            arguments = _split_redirections(words[1:])[0]
+            while arguments and arguments[0] in ("-n", "-e", "-E", "--"):
+                arguments = arguments[1:]
+            if any("$" in word or "`" in word for word in arguments):
+                return None
+            return [word.replace("\\n", "\n").replace("\\t", " ") for word in arguments]
+
+
+        def _su_command(name: str, words):
+            # su and runuser: (direct argv or None, -c command or None, False for an unknown option).
+            command = None
+            user_named = False
+            runuser_user = False
+            idx = 1
+            while idx < len(words):
+                word = words[idx]
+                if word == "--":
+                    rest = words[idx + 1:]
+                    if runuser_user and rest:
+                        return rest, command, True
+                    idx += 1
+                    continue
+                if word.startswith(("--command=", "--session-command=")):
+                    command = word.split("=", 1)[1]
+                elif word in ("--command", "--session-command") or (
+                        word.startswith("-") and not word.startswith("--") and len(word) > 1 and word.endswith("c")
+                        and all(ch in "flmpPc" for ch in word[1:])):
+                    if idx + 1 >= len(words):
+                        return None, None, False
+                    command = words[idx + 1]
+                    idx += 2
+                    continue
+                elif word in ("-s", "-g", "-G", "-w", "--shell", "--group", "--supp-group", "--whitelist-environment"):
+                    idx += 2
+                    continue
+                elif word in ("-u", "--user") and name == "runuser":
+                    runuser_user = True
+                    idx += 2
+                    continue
+                elif word.startswith("--"):
+                    if word.split("=", 1)[0] not in ("--login", "--preserve-environment", "--pty", "--fast", "--shell",
+                                                     "--group", "--supp-group", "--user", "--whitelist-environment", "--help", "--version"):
+                        return None, command, False
+                    runuser_user = runuser_user or word.startswith("--user=")
+                elif word.startswith("-"):
+                    if any(ch not in "flmpPhV" for ch in word[1:]):
+                        return None, command, False
+                elif runuser_user:
+                    return words[idx:], command, True
+                elif not user_named:
+                    user_named = True
+                idx += 1
+            return None, command, True
+
+
+        def _watched_command(words):
+            # watch [options] command: (the command string it runs, False for an unknown option).
+            exact = False
+            idx = 1
+            while idx < len(words):
+                word = words[idx]
+                if word == "--":
+                    idx += 1
+                    break
+                if word.startswith("--"):
+                    key = word[2:].split("=", 1)[0]
+                    if key == "interval":
+                        idx += 1 if "=" in word else 2
+                        continue
+                    if key == "exec":
+                        exact = True
+                    elif key not in ("beep", "chgexit", "color", "differences", "errexit", "equexit", "no-linewrap",
+                                     "no-rerun", "no-title", "no-wrap", "precise", "help", "version"):
+                        return "", False
+                    idx += 1
+                    continue
+                if not word.startswith("-") or word == "-":
+                    break
+                for position in range(1, len(word)):
+                    char = word[position]
+                    if char in "nq":
+                        if position == len(word) - 1:
+                            idx += 1
+                        break
+                    if char == "d":
+                        break  # -d may carry an attached value
+                    if char == "x":
+                        exact = True
+                    elif char not in "tgebcprwhv":
+                        return "", False
+                idx += 1
+            rest = words[idx:]
+            return (_join_words(rest) if exact and rest else " ".join(rest)), True
+
+
+        def _find_exec_commands(words):
+            # The argv of each find -exec, -execdir, -ok and -okdir action.
+            commands = []
+            idx = 1
+            while idx < len(words):
+                if words[idx] in ("-exec", "-execdir", "-ok", "-okdir"):
+                    end = idx + 1
+                    while end < len(words) and words[end] not in (";", "\\;", "+"):
+                        end += 1
+                    if end > idx + 1:
+                        commands.append(words[idx + 1:end])
+                    idx = end
+                idx += 1
+            return commands
 
 
         def _expand_command(command: str):
@@ -759,7 +1019,7 @@ public static class AgentCommandGuard
 
 
         def _deletes_protected(command: str, protected) -> bool:
-            verbs = ("del", "erase", "rm", "rmdir", "remove-item", "unlink",
+            verbs = ("del", "erase", "rm", "rmdir", "rd", "remove-item", "unlink",
                      "move", "move-item", "ren", "rename", "rename-item", "mv",
                      "shred", "truncate", "shutil.rmtree", "os.remove", "os.unlink")
             if _deletes_inline(command, protected):
@@ -829,6 +1089,94 @@ public static class AgentCommandGuard
             verbs = ("cat", "type", "more", "head", "tail", "get-content", "readalltext",
                      "open(", ".read(", "copy", "cp", "get-item", "strings", "forfiles")
             return _has_command_verb(command, verbs)
+
+
+        def _redirection_targets(segment: str) -> list:
+            # Words that unquoted output redirections (>, >>, >|, &>, 2>) write to.
+            targets = []
+            quote = ""
+            i = 0
+            n = len(segment)
+            while i < n:
+                ch = segment[i]
+                if quote:
+                    if quote == '"' and ch == "\\" and segment[i + 1:i + 2] in ('"', "\\"):
+                        i += 2
+                        continue
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch == "\\" and segment[i + 1:i + 2] in ('"', "'", ">"):
+                    i += 2
+                    continue
+                elif ch == ">":
+                    j = i + 1
+                    while j < n and segment[j] in ">|":
+                        j += 1
+                    if segment[j:j + 1] != "&":
+                        tokens = _tokenize_segment(segment[j:].lstrip())
+                        if tokens:
+                            targets.append(tokens[0][0])
+                    i = j
+                    continue
+                i += 1
+            return targets
+
+
+        def _written_paths(words) -> list:
+            # Paths that tee, dd, install, ln, cp, mv and destructive git -C calls write to.
+            name = _command_name(words[0])
+            arguments = _split_redirections(words[1:])[0]
+            if name == "dd":
+                return [word[3:] for word in arguments if word.startswith("of=")]
+            if name == "git":
+                folders = [arguments[i + 1] for i in range(len(arguments) - 1) if arguments[i] == "-C"]
+                if folders and any(word in ("clean", "checkout", "reset") for word in arguments):
+                    return folders
+                return []
+            if name not in ("tee", "install", "ln", "cp", "mv", "copy", "move", "copy-item", "move-item", "tee-object"):
+                return []
+            valued = ("-m", "-o", "-g", "-S", "--mode", "--owner", "--group", "--suffix") if name == "install" else ("-S", "--suffix")
+            operands = []
+            directory = []
+            all_operands = False
+            idx = 0
+            while idx < len(arguments):
+                word = arguments[idx]
+                if word.startswith("--target-directory="):
+                    directory.append(word.split("=", 1)[1])
+                elif word in ("-t", "--target-directory") and name in ("install", "ln", "cp", "mv"):
+                    directory.extend(arguments[idx + 1:idx + 2])
+                    idx += 1
+                elif word in valued:
+                    idx += 1
+                elif word == "-d" and name == "install":
+                    all_operands = True
+                elif word.startswith("-") and len(word) > 1:
+                    pass
+                else:
+                    operands.append(word)
+                idx += 1
+            if name in ("tee", "tee-object") or all_operands:
+                return operands + directory
+            if directory:
+                return directory
+            return operands[-1:] if len(operands) > 1 else []
+
+
+        def _writes_protected(command: str, protected) -> bool:
+            for segment in _split_shell_segments(command):
+                if segment == _UNINSPECTABLE_SEGMENT:
+                    continue
+                targets = _redirection_targets(segment)
+                for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if words:
+                        targets.extend(_written_paths(words))
+                if any(_text_hits_protected(target, protected) for target in targets):
+                    return True
+            return False
 
 
         def _tampers_with_protected(command: str, protected) -> bool:
@@ -1367,6 +1715,8 @@ public static class AgentCommandGuard
                 return ("read", "Blackbox blocked this call: it reads a protected path through a hidden path form.")
             if _tampers_with_protected(command_text, protected):
                 return ("permissions", "Blackbox blocked this call: it changes ownership or permissions of a protected path.")
+            if _writes_protected(command_text, protected):
+                return ("write", "Blackbox blocked this call: it modifies a protected path.")
             if _exfiltrates_protected(command_text, protected):
                 return ("exfiltration", "Blackbox blocked this call: it uploads a file from a protected path.")
             if _executes_protected(command_text, protected):
