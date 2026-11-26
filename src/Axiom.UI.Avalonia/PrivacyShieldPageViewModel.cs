@@ -690,6 +690,56 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         }
     }
 
+    /// <summary>
+    /// Enables or disables from the Simple/Mini home toggles without optimistic UI state: the
+    /// switch only changes after PrivacyConfigure succeeds, and the failure text stays in
+    /// <see cref="StatusText"/> for the caller to surface inline.
+    /// </summary>
+    internal async Task<bool> SetEnabledFromHomeAsync(bool enabled)
+    {
+        if (_client is null || IsBusy)
+        {
+            return false;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var settings = BuildSettings() with { Enabled = enabled };
+            if (!ValidateSettingsSize(settings))
+            {
+                return false;
+            }
+
+            var status = await CreateConfigureClient()!
+                .SendAsync<PrivacyShieldStatus>(
+                    IpcCommandTypes.PrivacyConfigure,
+                    settings,
+                    CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyStatus(status);
+            return status.Enabled == enabled;
+        }
+        catch (ServiceUnavailableException exception)
+        {
+            StatusBadge = "UNAVAILABLE";
+            StatusText = exception.Message;
+            return false;
+        }
+#pragma warning disable CA1031 // The home view shows the failure inline.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            StatusBadge = "ERROR";
+            StatusText = exception.Message;
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     [RelayCommand]
     private async Task DisableAsync()
     {

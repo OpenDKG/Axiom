@@ -464,6 +464,10 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [ObservableProperty]
     private string _shieldStatusText = "Checking the local service…";
 
+    /// <summary>Last shield toggle failure, for the Simple/Mini inline error line.</summary>
+    [ObservableProperty]
+    private string? _shieldActionError;
+
     [ObservableProperty]
     private string _shieldHintText =
         $"Axiom Shield applies {PlatformText.Firewall} rules owned by Axiom. Nothing is blocked until you turn it on.";
@@ -742,6 +746,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
     [RelayCommand(CanExecute = nameof(CanToggleShield))]
     private async Task ToggleShieldAsync()
     {
+        ShieldActionError = null;
         if (_client is null)
         {
             ShieldStatusText = "Axiom Shield needs the local service.";
@@ -800,12 +805,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             catch (ServiceUnavailableException exception)
             {
                 ShieldStatusText = exception.Message;
+                ShieldActionError = exception.Message;
             }
 #pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
             catch (Exception exception)
 #pragma warning restore CA1031
             {
                 ShieldStatusText = $"Disable failed: {exception.Message}";
+                ShieldActionError = ShieldStatusText;
             }
             finally
             {
@@ -849,6 +856,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
                 if (!install.Success)
                 {
                     ShieldStatusText = install.Message;
+                    ShieldActionError = install.Message;
                     return;
                 }
 
@@ -877,12 +885,14 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         catch (ServiceUnavailableException exception)
         {
             ShieldStatusText = exception.Message;
+            ShieldActionError = exception.Message;
         }
 #pragma warning disable CA1031 // The page must show an IPC failure instead of crashing.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
             ShieldStatusText = $"Enable failed: {exception.Message}";
+            ShieldActionError = ShieldStatusText;
         }
         finally
         {
