@@ -265,8 +265,8 @@ public static class AgentCommandGuard
 
         @_remembered
         def _split_stages(raw: str, escapes: bool) -> list:
-            # (piped, segment) pairs, split on unquoted ;, &&, ||, | and newlines. piped is True when
-            # the segment reads the previous one's output. With escapes, a backslash also protects a
+            # (piped, segment) pairs, split on unquoted ;, &&, ||, |, a single & and newlines. piped is
+            # True when the segment reads the previous one's output. With escapes, a backslash also protects a
             # quote or operator, as in a POSIX shell; without, backslashes are plain (Windows paths).
             stages = []
             buf = []
@@ -274,6 +274,10 @@ public static class AgentCommandGuard
             piped = False
             i = 0
             n = len(raw)
+            # Open ( that are outside quotes, True for $(. A single & inside $( ) or $(( )) does not end
+            # the outer command; the substitution's own text is split when it is read as a command.
+            opened = []
+            substitutions = 0
 
             def close():
                 segment = "".join(buf).strip()
@@ -299,11 +303,19 @@ public static class AgentCommandGuard
                     buf.append(ch)
                     i += 1
                     continue
+                if ch == "(":
+                    opened.append(i > 0 and raw[i - 1] == "$")
+                    substitutions += opened[-1]
+                elif ch == ")" and opened:
+                    substitutions -= opened.pop()
                 if ch == "|" and buf and buf[-1] == ">":
                     buf.append(ch)  # >| is a redirection
                     i += 1
                     continue
-                if ch in "\n\r;|" or raw.startswith("&&", i):
+                # A single & ends a command too, unless it is part of a redirection: &>, >&, <& (or |&).
+                background = (ch == "&" and not substitutions and raw[i + 1:i + 2] != ">"
+                              and (i == 0 or raw[i - 1] not in "<>|&"))
+                if ch in "\n\r;|" or raw.startswith("&&", i) or background:
                     pipe = ch == "|" and not raw.startswith("||", i)
                     ended = close()
                     # A newline right after a pipe continues the pipeline.
@@ -382,7 +394,7 @@ public static class AgentCommandGuard
 
 
         def _unescape_unquoted(segment: str) -> str:
-            # r\m runs rm. Removes such backslashes outside quotes, keeping Windows paths and commands.
+            # Removes the backslashes that a shell ignores outside quotes, keeping Windows paths and commands.
             import re as _re
             tokens = _tokenize_segment(segment)
             if "\\" not in segment or not tokens or _command_name(tokens[0][0]) in ("cmd",) + _POWERSHELLS:
@@ -465,6 +477,175 @@ public static class AgentCommandGuard
 
 
         @_remembered
+        def _group_end(text: str, start: int, escapes: bool) -> int:
+            # The index after the ) that closes the ( at start, or the length of an unclosed text.
+            quote = ""
+            depth = 0
+            i = start
+            while i < len(text):
+                ch = text[i]
+                if escapes and ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if not depth:
+                        return i + 1
+                i += 1
+            return len(text)
+
+
+        def _word_end(text: str, start: int, escapes: bool) -> int:
+            # The index after the shell word at start, keeping quotes and $( ) whole.
+            quote = ""
+            i = start
+            while i < len(text):
+                ch = text[i]
+                if escapes and ch == "\\" and quote != "'":
+                    i += 2
+                    continue
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"', "`"):
+                    quote = ch
+                elif text.startswith(("$(", "<(", ">("), i):
+                    i = _group_end(text, i + 1, escapes)
+                    continue
+                elif ch in " \t\r\n;|&<>()":
+                    break
+                i += 1
+            return min(i, len(text))
+
+
+        @_remembered
+        def _redirections_apart(text: str, escapes: bool = True) -> str:
+            # The same commands with each redirection moved, as its own words, to the end of its command.
+            # A shell reads a redirection the same way wherever it stands. A command whose redirections
+            # already stand alone after its words stays as written.
+            # Quotes and substitutions stay as written too; their texts are read on their own.
+            import re as _re
+            if "<" not in text and ">" not in text:
+                return text
+            output = []
+            command = []
+            moved = []
+            begin = 0
+            misplaced = False
+            # What may follow a redirection that already stands alone: the end of the command or another one.
+            settled = _re.compile(r"(?:\d+|&)?[<>]|[;|&\n\r()]")
+
+            def close(end):
+                nonlocal misplaced
+                if not misplaced:
+                    output.append(text[begin:end])
+                else:
+                    words = "".join(command).rstrip()
+                    output.append(" ".join(([words] if words else []) + moved))
+                moved.clear()
+                command.clear()
+                misplaced = False
+
+            quote = ""
+            i = 0
+            n = len(text)
+            while i < n:
+                ch = text[i]
+                if escapes and ch == "\\" and quote != "'":
+                    command.extend(text[i:i + 2])
+                    i += 2
+                    continue
+                if quote:
+                    command.append(ch)
+                    if ch == quote:
+                        quote = ""
+                    i += 1
+                    continue
+                if ch in ("'", '"', "`"):
+                    quote = ch
+                    command.append(ch)
+                    i += 1
+                    continue
+                if text.startswith(("$(", "<(", ">(", "(("), i):
+                    end = _group_end(text, i if ch == "(" else i + 1, escapes)
+                    command.extend(text[i:end])
+                    i = end
+                    continue
+                redirection = (_re.compile(r"&>>?|<<<|<<-?|<>|<&|<|>>|>\||>&|>").match(text, i)
+                               if ch in "<>&" else None)
+                if not redirection:
+                    if ch in ";|&\n\r()":
+                        close(i)
+                        output.append(ch)
+                        begin = i + 1
+                    else:
+                        command.append(ch)
+                    i += 1
+                    continue
+                operator = redirection.group()
+                # A descriptor written right before it, such as 2, {name} or PowerShell's *, belongs to it.
+                start = len(command)
+                while start and len(command) - start < 32 and command[start - 1] not in " \t":
+                    start -= 1
+                before = "".join(command[start:])
+                descriptor = ""
+                if (operator[0] != "&" and (not start or command[start - 1] in " \t")
+                        and _re.fullmatch(r"\d+|\*|\{[A-Za-z_]\w*\}", before)):
+                    del command[start:]
+                    descriptor = before if before.isdigit() else ""
+                    misplaced = misplaced or not descriptor
+                # Written against a word.
+                misplaced = misplaced or bool(command) and command[-1] not in " \t"
+                target_start = redirection.end()
+                while target_start < n and text[target_start] in " \t":
+                    target_start += 1
+                i = _word_end(text, target_start, escapes)
+                target = text[target_start:i]
+                if not target:
+                    command.extend(descriptor + operator)
+                    i = max(i, redirection.end())
+                    continue
+                if operator == "<&" or (operator == ">&" and (descriptor or _re.fullmatch(r"\d+-?|-", target))):
+                    moved.append(descriptor + operator + target)
+                elif operator == ">&":
+                    moved.append("&> " + target)
+                elif operator == "<>":
+                    moved.extend(["< " + target, "> " + target])
+                else:
+                    moved.append(descriptor + operator + " " + target)
+                while command and command[-1] in " \t":
+                    command.pop()
+                while i < n and text[i] in " \t":
+                    i += 1
+                if command:
+                    command.append(" ")
+                # A word after the redirection means it does not stand after the words.
+                misplaced = misplaced or i < n and not settled.match(text, i)
+            close(n)
+            return "".join(output)
+
+
+        def _redirection_spellings(text: str) -> list:
+            # The other spellings of a text with its redirections set apart, read with and without escapes.
+            spellings = [_redirections_apart(text, True).strip()]
+            if "\\" in text:
+                spellings.append(_redirections_apart(text, False).strip())
+            return [spelled for spelled in dict.fromkeys(spellings) if spelled and spelled != text]
+
+
+        def _segment_spellings(segment: str) -> list:
+            if segment.split(None, 1)[:1] in (["//"], ["///"], ["#"]):
+                return []
+            return _redirection_spellings(segment)
+
+
         def _bare_commands(segment: str) -> list:
             # The commands a segment holds behind then, do, else and similar words, ( and {.
             import re as _re
@@ -480,6 +661,19 @@ public static class AgentCommandGuard
                 if body and body != segment:
                     found.append(body)
             return list(dict.fromkeys(found))
+
+
+        def _inner_commands(segment: str) -> list:
+            # The bare commands of a segment, then the spellings of it and of them with their redirections
+            # set apart. These are read in addition to the text as written.
+            bare = _bare_commands(segment)
+            found = list(bare)
+            for text in [segment] + bare:
+                for spelled in _segment_spellings(text):
+                    found.append(spelled)
+                    # Moved from the front of a command, a redirection can uncover another shell word.
+                    found.extend(_bare_commands(spelled))
+            return [candidate for candidate in dict.fromkeys(found) if candidate != segment]
 
 
         def _quotes_closed(segment: str) -> bool:
@@ -555,11 +749,15 @@ public static class AgentCommandGuard
             for position, (piped, segment) in enumerate(stages):
                 if not piped or position == 0:
                     continue
-                tokens = _tokenize_posix((_bare_commands(segment) or [segment])[0])
-                start = _strip_prefixes(tokens)[0]
-                if any(_command_name(word) == "xargs" for word, _ in tokens[:start]):
-                    continue  # xargs takes the pipe, not the command it runs
-                if not _reads_commands_from_stdin([word for word, _ in tokens[start:]]):
+                written = (_bare_commands(segment) or [segment])[0]
+                reads = False
+                for text in [written] + _redirection_spellings(written):
+                    tokens = _tokenize_posix(text)
+                    start = _strip_prefixes(tokens)[0]
+                    # xargs takes the pipe, not the command it runs.
+                    reads = reads or (not any(_command_name(word) == "xargs" for word, _ in tokens[:start])
+                                      and _reads_commands_from_stdin([word for word, _ in tokens[start:]]))
+                if not reads:
                     continue
                 before = _tokenize_posix(stages[position - 1][1])
                 literal = _literal_output([word for word, _ in before[_strip_prefixes(before)[0]:]])
@@ -569,14 +767,14 @@ public static class AgentCommandGuard
                 for text in dict.fromkeys([" ".join(literal)] + literal):
                     descend(text, False)
 
-            # Both readings are inspected, so neither one's blind spot hides a command.
+            # Both readings are inspected.
             posix_segments = [segment for _, segment in stages]
             shell_segments = set(posix_segments)
             # Each segment, then the bare commands inside it, which go through every check too.
             segments = {}
             for segment in dict.fromkeys(_split_operators(raw, False) + posix_segments):
                 segments[segment] = None
-                for bare in _bare_commands(segment):
+                for bare in _inner_commands(segment):
                     segments[bare] = None
                     if segment in posix_segments:
                         shell_segments.add(bare)
@@ -882,8 +1080,7 @@ public static class AgentCommandGuard
 
 
         def _nesting_is_lost(inner: str, rest) -> bool:
-            # Reused quotes: the argument to unwrap stops at the next shell's name, and that shell's
-            # command lies in the words after it.
+            # True when the argument to unwrap does not hold the whole command, so it cannot be inspected.
             def bare(token: str) -> str:
                 return token.lower().strip("\\\"'^")
 
@@ -1162,9 +1359,7 @@ public static class AgentCommandGuard
 
         @_remembered
         def _normalize_command(command: str) -> str:
-            # Shell variables and Win32 prefixes hide a protected path from token matching:
-            # `cat "$HOME/.ssh/id_rsa"` and `type \\?\C:\...` were allowed while the literal
-            # form blocked. Expand them before any path check runs.
+            # Expands shell variables and Win32 path prefixes before any path check runs.
             text = (command or "").lower()
             home = os.path.normpath(str(Path.home())).lower()
             profile = (os.environ.get("USERPROFILE") or str(Path.home())).lower()
@@ -1226,11 +1421,13 @@ public static class AgentCommandGuard
 
 
         def _reads_protected(command: str, protected) -> bool:
+            if _rsync_copies_protected(command, protected, to_other_host=False):
+                return True
             verbs = ("cat", "type", "more", "head", "tail", "get-content", "readalltext",
                      "open(", ".read(", "copy", "cp", "get-item", "strings", "forfiles",
                      "findstr", "select-string", "grep", "rg", "tar", "compress-archive",
                      "copy-item", "move-item", "robocopy", "xcopy", "openssl", "ssh-keygen",
-                     "gpg", "age", "makecab", "expand", "esentutl", "ssh -i", "split", "csplit")
+                     "gpg", "age", "makecab", "expand", "esentutl", "ssh -i", "split", "csplit", "base64")
             if not _has_command_verb(command, verbs):
                 return False
             tokens = _protected_tokens(protected)
@@ -1243,10 +1440,8 @@ public static class AgentCommandGuard
 
 
         def _hidden_path_read(command: str, protected) -> bool:
-            # Blackbox blocks a literal read of a protected path. The same read written with a
-            # shell variable or a Win32 prefix ($HOME/.ssh, %USERPROFILE%\.ssh, \\?\C:\...)
-            # passed. Only commands that actually hide a path are checked, so a literal
-            # `.env.example` read is not a false positive.
+            # The read check for paths written with a shell variable or a Win32 prefix. Other commands
+            # keep the literal check, so that ordinary file names are not false positives.
             raw = (command or "").lower()
             hidden = ("$home", "%userprofile%", "$env:userprofile", "$env:localappdata",
                       "%localappdata%", "$env:appdata", "%appdata%", "~/", "~\\", "\\\\?\\", "//?/")
@@ -1334,9 +1529,8 @@ public static class AgentCommandGuard
             return operands if scripted else operands[1:]
 
 
-        def _copy_destination(name: str, arguments) -> list:
-            # The local destination of rsync or scp: the last operand, unless it names another host.
-            import re as _re
+        def _copy_operands(name: str, arguments) -> list:
+            # The sources and destination of rsync or scp, without options and their values.
             short_valued = "efBTM" if name == "rsync" else "cDFiJloPSX"
             long_valued = ("--rsh", "--filter", "--exclude", "--include", "--exclude-from", "--include-from",
                            "--files-from", "--block-size", "--temp-dir", "--log-file", "--log-file-format",
@@ -1358,11 +1552,39 @@ public static class AgentCommandGuard
                 else:
                     operands.append(word)
                 idx += 1
-            if len(operands) < 2:
+            return operands
+
+
+        def _names_other_host(spec: str) -> bool:
+            import re as _re
+            return _re.match(r"[^/\\]{2,}:|(?:rsync|scp|sftp)://", spec) is not None
+
+
+        def _copy_destination(name: str, arguments) -> list:
+            # The local destination of rsync or scp: the last operand, unless it names another host.
+            operands = _copy_operands(name, arguments)
+            if len(operands) < 2 or _names_other_host(operands[-1]):
                 return []
-            destination = operands[-1]
-            remote = _re.match(r"[^/\\]{2,}:|(?:rsync|scp|sftp)://", destination)
-            return [] if remote else [destination]
+            return [operands[-1]]
+
+
+        def _rsync_copies_protected(command: str, protected, to_other_host: bool) -> bool:
+            # An rsync whose source is a protected path, split by where the copy goes. Values of options
+            # such as -e or --exclude are not sources.
+            for segment in _split_shell_segments(command):
+                if segment == _UNINSPECTABLE_SEGMENT:
+                    continue
+                # A ) or } left over from a group would otherwise read as the destination.
+                segment = _without_stray_closers(segment)
+                for tokens in (_tokenize_segment(segment), _tokenize_posix(segment)):
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words or _command_name(words[0]) != "rsync":
+                        continue
+                    operands = _copy_operands("rsync", _split_redirections(words[1:])[0])
+                    if len(operands) > 1 and _names_other_host(operands[-1]) == to_other_host and any(
+                            _text_hits_protected(source, protected) for source in dict.fromkeys(operands[:-1])):
+                        return True
+            return False
 
 
         def _permission_targets(words) -> list:
@@ -1398,9 +1620,14 @@ public static class AgentCommandGuard
             return []
 
 
+        def _scripts_as_read(command: str) -> list:
+            # Each command text the shell would run, also with its redirections set apart.
+            return [text for script in _expand_command(command)[2] for text in [script] + _redirection_spellings(script)]
+
+
         def _pipes_protected_into(command: str, protected, changers) -> bool:
             # find, ls or echo naming a protected path, piped to xargs and one of the changers.
-            for script in _expand_command(command)[2]:
+            for script in _scripts_as_read(command):
                 if "xargs" not in script:
                     continue
                 for pipeline in _pipelines(script):
@@ -1638,7 +1865,7 @@ public static class AgentCommandGuard
         def _feeds_guard_into_kill(command: str) -> bool:
             # A looked-up Axiom process reaches a kill through its pipeline, a substitution or a variable.
             import re as _re
-            for script in _expand_command(command)[2]:
+            for script in _scripts_as_read(command):
                 if "axiom" not in script.lower():
                     continue
                 tainted = set()
@@ -1833,9 +2060,7 @@ public static class AgentCommandGuard
             if window and value and (_literal_end_differs(window[0], value[0], "*?[")
                                      or _literal_end_differs(window[-1], value[-1], "*?]")):
                 return False
-            # Match one wildcard spelling against the literal name it could resolve to. Reads done
-            # with a wildcard (`type C:\Users\me\.ss?\id_rsa`, `...\*\Login Data`) never
-            # contain the literal protected token, so a plain substring test misses them.
+            # Match one wildcard spelling against the literal name it could resolve to.
             import re as _re
 
             parts = []
@@ -1883,8 +2108,8 @@ public static class AgentCommandGuard
                 for spot in spots:
                     for start in range(max(0, spot - size + 1), spot + 1):
                         window = text[start:start + size]
-                        # A character class spells one name character with several text
-                        # characters (`[.]ssh`), so extend the window to its closing bracket.
+                        # A character class takes several text characters for one name
+                        # character, so extend the window to its closing bracket.
                         closing = window.find("]")
                         if "[" in window and closing > 0:
                             window = text[start:start + size + closing]
@@ -1958,13 +2183,19 @@ public static class AgentCommandGuard
             return _any_word_matches(words, tokens) or _glob_hits(text, tokens)
 
 
+        def _text_as_read(command: str) -> str:
+            # The command as written, then the other spellings of its segments.
+            spelled = [spelling for segment in _split_shell_segments(command) if segment != _UNINSPECTABLE_SEGMENT
+                       for spelling in _segment_spellings(segment)]
+            return " ; ".join(" ".join(text.lower().split()) for text in [command or ""] + list(dict.fromkeys(spelled)))
+
+
         def _executes_protected(command: str, protected) -> bool:
-            # An agent must not launch a file that lives in a protected path: reading and copying
-            # are covered by Blackbox, but Start-Process/&/cmd on the same file was allowed.
+            # An agent must not launch a file that lives in a protected path.
             import re as _re
-            text = " ".join((command or "").lower().split())
-            if not _hits_protected(text, protected):
+            if not _hits_protected(" ".join((command or "").lower().split()), protected):
                 return False
+            text = _text_as_read(command)
             verbs = ("start-process", "invoke-item", "cmd /c", "cmd.exe /c", "powershell", "pwsh",
                      "rundll32", "regsvr32", "mshta", "wmic process call create", "schtasks /run")
             if any(verb in text for verb in verbs):
@@ -1973,11 +2204,12 @@ public static class AgentCommandGuard
 
 
         def _exfiltrates_protected(command: str, protected) -> bool:
-            # Uploading or encoding a protected file is exfiltration even when no file-access rule
-            # matched the argument (curl -F file=@... was allowed in the lab).
-            text = " ".join((command or "").lower().split())
-            if not _hits_protected(text, protected):
+            # Uploading or encoding a protected file is exfiltration.
+            if _rsync_copies_protected(command or "", protected, to_other_host=True):
+                return True
+            if not _hits_protected(" ".join((command or "").lower().split()), protected):
                 return False
+            text = _text_as_read(command)
             if any(client in text for client in ("scp ", "sftp ", "ftp ")):
                 return True
             clients = ("curl", "wget", "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "certutil",
@@ -2245,9 +2477,8 @@ public static class AgentCommandGuard
 
 
         def _axiom_injection(value) -> str:
-            # Axiom-owned phrasings the vendor's curated regexes missed in the lab: plain
-            # "ignore previous instructions", "before answering, run ..." and zero-width
-            # obfuscation between words. Returns the matched phrase for a named block.
+            # Axiom's own prompt-injection phrasings, in addition to the vendor's rules. Returns the matched
+            # phrase for a named block.
             text = _flatten_args(value).lower()
             for mark in ("\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"):
                 text = text.replace(mark, "")
@@ -2296,7 +2527,129 @@ public static class AgentCommandGuard
             )
 
 
-        def _check_command_safety(args, protected=None):
+        def _stages_as_run(command: str) -> list:
+            # The pipeline stages of every command text the shell would run, and the bare commands
+            # inside them, without the other derived spellings that the segment list adds.
+            return [candidate for script in _expand_command(command)[2] for _, segment in _split_stages(script, True)
+                    for candidate in [segment] + _inner_commands(segment)]
+
+
+        def _rsync_transports(command: str) -> list:
+            # The values rsync runs on this computer to reach the other side: -e, --rsh and RSYNC_RSH.
+            values = []
+            for segment in _stages_as_run(command):
+                if "rsync" not in segment and "RSYNC_RSH" not in segment:
+                    continue
+                # With escaped quotes only the POSIX reading finds where a value ends.
+                readings = [_tokenize_posix(segment)]
+                if '\\"' not in segment:
+                    readings.append(_tokenize_segment(segment))
+                for tokens in readings:
+                    values.extend(word[10:] for word, _ in tokens if word.startswith("RSYNC_RSH="))
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words or _command_name(words[0]) != "rsync":
+                        continue
+                    idx = 1
+                    while idx < len(words) and words[idx] != "--":
+                        word = words[idx]
+                        following = words[idx + 1] if idx + 1 < len(words) else ""
+                        if word == "--rsh":
+                            values.append(following)
+                            idx += 1
+                        elif word.startswith("--rsh="):
+                            values.append(word[6:])
+                        elif word.startswith("-") and not word.startswith("--"):
+                            for position in range(1, len(word)):
+                                if word[position] == "e":
+                                    attached = word[position + 1:].removeprefix("=")
+                                    values.append(attached or following)
+                                    idx += 0 if attached else 1
+                                    break
+                                if word[position] in "fBTM":
+                                    idx += 1 if position == len(word) - 1 else 0
+                                    break
+                        idx += 1
+            return [value for value in dict.fromkeys(values) if value.strip()]
+
+
+        def _plain_command_end(text: str) -> int:
+            # Where the first simple command of a text ends: an unquoted operator, redirection,
+            # backtick or $(.
+            quote = ""
+            i = 0
+            while i < len(text):
+                ch = text[i]
+                if quote:
+                    if ch == quote:
+                        quote = ""
+                elif ch in ("'", '"'):
+                    quote = ch
+                elif ch in ";|&<>\n`" or text.startswith("$(", i):
+                    return i
+                i += 1
+            return len(text)
+
+
+        def _transport_checks(value: str) -> list:
+            # The command texts to judge for one transport value. An ssh call may name the key it logs
+            # in with, so that option is set aside; commands that ssh itself would run are judged too.
+            import re as _re
+            tokens = _tokenize_segment(value)
+            word = r'(?:"[^"]*"|' + "'[^']*'" + r'|[^\s"' + "'" + r'])+'
+            words = list(_re.finditer(word, value))
+            # NAME='a b' is still an assignment: only a quoted name makes the word a command.
+            if len(words) == len(tokens):
+                tokens = [(text, quoted and not _re.match(r"[A-Za-z_][A-Za-z0-9_]*\+?=", found.group()))
+                          for (text, quoted), found in zip(tokens, words)]
+            # ssh may be named by a path, or sit behind assignments and commands such as env or sudo.
+            start = _strip_prefixes(tokens)[0]
+            if start >= len(tokens) or _command_name(tokens[start][0]) != "ssh":
+                return [value]
+            # The key option is set aside only after the ssh word, so that sudo -i or env -i stay as they
+            # are, and only in the first simple command.
+            named = words[start].end() if start < len(words) else len(value)
+            end = max(named, _plain_command_end(value))
+            double = r'"(?:[^"`$]|\$(?!\())*"'
+            single = r"'[^']*'"
+            bare = r'(?:[^\s"\'`$();|&<>]|\$(?!\())+'
+            path = "(?:" + double + "|" + single + "|" + bare + ")"
+            identity = (r"(?<=\s)(?:-i\s*" + path + r"|-o\s*(?:IdentityFile=" + path
+                        + "|" + r'"IdentityFile=[^"`$]*"' + "|" + r"'IdentityFile=[^']*'" + r"))(?=\s|$)")
+            checks = [(value[:named] + _re.sub(identity, "", value[named:end]) + value[end:]).strip()]
+            # ssh takes these as Name=value, "Name value", or Name followed by the value as its own word.
+            for index, (word, _) in enumerate(tokens[start + 1:], start + 1):
+                option = _re.fullmatch(
+                    r"(?:-o)?\s*(?:proxycommand|localcommand|knownhostscommand)\b\s*=?\s*(.*)",
+                    word, _re.IGNORECASE | _re.DOTALL)
+                if not option:
+                    continue
+                command = option.group(1).strip()
+                if not command:
+                    following = [token for token, _ in tokens[index + 1:index + 3]]
+                    if following[:1] == ["="]:
+                        following = following[1:]
+                    command = following[0].removeprefix("=").strip() if following else ""
+                if command:
+                    checks.append(command)
+            return checks
+
+
+        def _check_transports(command: str, protected, depth: int):
+            # rsync runs its transport value as a command, so it gets the same checks as any command.
+            if "rsync" not in command and "RSYNC_RSH" not in command:
+                return None
+            texts = [text for value in _rsync_transports(command) for text in _transport_checks(value)]
+            texts = [text for text in dict.fromkeys(texts) if text.strip() not in ("", "ssh")]
+            if texts and (depth >= 3 or len(texts) > 16):
+                return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
+            for text in texts:
+                result = _check_command_safety({"command": text}, protected, depth + 1)
+                if result is not None:
+                    return result
+            return None
+
+
+        def _check_command_safety(args, protected=None, transport_depth: int = 0):
             injection = "" if _is_non_executable_doc_or_test_edit(args) else _axiom_injection(args)
             if injection:
                 return ("injection-heuristic", "Blackbox blocked this call: prompt-injection phrasing in the tool arguments.")
@@ -2325,6 +2678,9 @@ public static class AgentCommandGuard
                 if len(command_text) > _MAX_COMMAND_LENGTH:
                     return ("nesting", "Blackbox blocked this call: the command is too long for the guard to inspect.")
                 return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")
+            transport = _check_transports(command_text, protected, transport_depth)
+            if transport is not None:
+                return transport
             if _tampers_with_guard(command_text):
                 return ("tamper", "Blackbox blocked this call: it modifies the local guard.")
             if _disables_guard(command_text):
