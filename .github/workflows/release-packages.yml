@@ -77,10 +77,13 @@ jobs:
           chmod u+x "$bpftool"
           "$bpftool" version
           echo "BPFTOOL=$bpftool" >> "$GITHUB_ENV"
-      - name: Test the Linux desktop and infrastructure
+      - name: Full portable and Linux test suites
         run: |
-          dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
+          dotnet restore Axiom.Portable.slnx --locked-mode
+          dotnet build Axiom.Portable.slnx -c Release --no-restore
+          dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1
           dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests -c Release
+          dotnet test tests/Axiom.Infrastructure.Linux.Tests -c Release
           dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
       - name: Package and verify Ubuntu amd64
@@ -98,6 +101,8 @@ jobs:
           cp "$package" release/
           cd release
           sha256sum "$(basename "$package")" > SHA256SUMS.txt
+      - name: Install the package and smoke-test axiomd and Axiom
+        run: scripts/linux/smoke-install.sh build/linux/axiom-firewall_*.deb
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: axiom-linux-amd64
@@ -107,45 +112,76 @@ jobs:
 
   macos:
     if: ${{ !endsWith(github.ref_name, '-preview') || endsWith(github.ref_name, '-macos-preview') }}
-    runs-on: macos-15-intel
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            rid: osx-x64
+            expected_arch: x86_64
+            artifact: axiom-macos-intel
+          - runner: macos-15
+            rid: osx-arm64
+            expected_arch: arm64
+            artifact: axiom-macos-apple-silicon
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - name: Test the macOS filter and desktop
+      - name: Full portable and macOS test suites
         run: |
+          dotnet restore Axiom.Portable.slnx --locked-mode
+          dotnet build Axiom.Portable.slnx -c Release --no-restore
+          dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1
           mkdir -p "$RUNNER_TEMP/axiom"
           export TMPDIR="$RUNNER_TEMP/axiom"
           bash macos/build.sh test
-          dotnet test tests/Axiom.Infrastructure.MacOS.Tests -c Release
-          dotnet test tests/Axiom.Desktop.Avalonia.MacOS.Tests -c Release
-          dotnet test tests/Axiom.Service.Unix.Tests -c Release
           dotnet test tests/Axiom.UI.Avalonia.Tests -c Release --filter 'FullyQualifiedName~AgentsViewLogoTests|FullyQualifiedName~UpdateIndicatorAndContactTests'
-      - name: Package and verify the Intel app
+      - name: Package, sign and verify ${{ matrix.rid }}
         run: |
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
           test -n "$version"
           build=26
-          AXIOM_BUILD="$build" bash scripts/macos/package-app.sh osx-x64 --build-filter
-          app=build/macos/osx-x64/Axiom.app
+          AXIOM_BUILD="$build" bash scripts/macos/package-app.sh ${{ matrix.rid }} --build-filter
+          app=build/macos/${{ matrix.rid }}/Axiom.app
           codesign --verify --deep --strict "$app"
           test -d "$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension"
           test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$version"
-          test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = x86_64
-          mkdir -p release
-          git rev-parse HEAD > release/SOURCE-COMMIT.txt
+          test "$(lipo -archs "$app/Contents/MacOS/Axiom")" = "${{ matrix.expected_arch }}"
           test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$build"
           extension_info="$app/Contents/Library/SystemExtensions/com.axiom.firewall.filter.systemextension/Contents/Info.plist"
           test "$(plutil -extract CFBundleVersion raw "$extension_info")" = "$build"
-          package="Axiom-$version-$build-osx-x64-adhoc.zip"
+      - name: Smoke-start the ${{ matrix.rid }} app bundle
+        run: |
+          app=build/macos/${{ matrix.rid }}/Axiom.app
+          "$app/Contents/MacOS/Axiom" > "$RUNNER_TEMP/axiom-app.log" 2>&1 &
+          app_pid=$!
+          sleep 20
+          if ! kill -0 "$app_pid"; then
+            cat "$RUNNER_TEMP/axiom-app.log" >&2 || true
+            echo "Axiom.app exited during the startup smoke window" >&2
+            exit 1
+          fi
+          kill "$app_pid" || true
+          wait "$app_pid" 2>/dev/null || true
+      - name: Zip, checksum and hand off the bundle
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          test -n "$version"
+          build=26
+          app=build/macos/${{ matrix.rid }}/Axiom.app
+          package="Axiom-$version-$build-${{ matrix.rid }}-adhoc.zip"
+          mkdir -p release
+          git rev-parse HEAD > release/SOURCE-COMMIT.txt
           ditto -c -k --sequesterRsrc --keepParent "$app" "release/$package"
           cd release
           shasum -a 256 "$package" > SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: axiom-macos-intel
+          name: ${{ matrix.artifact }}
           path: release/
           if-no-files-found: error
           compression-level: 0

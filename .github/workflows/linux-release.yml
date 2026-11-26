@@ -22,8 +22,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  tests:
+    name: Portable and Linux tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+
+      - name: Portable solution (restore, build, test)
+        run: |
+          dotnet restore Axiom.Portable.slnx --locked-mode
+          dotnet build Axiom.Portable.slnx -c Release --no-restore
+          dotnet test Axiom.Portable.slnx -c Release --no-build --no-restore -m:1
+
+      - name: Linux platform tests
+        run: |
+          dotnet test tests/Axiom.Desktop.Avalonia.Linux.Tests/Axiom.Desktop.Avalonia.Linux.Tests.csproj -c Release
+          dotnet test tests/Axiom.Infrastructure.Linux.Tests/Axiom.Infrastructure.Linux.Tests.csproj -c Release
+          dotnet test tests/Axiom.Service.Unix.Tests/Axiom.Service.Unix.Tests.csproj -c Release
+
   deb:
     name: Build Ubuntu .deb (x64)
+    needs: tests
     # The package is validated on Ubuntu 24.04 (docs/LINUX_TEST_REPORT.md); build on the same base.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -66,6 +95,9 @@ jobs:
             echo "architecture=$(dpkg-deb -f build/linux/axiom-firewall_*.deb Architecture)"
             echo "sha256=$(sha256sum build/linux/axiom-firewall_*.deb | cut -d' ' -f1)"
           } | tee build/linux/PROVENANCE.txt
+
+      - name: Install the package and smoke-test axiomd and Axiom
+        run: scripts/linux/smoke-install.sh build/linux/axiom-firewall_*.deb
 
       - name: Upload the package artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
