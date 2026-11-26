@@ -904,7 +904,7 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         (@"while read p; do kill -0 $p; done < <(pgrep axiomd)", "allowed"),
         (@"read line < <(pgrep axiomd); kill %2", "allowed"),
         (@"cat <(pgrep axiomd); kill 123", "allowed"),
-        // A command that follows a comment, a here-document or an ANSI-C quoted string is checked.
+        // Shell comments, here-documents and ANSI-C quoted strings.
         ("# Don't touch prod\nrm -rf ~/.ssh", "blocked"),
         ("# Don't touch prod\nbash -c \"rm -rf ~/.ssh\"", "blocked"),
         ("# Don't touch prod\npkill axiomd", "blocked"),
@@ -987,7 +987,7 @@ print("BLOCKED " + result[0] if result else "ALLOWED")
         ("# $(it's\nchmod 777 ~/.ssh", "blocked"),
         ("# `\nchmod 777 ~/.ssh", "blocked"),
         ("cat <<EOF\n<<X '\nEOF\nchmod 777 ~/.ssh", "blocked"),
-        // Apostrophes in comments, here-documents and strings do not block ordinary commands.
+        // Ordinary commands that use them stay allowed.
         ("git commit -m \"$(cat <<'EOF'\nFix: don't crash\nEOF\n)\"", "allowed"),
         ("# it's\nls", "allowed"),
         ("echo $'a\\nb'", "allowed"),

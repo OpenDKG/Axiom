@@ -713,9 +713,9 @@ public static class AgentCommandGuard
 
 
         def _shell_reading(text: str, escapes: bool = True):
-            # A command as a POSIX shell reads its quotes: (the text without comments and here-documents and
-            # with $'...' written as '...', the here-document bodies that a shell runs, the bodies whose
-            # delimiter is unquoted, and the text from a quote or here-document that never closes, or "").
+            # Reads a command's quoting as a POSIX shell does. Returns the command without comments and
+            # here-documents, the here-document bodies that a shell runs, the bodies with an unquoted
+            # delimiter, and the text of a quote or here-document that is left open, or "".
             import re as _re
             heredoc = _re.compile(r"<<(-?)[ \t]*(?:'([^'\n]*)'|" + r'"([^"\n]*)"|(\\?)([A-Za-z_][\w.+-]*))'
                                   + r"(?![^\s;&|<>()`])")
@@ -768,7 +768,7 @@ public static class AgentCommandGuard
                         emit(text[i:])
                         break
                     if ansi:
-                        # A backslash escapes the next character here, so \' does not close the quote.
+                        # This quoting form has its own backslash escapes.
                         body = _re.sub(r"\\(.)", lambda found: "" if found.group(1) in "'\"" else found.group(),
                                        text[i + 2:end], flags=_re.DOTALL)
                         emit("'" + body + "'")
@@ -777,10 +777,10 @@ public static class AgentCommandGuard
                     i = end + 1
                     at_word = False
                     continue
-                # cmd comment lines, which a POSIX shell would run as a command of their own.
+                # cmd comment lines.
                 batch = (ch in "rR:" and not inside and (not i or text[i - 1] == "\n")
                          and _re.compile(r"(?:rem(?=[ \t])|::)", _re.IGNORECASE).match(text, i))
-                # A PowerShell here-string: @' or @" ends a line, and '@ or "@ starts one.
+                # PowerShell here-strings.
                 block_string = ch == "@" and _re.compile(r"@(['" + r'"])[ \t]*\r?\n').match(text, i)
                 if block_string:
                     end = text.find("\n" + block_string.group(1) + "@", block_string.end() - 1)
@@ -794,7 +794,7 @@ public static class AgentCommandGuard
                         i += 1
                     continue
                 if text.startswith("((", i):
-                    # Arithmetic: << is a shift here and # a base mark.
+                    # Arithmetic is kept as written.
                     depth, end = 0, i
                     while end < n:
                         depth += {"(": 1, ")": -1}.get(text[end], 0)
@@ -837,7 +837,7 @@ public static class AgentCommandGuard
                                 closed = True
                                 i = end + 1
                             elif opened and opened[-1][0] == ")" and bare.startswith(delimiter) and bare[len(delimiter):].lstrip()[:1] == ")":
-                                # EOF) closes both the here-document and its $( ).
+                                # The delimiter line can also close the enclosing substitution.
                                 closed = True
                                 i += len(line) - len(bare) + len(delimiter)
                             else:
@@ -876,8 +876,7 @@ public static class AgentCommandGuard
 
 
         def _expanded_substitutions(body: str) -> list:
-            # The substitutions a shell runs in a here-document with an unquoted delimiter, where quotes
-            # outside them are ordinary characters. Inside a substitution quotes count as usual.
+            # The substitutions that a shell runs in a here-document with an unquoted delimiter.
             found = []
             i = 0
             while i < len(body):
@@ -896,11 +895,11 @@ public static class AgentCommandGuard
 
 
         def _runs_past_its_end(raw: str, unfinished: str) -> bool:
-            # A POSIX reading that ends inside a quote or here-document, with more commands possibly inside.
+            # True when a POSIX reading is left open with more text to run.
             import re as _re
             if not _re.search(r"[\n;&|]", unfinished):
                 return False
-            # In a Windows command a backslash before a quote is part of a path, so the plain reading decides.
+            # Windows paths use backslashes differently, so they are also read without escapes.
             windows = _re.search(r"[A-Za-z]:\\|%\w+%\\|\\\\[\w?.]", raw)
             return not (windows and not _shell_reading(raw, False)[3])
 
@@ -915,7 +914,7 @@ public static class AgentCommandGuard
             if not raw.strip() or seen.get(key, _MAX_SHELL_UNWRAP_DEPTH + 1) <= depth:
                 return
             seen[key] = depth
-            # The second reading of a command, as a shell reads its quotes, has a budget of its own.
+            # The second reading of a command has a budget of its own.
             spent = [0, 0] if spent is None else spent
             spent[lane] += (len(raw) + _OPERATOR_WORK * sum(raw.count(char) for char in _SHELL_OPERATORS)
                             + _REDIRECTION_WORK * (raw.count("<") + raw.count(">")))
@@ -940,8 +939,7 @@ public static class AgentCommandGuard
             # In PowerShell a backtick is an escape or a line continuation, not a substitution.
             in_powershell = powershell or head in _POWERSHELLS or bool(
                 _re.fullmatch(_POWERSHELL_CMDLET, head))
-            # Comments, here-document bodies and $'...' hold quote characters that a POSIX shell does not
-            # take as quotes. The command is also read as that shell reads it; the checks see both readings.
+            # The command is also read the way a POSIX shell reads its quoting; the checks see both readings.
             posix = not (foreign or in_powershell or head == "cmd")
             reading, run_bodies, expanding, unfinished = _shell_reading(raw)
             differs = " ".join(reading.split()) != " ".join(raw.split())
@@ -949,7 +947,7 @@ public static class AgentCommandGuard
                 lost()
             bodies, closed = _substitutions(raw, backticks=not in_powershell)
             if differs and posix:
-                # The shell's reading decides what cannot be inspected.
+                # This reading decides what cannot be inspected.
                 read_bodies, closed = _substitutions(reading, backticks=True)
                 for body in bodies:
                     if body not in read_bodies:
