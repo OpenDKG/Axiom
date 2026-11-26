@@ -52,12 +52,24 @@ public sealed class FirstRunDialog : Window
         Title = "Set up Axiom";
         Width = 720;
         Height = 680;
-        CanResize = false;
+        MinWidth = 520;
+        MinHeight = 420;
+        CanResize = true;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = BackgroundBrush;
         Foreground = ForegroundBrush;
 
         _accept.IsCheckedChanged += (_, _) => _apply.IsEnabled = _accept.IsChecked == true;
+        // Automatic sharing only makes sense for a selected (or already installed) Blackbox.
+        _automaticSharing.IsEnabled = false;
+        _blackbox.IsCheckedChanged += (_, _) =>
+        {
+            _automaticSharing.IsEnabled = _blackbox.IsChecked == true;
+            if (_blackbox.IsChecked != true)
+            {
+                _automaticSharing.IsChecked = false;
+            }
+        };
         _apply.Click += (_, _) =>
         {
             _accepted = true;
@@ -79,6 +91,32 @@ public sealed class FirstRunDialog : Window
     }
 
     public bool Accepted => _accepted;
+
+    internal CheckBox BlackboxOption => _blackbox;
+
+    internal CheckBox AutomaticSharingOption => _automaticSharing;
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        try
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null)
+            {
+                return;
+            }
+
+            var (width, height, _) = MainWindow.FitToWorkingArea(
+                Width, Height, MinWidth, MinHeight, screen.WorkingArea, screen.Scaling);
+            Width = Math.Max(MinWidth, width);
+            Height = Math.Max(MinHeight, height);
+        }
+        catch (InvalidOperationException)
+        {
+            // Headless/early startup has no platform screen; keep the centered default.
+        }
+    }
 
     public static async Task<bool> ShowAsync(Window owner, IApiKeyProtector protector)
     {
@@ -112,15 +150,6 @@ public sealed class FirstRunDialog : Window
             }
         }
 
-        if (dialog._automaticSharing.IsChecked == true)
-        {
-            BlackboxAutomaticSharingProvisioner.TryMarkPending();
-            using var blackboxClient = new BlackboxDashboardClient();
-            await BlackboxAutomaticSharingProvisioner
-                .TryApplyToDashboardAsync(blackboxClient, CancellationToken.None)
-                .ConfigureAwait(true);
-        }
-
         var installer = new OptionalModuleInstaller();
         if (settings.Dkg)
         {
@@ -130,6 +159,17 @@ public sealed class FirstRunDialog : Window
         if (settings.Blackbox)
         {
             installer.InstallBlackbox();
+        }
+
+        // Provision sharing only after Blackbox was selected and its installer ran; the dashboard
+        // is not contacted for a component the operator did not choose.
+        if (settings.Blackbox && dialog._automaticSharing.IsChecked == true)
+        {
+            BlackboxAutomaticSharingProvisioner.TryMarkPending();
+            using var blackboxClient = new BlackboxDashboardClient();
+            await BlackboxAutomaticSharingProvisioner
+                .TryApplyToDashboardAsync(blackboxClient, CancellationToken.None)
+                .ConfigureAwait(true);
         }
 
         return true;

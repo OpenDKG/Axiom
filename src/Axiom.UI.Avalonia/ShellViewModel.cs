@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net.Http;
+using Avalonia.Controls;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -82,6 +83,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         _serviceClient = serviceClient;
+        _onboardingProtector = apiKeyProtector ?? new UnsupportedApiKeyProtector();
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
@@ -682,6 +684,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _activePage = value;
     }
 
+    private readonly IApiKeyProtector _onboardingProtector;
     private PageViewModel? _activePage;
     private PageViewModel? _contextualReturnPage;
     private PageViewModel? _lastNavigationPage;
@@ -1237,6 +1240,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private void ClearAlerts() => AlertCenter.Clear();
 
     /// <summary>Opens the page an alert belongs to and highlights what it was about.</summary>
+    /// <summary>
+    /// Reopens the optional-module onboarding dialog (for example after "Skip for now"), from
+    /// Settings in any UI mode.
+    /// </summary>
+    public Task RunOnboardingAsync(Window owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        return FirstRunDialog.ShowAsync(owner, _onboardingProtector);
+    }
+
     public void OpenAlert(AlertRecord alert)
     {
         ArgumentNullException.ThrowIfNull(alert);

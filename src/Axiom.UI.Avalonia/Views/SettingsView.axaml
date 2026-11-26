@@ -36,6 +36,9 @@
             </WrapPanel>
             <controls:AxiomSelectableTextBlock Text="{Binding CurrentVisualEffectsText}" FontSize="10"
                                                Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
+            <Button Content="Set up optional modules…" Click="OnRunOnboardingClick"
+                    Padding="12,6" Margin="0,0,8,8"
+                    ToolTip.Tip="Reopens the first-run component picker: DKG, Blackbox, community feed and sharing." />
             <Button Content="Restore network settings" Command="{Binding RestoreNetworkSettingsCommand}"
                     IsVisible="{Binding HasNetworkRecovery}" Padding="12,6" HorizontalAlignment="Left" Margin="0,2,0,0"
                     ToolTip.Tip="Restores the DNS servers saved before the last protection change and removes only Axiom-owned firewall rules." />
