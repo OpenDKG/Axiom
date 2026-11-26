@@ -1163,6 +1163,9 @@ public static class AgentCommandGuard
             # here-documents, the here-document bodies that a shell runs, the bodies with an unquoted
             # delimiter, the text of a quote or here-document that is left open, or "", and the command
             # without the quoted here-documents inside a substitution that no shell runs.
+            if (not any(ch in text for ch in ("'", '"', "`", "#", "<", "\\", "@", "("))
+                    and "::" not in text and "rem" not in text.lower()):
+                return text, [], [], "", text
             import re as _re
             heredoc = _re.compile(r"<<(-?)[ \t]*(?:'([^'\n]*)'|" + r'"([^"\n]*)"|(\\?)([A-Za-z_][\w.+-]*))'
                                   + r"(?![^\s;&|<>()`])")
@@ -1449,17 +1452,21 @@ public static class AgentCommandGuard
             # What each shell or interpreter that reads stdin is fed through a pipe. Pipelines are
             # read as a POSIX shell splits them.
             stages = _split_stages(raw, True)
+            reads_cache = {}
             for position, (piped, segment) in enumerate(stages):
                 if not piped or position == 0:
                     continue
-                written = (_bare_commands(segment) or [segment])[0]
-                reads = False
-                for text in [written] + _redirection_spellings(written):
-                    tokens = _tokenize_posix(text)
-                    start = _strip_prefixes(tokens)[0]
-                    # xargs takes the pipe, not the command it runs.
-                    reads = reads or (not any(_command_name(word) in _LIST_READERS for word, _ in tokens[:start])
-                                      and _reads_commands_from_stdin([word for word, _ in tokens[start:]]))
+                reads = reads_cache.get(segment)
+                if reads is None:
+                    written = (_bare_commands(segment) or [segment])[0]
+                    reads = False
+                    for text in [written] + _redirection_spellings(written):
+                        tokens = _tokenize_posix(text)
+                        start = _strip_prefixes(tokens)[0]
+                        # xargs takes the pipe, not the command it runs.
+                        reads = reads or (not any(_command_name(word) in _LIST_READERS for word, _ in tokens[:start])
+                                          and _reads_commands_from_stdin([word for word, _ in tokens[start:]]))
+                    reads_cache[segment] = reads
                 if not reads:
                     continue
                 before = _tokenize_posix(stages[position - 1][1])
