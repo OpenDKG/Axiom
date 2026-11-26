@@ -62,7 +62,7 @@
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="NETWORK OVERVIEW" Classes="kpi-label" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Content="Open" Command="{Binding OpenFirewallCommand}" Padding="8,2" FontSize="10" />
+            <Button Grid.Column="1" Content="Open" Command="{Binding OpenNetworkOverviewCommand}" Padding="8,2" FontSize="10" />
           </Grid>
           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
             <TextBlock Text="Active sockets" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
