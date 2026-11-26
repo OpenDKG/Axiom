@@ -345,7 +345,8 @@ internal static class SetupDefaults
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = executable,
-                Arguments = "--install-service",
+                Arguments = ProtectionServiceInstall.WindowsInstallArguments(
+                    ProtectionServiceInstall.CurrentUserSid()),
                 UseShellExecute = true,
                 Verb = "runas",
                 CreateNoWindow = true,

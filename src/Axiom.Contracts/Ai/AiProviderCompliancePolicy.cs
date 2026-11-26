@@ -84,14 +84,14 @@ public static class AiProviderCompliancePolicy
             string.Empty,
             string.Empty,
             RequiresApiKey: true,
-            "Bring-your-own HTTPS OpenAI-compatible API endpoint and key. Consumer web and OAuth proxy endpoints are blocked."),
+            "Bring-your-own HTTPS OpenAI-compatible API endpoint and key. Subscription OAuth tokens (sk-ant-oat..., ya29....) are rejected for every provider, known consumer web and private OAuth backend hosts are blocked, and redirects are not followed."),
         new(
             AiProviderKind.OpenChamberLocal,
             "OpenCode CLI (local — authorized OpenCode providers only)",
             "opencode://local",
             "opencode-go/deepseek-v4.1-flash",
             RequiresApiKey: false,
-            "Runs local OpenCode CLI with authorized OpenCode providers only (for example opencode-go, ollama, lmstudio, deepseek, or openrouter). Third-party subscription OAuth providers and :free external routes are blocked."),
+            "Runs local OpenCode CLI with authorized OpenCode providers only (for example opencode-go, ollama, lmstudio, deepseek, or openrouter). Third-party subscription OAuth providers, including openai/* (which OpenCode can sign in with a ChatGPT subscription), and :free external routes are blocked; use the OpenAI Platform API key preset instead."),
     ];
 
     private static readonly (string Domain, string Description)[] BlockedEndpointDomains =
@@ -119,6 +119,7 @@ public static class AiProviderCompliancePolicy
         "copilot",
         "chatgpt",
         "codex",
+        "openai",
         "openai-codex",
         "cursor",
         "windsurf",
@@ -164,12 +165,11 @@ public static class AiProviderCompliancePolicy
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        string? host = null;
         if (!string.IsNullOrWhiteSpace(settings.Endpoint) &&
             Uri.TryCreate(settings.Endpoint.Trim(), UriKind.Absolute, out var endpointUri) &&
             (endpointUri.Scheme == Uri.UriSchemeHttp || endpointUri.Scheme == Uri.UriSchemeHttps))
         {
-            host = endpointUri.Host.TrimEnd('.');
+            var host = endpointUri.Host.TrimEnd('.');
             foreach (var (domain, description) in BlockedEndpointDomains)
             {
                 if (IsHostOrSubdomain(host, domain))
@@ -181,6 +181,25 @@ public static class AiProviderCompliancePolicy
                     return false;
                 }
             }
+        }
+
+        // Subscription OAuth tokens are never valid platform API keys, so they are rejected for
+        // every provider kind and endpoint, including custom and local OpenAI-compatible relays.
+        var trimmedKey = apiKey?.Trim() ?? string.Empty;
+        if (trimmedKey.StartsWith("sk-ant-oat", StringComparison.OrdinalIgnoreCase))
+        {
+            error =
+                "Claude Pro/Max/Claude Code OAuth tokens (sk-ant-oat...) violate Anthropic ToS in third-party apps, with any provider or endpoint. " +
+                "Use an Anthropic Console API key (sk-ant-api...) or official Claude Code with Axiom's read-only MCP server.";
+            return false;
+        }
+
+        if (trimmedKey.StartsWith("ya29.", StringComparison.OrdinalIgnoreCase))
+        {
+            error =
+                "Google OAuth tokens (ya29... from Antigravity / Gemini CLI) violate Google ToS in third-party apps, with any provider or endpoint. " +
+                "Use a Google AI Studio API key (AIza...) or official Antigravity / Gemini CLI with Axiom's read-only MCP server.";
+            return false;
         }
 
         if (settings.Provider == AiProviderKind.OpenChamberLocal)
@@ -198,30 +217,6 @@ public static class AiProviderCompliancePolicy
 
             error = string.Empty;
             return true;
-        }
-
-        var trimmedKey = apiKey?.Trim() ?? string.Empty;
-        if (trimmedKey.Length > 0)
-        {
-            if ((settings.Provider == AiProviderKind.Anthropic ||
-                 (host is not null && IsHostOrSubdomain(host, "api.anthropic.com"))) &&
-                trimmedKey.StartsWith("sk-ant-oat", StringComparison.OrdinalIgnoreCase))
-            {
-                error =
-                    "Claude Pro/Max/Claude Code OAuth tokens (sk-ant-oat...) violate Anthropic ToS in third-party apps. " +
-                    "Use an Anthropic Console API key (sk-ant-api...) or official Claude Code with Axiom's read-only MCP server.";
-                return false;
-            }
-
-            if ((settings.Provider == AiProviderKind.GoogleGemini ||
-                 (host is not null && IsHostOrSubdomain(host, "generativelanguage.googleapis.com"))) &&
-                trimmedKey.StartsWith("ya29.", StringComparison.OrdinalIgnoreCase))
-            {
-                error =
-                    "Google OAuth tokens (ya29... from Antigravity / Gemini CLI) violate Google ToS in third-party apps. " +
-                    "Use a Google AI Studio API key (AIza...) or official Antigravity / Gemini CLI with Axiom's read-only MCP server.";
-                return false;
-            }
         }
 
         error = string.Empty;

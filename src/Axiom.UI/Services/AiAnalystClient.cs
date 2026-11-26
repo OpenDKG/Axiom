@@ -63,7 +63,12 @@ public sealed class AiAnalystClient : IDisposable
     {
         if (httpClient is null)
         {
-            _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            // Redirects are not followed: AiProviderCompliancePolicy validates only the configured
+            // endpoint, so an automatic redirect could reach a blocked host with the API key.
+            _http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }, disposeHandler: true)
+            {
+                Timeout = TimeSpan.FromSeconds(60),
+            };
             _ownsHttpClient = true;
         }
         else
@@ -121,6 +126,11 @@ public sealed class AiAnalystClient : IDisposable
             using var response = await _http
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
+            if (IsRedirect(response))
+            {
+                return ErrorFinding(RedirectRefusedMessage(response));
+            }
+
             var body = await ReadBoundedAsync(response, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
@@ -638,6 +648,11 @@ public sealed class AiAnalystClient : IDisposable
             using var response = await _http
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
+            if (IsRedirect(response))
+            {
+                return ErrorFinding(RedirectRefusedMessage(response));
+            }
+
             var body = await ReadBoundedAsync(response, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
@@ -738,6 +753,14 @@ public sealed class AiAnalystClient : IDisposable
 
         return request;
     }
+
+    private static bool IsRedirect(HttpResponseMessage response) =>
+        (int)response.StatusCode is >= 300 and < 400;
+
+    private static string RedirectRefusedMessage(HttpResponseMessage response) =>
+        $"Provider endpoint redirected (HTTP {(int)response.StatusCode}"
+        + (response.Headers.Location is { } location && location.IsAbsoluteUri ? $" to host '{location.Host}'" : string.Empty)
+        + "); redirects are not followed. Configure the final API endpoint.";
 
     private static bool TryValidateEndpoint(
         AiAnalystSettings settings,

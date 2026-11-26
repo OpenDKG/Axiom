@@ -21,10 +21,13 @@ public sealed record BrokerFileOpenResult(
     byte[]? ContentBytes = null);
 
 /// <summary>
-/// Stage E3 prototype broker for mediated file reads. Rejects device/UNC namespaces, rejects
-/// symlink/reparse points in the path hierarchy, enforces <see cref="EnforcementPolicyEvaluator"/>
-/// at <see cref="EnforcementStrength.TrustedBroker"/>, and compares file identity before and after
-/// reading to detect TOCTOU swaps.
+/// Stage E3 prototype broker for mediated file reads. Rejects device/UNC namespaces and
+/// symlink/reparse points in the path hierarchy, then opens the file once without following a
+/// link in the final component. The policy decision (<see cref="EnforcementPolicyEvaluator"/> at
+/// <see cref="EnforcementStrength.TrustedBroker"/>) uses the final path resolved from that handle,
+/// the content is read from the same handle, and the file identity (volume + file index, or
+/// device + inode) is compared from the handle before and after the read and against what the
+/// requested path names afterwards, to detect TOCTOU swaps.
 /// </summary>
 public sealed class TrustedFileBroker(
     EnforcementPolicyEvaluator evaluator,
@@ -111,13 +114,48 @@ public sealed class TrustedFileBroker(
                 utcTime);
         }
 
+        using var handle = BrokerFileHandle.OpenNoFollow(fullPath, out var openFailure);
+        if (handle is null)
+        {
+            return openFailure == BrokerOpenFailure.LinkOrReparse
+                ? Deny(BrokerAccessDecision.DeniedReparseOrSymlink, EnforcementReasonCodes.ProtectedResource, requestId, fullPath, "broker-reparse-guard", utcTime)
+                : Deny(BrokerAccessDecision.DeniedUnsafePath, EnforcementReasonCodes.InvalidRequest, requestId, fullPath, "broker-no-follow-open", utcTime);
+        }
+
+        if (!BrokerFileHandle.TryGetIdentity(handle, out var before))
+        {
+            return Deny(BrokerAccessDecision.DeniedUnsafePath, EnforcementReasonCodes.InvalidRequest, requestId, fullPath, "broker-no-follow-open", utcTime);
+        }
+
+        if (before.IsReparsePoint)
+        {
+            return Deny(BrokerAccessDecision.DeniedReparseOrSymlink, EnforcementReasonCodes.ProtectedResource, requestId, fullPath, "broker-reparse-guard", utcTime);
+        }
+
+        if (!before.IsRegularFile)
+        {
+            return Deny(BrokerAccessDecision.DeniedUnsafePath, EnforcementReasonCodes.InvalidRequest, requestId, fullPath, "broker-no-follow-open", utcTime);
+        }
+
+        // The policy decision binds to the file actually opened, not to the requested string.
+        var finalPath = BrokerFileHandle.GetFinalPath(handle, fullPath);
+        if (finalPath is null || !TryCanonicalizeLocalPath(finalPath, out finalPath))
+        {
+            return Deny(BrokerAccessDecision.DeniedUnsafePath, EnforcementReasonCodes.InvalidRequest, requestId, fullPath, "broker-path-canonicalizer", utcTime);
+        }
+
+        if (_hasReparsePointInChain(finalPath))
+        {
+            return Deny(BrokerAccessDecision.DeniedReparseOrSymlink, EnforcementReasonCodes.ProtectedResource, requestId, finalPath, "broker-reparse-guard", utcTime);
+        }
+
         var verdict = _evaluator.Evaluate(
             new AgentActionRequest
             {
                 RequestId = requestId,
                 AgentId = agentId,
                 Kind = AgentActionKind.ReadFile,
-                Target = fullPath,
+                Target = finalPath,
                 UtcTime = utcTime,
             },
             new EnforcementCapabilities
@@ -132,7 +170,7 @@ public sealed class TrustedFileBroker(
                 BrokerAccessDecision.DeniedByPolicy,
                 verdict.ReasonCode,
                 requestId,
-                fullPath,
+                finalPath,
                 verdict.Decision,
                 EnforcementReceiptResult.OsDenyVerified,
                 EnforcementObservedSideEffect.Absent,
@@ -140,17 +178,24 @@ public sealed class TrustedFileBroker(
                 utcTime);
         }
 
-        var beforeStamp = CaptureFileStamp(fullPath);
-        var bytes = File.ReadAllBytes(fullPath);
-        var afterStamp = CaptureFileStamp(fullPath);
+        var bytes = BrokerFileHandle.ReadAll(handle);
+        var unchanged = BrokerFileHandle.TryGetIdentity(handle, out var after) && after == before;
+        var pathStillNamesFile = false;
+        if (unchanged && !_hasReparsePointInChain(fullPath))
+        {
+            using var current = BrokerFileHandle.OpenNoFollow(fullPath, out _);
+            pathStillNamesFile = current is not null &&
+                                 BrokerFileHandle.TryGetIdentity(current, out var named) &&
+                                 string.Equals(named.FileId, before.FileId, StringComparison.Ordinal);
+        }
 
-        if (_hasReparsePointInChain(fullPath) || !string.Equals(beforeStamp, afterStamp, StringComparison.Ordinal))
+        if (!unchanged || !pathStillNamesFile)
         {
             return RecordAndReturn(
                 BrokerAccessDecision.DeniedToctouMismatch,
                 EnforcementReasonCodes.ReplayMismatch,
                 requestId,
-                fullPath,
+                finalPath,
                 EnforcementDecision.Block,
                 EnforcementReceiptResult.OsDenyVerified,
                 EnforcementObservedSideEffect.Absent,
@@ -162,7 +207,7 @@ public sealed class TrustedFileBroker(
             BrokerAccessDecision.Allowed,
             verdict.ReasonCode,
             requestId,
-            fullPath,
+            finalPath,
             EnforcementDecision.Allow,
             EnforcementReceiptResult.Detected,
             EnforcementObservedSideEffect.Unknown,
@@ -170,6 +215,42 @@ public sealed class TrustedFileBroker(
             utcTime,
             bytes);
     }
+
+    /// <summary>
+    /// Final path of <paramref name="path"/> as the broker resolves it from a no-follow handle, so
+    /// callers can express policy scopes in the same form the broker evaluates. False when the file
+    /// cannot be opened that way.
+    /// </summary>
+    public static bool TryResolveFinalPath(string path, out string finalPath)
+    {
+        finalPath = string.Empty;
+        if (!TryCanonicalizeLocalPath(path, out var fullPath))
+        {
+            return false;
+        }
+
+        using var handle = BrokerFileHandle.OpenNoFollow(fullPath, out _);
+        var resolved = handle is null ? null : BrokerFileHandle.GetFinalPath(handle, fullPath);
+        return resolved is not null && TryCanonicalizeLocalPath(resolved, out finalPath);
+    }
+
+    private BrokerFileOpenResult Deny(
+        BrokerAccessDecision decision,
+        string reasonCode,
+        string requestId,
+        string target,
+        string verifiedBy,
+        DateTimeOffset utcTime) =>
+        RecordAndReturn(
+            decision,
+            reasonCode,
+            requestId,
+            target,
+            EnforcementDecision.Block,
+            EnforcementReceiptResult.OsDenyVerified,
+            EnforcementObservedSideEffect.Absent,
+            verifiedBy,
+            utcTime);
 
     private BrokerFileOpenResult RecordAndReturn(
         BrokerAccessDecision decision,
@@ -218,18 +299,5 @@ public sealed class TrustedFileBroker(
         }
 
         return false;
-    }
-
-    private static string CaptureFileStamp(string fullPath)
-    {
-        if (!File.Exists(fullPath))
-        {
-            return "missing";
-        }
-
-        var info = new FileInfo(fullPath);
-        return string.Create(
-            System.Globalization.CultureInfo.InvariantCulture,
-            $"{info.Length}|{info.CreationTimeUtc.Ticks}|{info.LastWriteTimeUtc.Ticks}");
     }
 }
