@@ -114,7 +114,8 @@ public sealed class ServiceInstallerSidTests
 
         var resolved = ServiceInfo.ResolveAllowedSid("S-1-1-0", store, ServiceAccount, FakeLookup, refusals.Add);
 
-        Assert.Equal(ServiceAccount, resolved);
+        Assert.Equal(ServiceAccount, resolved.Sid);
+        Assert.False(resolved.Pending);
         Assert.Single(refusals);
     }
 
@@ -149,7 +150,7 @@ public sealed class ServiceInstallerSidTests
 
             var refusals = new List<string>();
             var resolved = ServiceInfo.ResolveAllowedSid(
-                null, new ProtectionSettingsStore(path), ServiceAccount, FakeLookup, refusals.Add);
+                null, new ProtectionSettingsStore(path), ServiceAccount, FakeLookup, refusals.Add).Sid;
             return (resolved, refusals);
         }
         finally

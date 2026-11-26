@@ -3,6 +3,7 @@ using System.Security.Principal;
 using Axiom.Contracts;
 using Axiom.Contracts.Protection;
 using Axiom.Core.Protection;
+using Axiom.Infrastructure.Windows.Ipc;
 
 namespace Axiom.Service;
 
@@ -15,7 +16,7 @@ public static partial class ServiceInfo
     /// current user. The pipe ACL grants whatever this returns, so a configured or persisted SID is
     /// checked again here and refused unless it names a user account.
     /// </summary>
-    public static string ResolveAllowedSid()
+    public static AllowedPipeSid ResolveAllowedSid()
     {
         using var identity = WindowsIdentity.GetCurrent();
         var current = identity.User?.Value
@@ -35,9 +36,10 @@ public static partial class ServiceInfo
     }
 
     /// <summary>
-    /// A refused SID falls back to the service's own account, which grants nobody else access.
+    /// A refused SID falls back to the service's own account, which grants nobody else access. A
+    /// well-formed SID that Windows cannot resolve is marked pending, so the transport retries it.
     /// </summary>
-    internal static string ResolveAllowedSid(
+    internal static AllowedPipeSid ResolveAllowedSid(
         string? configuredSid,
         ProtectionSettingsStore store,
         string currentSid,
@@ -49,18 +51,23 @@ public static partial class ServiceInfo
         if (string.IsNullOrEmpty(candidate) ||
             string.Equals(candidate, currentSid, StringComparison.OrdinalIgnoreCase))
         {
-            return currentSid;
+            return new AllowedPipeSid(currentSid);
         }
 
-        if (AccountSid.IsUser(candidate, lookup))
+        var wellFormed = AccountSid.IsWellFormed(candidate);
+        var use = wellFormed ? lookup(candidate) : null;
+        if (use == SidNameUse.User)
         {
-            return candidate;
+            return new AllowedPipeSid(candidate);
         }
 
+        var pending = wellFormed && use is null;
         var source = fromEnvironment ? "AXIOM_ALLOWED_SID" : store.FilePath;
-        reportRefusal(
-            $"pipe: refused the allowed SID from {source} because it is not a user account that Windows can " +
-            "resolve. Only the service account can connect until setup is re-run.");
-        return currentSid;
+        reportRefusal(pending
+            ? $"pipe: Windows cannot resolve the allowed SID from {source} yet. Only the service account can " +
+              "connect until it resolves to a user."
+            : $"pipe: refused the allowed SID from {source} because it is not a user account. Only the " +
+              "service account can connect until setup is re-run.");
+        return new AllowedPipeSid(currentSid, pending);
     }
 }
