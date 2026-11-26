@@ -131,6 +131,12 @@ $communityDir = Join-Path $root "artifacts\publish\win-x64\community"
 $communityFeed = Join-Path $communityDir "feed.json"
 if (-not (Test-Path $communityFeed)) { throw "Bundled community feed not found: $communityFeed" }
 
+# Stop on any native binary without a recorded license, then gather the .NET license texts.
+& (Join-Path $PSScriptRoot "verify-publish-natives.ps1") -PublishDir (Split-Path -Parent $exe), $serviceOutput, $setupOutput
+$licensesDir = Join-Path $root "artifacts\publish\licenses"
+Remove-Item $licensesDir -Recurse -Force -ErrorAction SilentlyContinue
+& (Join-Path $PSScriptRoot "collect-dotnet-licenses.ps1") -Program $exe, $serviceExe, $setupExe -OutputDir $licensesDir
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $zipName = "Axiom-$Version-win-x64.zip"
 $zipPath = Join-Path $OutputDir $zipName
@@ -143,6 +149,7 @@ $files = @(
     $exe,
     $serviceExe,
     $communityDir,
+    $licensesDir,
     (Join-Path $root "LICENSE"),
     (Join-Path $root "NOTICE"),
     (Join-Path $root "AUTHORS.md"),

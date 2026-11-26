@@ -6,10 +6,33 @@ Axiom, generated on 2026-11-04. Licenses were read from each package's
 
 The project itself is licensed under **GPL-3.0-or-later** (see LICENSE and NOTICE). All listed
 packages are permissive (MIT or Apache-2.0) and are compatible with that license. No GPL/AGPL
-third-party code is included.
+third-party code is included. The .NET runtime in Windows releases is covered separately below.
 
-The self-contained standalone build also redistributes the .NET 10 runtime and Windows Desktop
-runtime, which are MIT licensed (https://github.com/dotnet/runtime/blob/main/LICENSE.TXT).
+## .NET runtime and native binaries in Windows releases
+
+The Windows programs (`Axiom.Desktop.exe`, `Axiom.Service.exe` and Setup) are self-contained,
+single-file builds that redistribute the .NET 10 runtime. No Windows Desktop (WPF) runtime is
+included.
+
+| Component | License | Text in the release |
+|---|---|---|
+| .NET single-file host: the launcher of each program, with the runtime and `coreclr` built in (`Microsoft.NETCore.App.Host.win-x64`) | **.NET Library License** (proprietary, Microsoft) | `licenses/dotnet/DOTNET-LIBRARY-LICENSE.txt` |
+| Other .NET runtime files packed inside the programs (`Microsoft.NETCore.App.Runtime.win-x64`) | MIT, per Microsoft's [Windows license information](https://github.com/dotnet/core/blob/main/license-information-windows.md), with third-party notices | `licenses/dotnet/LICENSE.TXT`, `licenses/dotnet/THIRD-PARTY-NOTICES.TXT` |
+
+**Whether GPL-3.0-or-later programs may be distributed with the .NET Library License component needs
+review by the founders or a lawyer.** It is not settled; see [docs/LICENSING.md](docs/LICENSING.md).
+`Microsoft.DiaSymReader.Native`, also under that license, is not shipped.
+
+Native libraries packed inside the programs, besides the host:
+
+| File | NuGet package | License |
+|---|---|---|
+| `av_libglesv2.dll` | Avalonia.Angle.Windows.Natives (ANGLE) | BSD-3-Clause |
+| `libHarfBuzzSharp.dll` | HarfBuzzSharp.NativeAssets.Win32 | MIT, with third-party notices |
+| `libSkiaSharp.dll` | SkiaSharp.NativeAssets.Win32 | MIT, with third-party notices |
+| `e_sqlite3.dll` | SQLitePCLRaw.lib.e_sqlite3 | Apache-2.0 package; SQLite itself is public domain |
+
+The license texts of these four libraries are not yet part of the release.
 
 ## Runtime packages shipped with the application
 
