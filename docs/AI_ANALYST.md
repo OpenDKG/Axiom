@@ -4,19 +4,67 @@ AI Security Analyst is an optional, **default-disabled** read-only investigation
 not an enforcement path and cannot change Windows Firewall, execute commands, read arbitrary files
 or modify agent configuration.
 
+See [PROVIDER_TOS_COMPLIANCE.md](PROVIDER_TOS_COMPLIANCE.md) for the full provider Terms of Service
+matrix and hook/MCP audit results.
+
+## Supported providers & compliance policy
+
+Every request is validated before execution by `AiProviderCompliancePolicy` (`Axiom.Contracts.Ai`).
+Axiom supports official API keys, local inference, and strictly scoped OpenCode providers:
+
+| Provider (`AiProviderKind`) | Endpoint | Auth / Notes |
+|---|---|---|
+| `LocalOpenAiCompatible` (recommended for zero cloud ToS risk) | `http://127.0.0.1:11434/v1/chat/completions` (Ollama, LM Studio, `llama.cpp`) | No API key required. Plain HTTP is allowed **only** on loopback (`127.0.0.1` / `localhost`); zero data leaves the device. |
+| `OpenAi` | `https://api.openai.com/v1/chat/completions` | Official OpenAI Platform API key (`Authorization: Bearer`). |
+| `Anthropic` | `https://api.anthropic.com/v1/messages` | Official Anthropic Console API key (`x-api-key` + `anthropic-version: 2023-06-01`). |
+| `GoogleGemini` | `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` | Official Google AI Studio / Gemini Developer API key (`AIza...`, `Authorization: Bearer`). |
+| `OpenRouter` | `https://openrouter.ai/api/v1/chat/completions` | Official OpenRouter BYOK API key (`Authorization: Bearer`, `HTTP-Referer: https://github.com/OpenDKG/Axiom`, `X-Title: Axiom Firewall`). |
+| `DeepSeek` | `https://api.deepseek.com/chat/completions` | Official DeepSeek API key (`Authorization: Bearer`). |
+| `Zai` | `https://api.z.ai/api/paas/v4/chat/completions` | Official Z.ai GLM API key (`Authorization: Bearer`). |
+| `OpenCodeZen` | `https://opencode.ai/zen/v1/chat/completions` | Official OpenCode Zen API key (`Authorization: Bearer`). |
+| `OpenAiCompatible` | Custom `https://...` URL | Custom HTTPS OpenAI-compatible BYOK API. |
+| `OpenChamberLocal` (restricted) | `opencode://local` | Runs installed OpenCode CLI (`>= 2.2.3`, 2.x) in `--standalone` mode with deny-all tool/MCP/plugin/skill policies and `OPENCODE_DB=:memory:`. Restricted to authorized OpenCode-native or local providers (e.g., `opencode-go/*`, `ollama/*`, `lmstudio/*`, `deepseek/*`, `openrouter/*`). Default model: `opencode-go/deepseek-v4.1-flash`. |
+
+### Compliance restrictions enforced in code
+
+- **Blocked consumer & private endpoints:** `AiProviderCompliancePolicy.ValidateRequest` rejects
+  `cloudcode-pa.googleapis.com` (`*.cloudcode-pa.googleapis.com`), `claude.ai` (`*.claude.ai`),
+  `chatgpt.com` (`*.chatgpt.com`), `chat.openai.com`, `api.githubcopilot.com`, and
+  `copilot-proxy.githubusercontent.com`.
+- **Blocked consumer OAuth tokens:** `sk-ant-oat*` tokens (Claude Free/Pro/Max/Claude Code OAuth) on
+  Anthropic and `ya29.*` tokens (Google Antigravity/Gemini CLI OAuth) on Google Gemini are rejected
+  with guidance to use an official API key or the read-only MCP workflow.
+- **Restricted `OpenChamberLocal` (`opencode://local`) policy:**
+  - `AiProviderCompliancePolicy.ValidateOpenCodeModel` validates both `Model` and `VerifierModel`,
+    blocking third-party consumer OAuth provider prefixes (`anthropic`, `claude`, `claude-code`,
+    `antigravity`, `google`, `google-gemini-cli`, `gemini`, `gemini-cli`, `vertex-antigravity`,
+    `github-copilot`, `copilot`, `chatgpt`, `codex`, `openai-codex`, `cursor`, `windsurf`) and
+    bare `claude-*` / `antigravity*` / `gemini-cli*` names.
+  - External-routing-restricted free-tier models (`*:free`, `free`, `opencode/free*`) are also
+    blocked.
+  - `OpenCodeAnalystLaunch` explicitly removes `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`,
+    `GOOGLE_CLOUD_ACCESS_TOKEN`, and `GEMINI_CLI_OAUTH_TOKEN` from the child process environment and
+    sets `OPENCODE_DISABLE_CLAUDE_CODE=true` and `OPENCODE_DISABLE_PROJECT_CONFIG=true`.
+  - When using flat-rate OpenCode plans (such as `opencode-go/*`), keep **Automatic analysis**
+    disabled or conservatively throttled rather than polling continuously in the background.
+
+## Safe read-only MCP workflow for existing agent subscriptions
+
+If you already hold a subscription to **Claude Code**, **Antigravity**, **Codex CLI**,
+**Gemini CLI**, or **GitHub Copilot CLI**, do **not** extract OAuth tokens (`sk-ant-oat*`,
+`ya29.*`) or route those logins into standalone harnesses. Instead, register Axiom's read-only
+stdio MCP server (`Axiom.McpServer.exe`) directly inside your official unmodified agent client
+(see [MCP.md](MCP.md)). The client retains its native first-party authentication and calls Axiom's 9
+read-only telemetry tools over local stdio JSON-RPC backed by `\\.\pipe\Axiom.Service.v1`.
+
 ## What is implemented
 
-- **OpenChamber/OpenCode provider.** `opencode://local` runs the installed and signed-in OpenCode
-  CLI with a standalone server, an analyst-specific configuration and an in-memory session database.
-  Its permissions deny all tool actions, MCP servers, external plugins and skills. OpenCode
-  2.x version 2.2.3 or later is required for this policy. The default model is
-  `opencode-go/deepseek-v4.1-flash`, which processes the evidence remotely.
-- Provider-neutral OpenAI-compatible chat-completions adapter:
-  - HTTPS cloud endpoint;
-  - HTTP is allowed only for a loopback local inference endpoint;
-  - configurable endpoint, model, API key, path redaction, connection limit and token limit.
+- **Compliance & transport adapters:** `AiProviderCompliancePolicy` validates provider, endpoint,
+  credential shape, and `OpenChamberLocal` model before any request runs. Cloud providers require
+  HTTPS; plain HTTP is permitted only on loopback for `LocalOpenAiCompatible`.
 - API keys are protected with Windows DPAPI for the current user; they are never shown, logged or
-  written to findings. The OpenChamber/OpenCode provider uses the existing OpenCode login instead.
+  written to findings. `OpenChamberLocal` uses authorized OpenCode-native or local provider logins
+  while scrubbing leaked consumer OAuth environment variables.
 - Bounded evidence v2 from the current read-only monitor snapshot:
   - application name, PID, parent PID/name/chain, protocol, direction, state, endpoints, quality and
     first-observation time;
@@ -45,7 +93,8 @@ or modify agent configuration.
   - configurable minimum interval and hourly request limit;
   - no request is made while the analyst is disabled or unconfigured.
 - Optional second verifier model:
-  - uses a separate request/context and the same provider;
+  - uses a separate request/context and the same provider (and is also validated by
+    `AiProviderCompliancePolicy` for `OpenChamberLocal`);
   - records verifier status and summary without changing the primary finding;
   - verifier failure is surfaced, not treated as agreement.
 - Existing MCP server remains separate and read-only. No second MCP server and no MCP write tool is

@@ -89,6 +89,11 @@ public sealed class AiAnalystClient : IDisposable
             return ErrorFinding("AI analyst is disabled or its endpoint/model is not configured.");
         }
 
+        if (!AiProviderCompliancePolicy.ValidateRequest(settings, apiKey, out var complianceError))
+        {
+            return ErrorFinding(complianceError);
+        }
+
         if (settings.Provider == AiProviderKind.OpenChamberLocal)
         {
             return await AnalyzeWithOpenCodeAsync(settings, evidence, cancellationToken)
@@ -237,6 +242,11 @@ public sealed class AiAnalystClient : IDisposable
         if (string.IsNullOrWhiteSpace(model))
         {
             return new OpenCodeRunResult([], "OpenCode model is not configured.");
+        }
+
+        if (!AiProviderCompliancePolicy.ValidateOpenCodeModel(model, out var complianceError))
+        {
+            return new OpenCodeRunResult([], complianceError);
         }
 
         var executable = ResolveOpenCodeExecutable();
@@ -718,6 +728,12 @@ public sealed class AiAnalystClient : IDisposable
         else if (!string.IsNullOrWhiteSpace(apiKey))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+        }
+
+        if (provider == AiProviderKind.OpenRouter)
+        {
+            request.Headers.TryAddWithoutValidation("HTTP-Referer", "https://github.com/OpenDKG/Axiom");
+            request.Headers.TryAddWithoutValidation("X-Title", "Axiom Firewall");
         }
 
         return request;

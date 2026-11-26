@@ -167,6 +167,26 @@ public sealed class FirewallRuleCoordinatorTests : IDisposable
         Assert.Equal(FirewallAction.Block, report.EffectiveAction);
     }
 
+    [Fact]
+    public async Task Apply_cancellation_marks_rule_failed_instead_of_leaving_pending()
+    {
+        var spec = NewSpec();
+        using var cts = new CancellationTokenSource();
+        _adapter.UpsertOverride = _ =>
+        {
+            cts.Cancel();
+            cts.Token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("unreachable");
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            _coordinator.ApplyAsync(spec, Actor, cts.Token));
+
+        var stored = Assert.Single(await _store.ListFirewallRulesAsync());
+        Assert.Equal(RuleState.Failed, stored.State);
+        Assert.Equal("rule.apply_canceled", stored.LastErrorCode);
+    }
+
     private static RuleSpec NewSpec() => new()
     {
         ManagedRuleId = Guid.NewGuid(),

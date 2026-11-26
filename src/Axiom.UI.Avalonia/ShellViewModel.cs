@@ -27,6 +27,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ServiceStatusProbe? _serviceProbe;
     private readonly IServiceRequestClient? _serviceClient;
     private readonly IUserInteraction _ui;
+    private readonly IShellActions _shellActions;
     private readonly IThemeService _theme;
     private readonly IUiModeService _uiMode;
     private readonly IVisualEffectsService _visualEffects;
@@ -84,6 +85,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         IsServiceMode = source is ServiceSnapshotSource;
         var interaction = userInteraction ?? new NullUserInteraction();
         _ui = interaction;
+        _shellActions = shellActions ?? new UnsupportedShellActions();
         _theme = themeService ?? new FixedThemeService();
         _uiMode = uiModeService ?? new FixedUiModeService();
         _visualEffects = visualEffects ?? new FixedVisualEffectsService();
@@ -153,7 +155,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             securityDialogs ?? new UnsupportedSecurityDialogs(),
             apiKeyProtector ?? new UnsupportedApiKeyProtector(),
             timers,
-            shellActions ?? new UnsupportedShellActions(),
+            _shellActions,
             serviceClient,
             listenerInspector);
         Agents = new AgentsPageViewModel(
@@ -352,7 +354,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private Task OpenReleasePageAsync() => OpenExternalUrlAsync(_updateChecker.ReleaseUrl);
 
-    public string UpdateActionText => OperatingSystem.IsWindows() ? "Download and open installer" : "Release details";
+    public string UpdateActionText => _updateChecker.HasDirectInstaller ? "Update now" : "View release";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasUpdateDownloadStatus))]
@@ -372,7 +374,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task OpenUpdateAsync()
     {
-        if (!OperatingSystem.IsWindows())
+        if (IsDownloadingUpdate)
+        {
+            return;
+        }
+
+        if (!_updateChecker.HasDirectInstaller)
         {
             await OpenExternalUrlAsync(_updateChecker.ReleaseUrl).ConfigureAwait(true);
             return;
@@ -381,7 +388,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var token = _cancellation.Token;
         UpdateDownloadProgress = 0;
         IsDownloadingUpdate = true;
-        UpdateDownloadStatus = "Downloading the installer…";
+        UpdateDownloadStatus = "Downloading Axiom update…";
         var progress = new Progress<int>(percent =>
         {
             if (!IsDownloadingUpdate)
@@ -392,28 +399,40 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             UpdateDownloadProgress = percent;
             if (percent == 100)
             {
-                UpdateDownloadStatus = "Verifying the installer…";
+                UpdateDownloadStatus = "Verifying package integrity…";
             }
         });
         try
         {
-            var installer = await _updateChecker.DownloadWindowsInstallerAsync(token, progress).ConfigureAwait(true);
+            var installer = await _updateChecker.DownloadPlatformInstallerAsync(token, progress).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             await _ui.OpenExternalAsync(installer, token).ConfigureAwait(true);
-            UpdateDownloadStatus = "Installer opened. Choose Complete or Partial in the installer.";
+            if (OperatingSystem.IsWindows())
+            {
+                UpdateDownloadStatus = "Starting installer — Axiom is closing to complete the update…";
+                _shellActions.Shutdown();
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                UpdateDownloadStatus = "Package verified and opened. Confirm the installer prompt to complete the update.";
+            }
+            else
+            {
+                UpdateDownloadStatus = "Update archive verified and opened. Move Axiom.app into Applications to finish updating.";
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
         }
         catch (OperationCanceledException)
         {
-            UpdateDownloadStatus = "The installer download timed out. Try again.";
+            UpdateDownloadStatus = "Download timed out. Please try again in a moment.";
         }
         catch (Exception exception) when (exception is
                      IOException or HttpRequestException or UnauthorizedAccessException or
                      InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
         {
-            UpdateDownloadStatus = $"Could not download or open the installer. {exception.Message}";
+            UpdateDownloadStatus = $"Could not start the update: {exception.Message}";
         }
         finally
         {
@@ -503,6 +522,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(UpdateAvailable));
         OnPropertyChanged(nameof(LatestVersion));
         OnPropertyChanged(nameof(UpdateTooltip));
+        OnPropertyChanged(nameof(UpdateActionText));
         OnPropertyChanged(nameof(UpdateReleaseDateText));
         OnPropertyChanged(nameof(UpdateSummaryText));
         OnPropertyChanged(nameof(UpdateReleaseNotesText));
@@ -516,8 +536,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             _announcedUpdateVersion = _updateChecker.LatestVersion;
             AxiomAlertService.Show(
-                "Axiom update available",
-                $"Axiom v{_updateChecker.LatestVersion} is available on GitHub. Open Settings or the top banner to download and install.",
+                "Update available",
+                $"Axiom v{_updateChecker.LatestVersion} is ready to install. Click the update icon in the top bar whenever convenient.",
                 page: typeof(SettingsPageViewModel));
         }
     }
@@ -683,6 +703,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             _traffic.Start();
             (_activePage as IActivatablePage)?.Activate();
             RefreshStatus();
+            _ = CheckForUpdatesAsync();
         }
         else
         {
@@ -883,7 +904,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// unknown together, without waiting for each page's own poll (maintainer ruling: unreachable
     /// is unknown, never protected).
     /// </summary>
-    private void OnServiceUnreachable(object? sender, EventArgs e) => MarkServiceUnreachable();
+    private void OnServiceUnreachable(object? sender, EventArgs e)
+    {
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            MarkServiceUnreachable();
+        }
+        else
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(MarkServiceUnreachable);
+        }
+    }
 
     private void MarkServiceUnreachable()
     {
@@ -909,6 +940,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// the pages return from the same answer instead of one probe interval apart.
     /// </summary>
     private void OnServiceAnswered(object? sender, EventArgs e)
+    {
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            HandleServiceAnswered();
+        }
+        else
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(HandleServiceAnswered);
+        }
+    }
+
+    private void HandleServiceAnswered()
     {
         if (!_serviceUnreachable)
         {

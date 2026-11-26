@@ -152,12 +152,14 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
         MainWindow? window = null;
         Button? updateButton = null;
         var interaction = new RecordingInteraction();
+        var shellActions = new RecordingShellActions();
         TestAppBuilder.RunOnUiThread(() =>
         {
             shell = new ShellViewModel(
                 new FakeSource(),
                 new FakeTimerFactory(),
                 userInteraction: interaction,
+                shellActions: shellActions,
                 updateChecker: checker);
             window = new MainWindow { DataContext = shell };
             window.Show();
@@ -180,12 +182,17 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             Assert.NotNull(updateButton);
             Assert.True(updateButton.IsVisible);
 
+            var updatePopup = window.FindControl<global::Avalonia.Controls.Primitives.Popup>("UpdatePopup");
+            Assert.NotNull(updatePopup);
+            Assert.True(updatePopup.IsOpen);
+
             action = shell.OpenUpdateCommand.ExecuteAsync(null);
         });
         await action!;
 
         TestAppBuilder.RunOnUiThread(() =>
         {
+            Assert.Equal(OperatingSystem.IsWindows() ? 1 : 0, shellActions.ShutdownCount);
             if (OperatingSystem.IsWindows())
             {
                 var path = Path.Combine(_tempDir.FullName, "updates", "Axiom-Setup.exe");
@@ -201,6 +208,8 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.UpdateAvailable);
             Assert.False(updateButton!.IsVisible);
+            var updatePopup = window!.FindControl<global::Avalonia.Controls.Primitives.Popup>("UpdatePopup");
+            Assert.False(updatePopup!.IsOpen);
 
             // Disabling the Settings toggle persists opt-out.
             shell.Settings.CheckForUpdates = false;
@@ -262,6 +271,17 @@ public sealed class UpdateIndicatorAndContactTests : IDisposable
         public Task<string?> PickFolderAsync(string title, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 
         public Task CopyTextAsync(string text, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingShellActions : Axiom.Presentation.IShellActions
+    {
+        public int ShutdownCount { get; private set; }
+
+        public void Restart()
+        {
+        }
+
+        public void Shutdown() => ShutdownCount++;
     }
 
     private sealed class FakeSource : IConnectionSnapshotSource

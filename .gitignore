@@ -52,3 +52,24 @@ desktop.ini
 # Local uncropped source brand exports in repo root
 /6217172f-fa7d-4ba8-81d9-eb02c00eaa6d.png
 /67b652cd-be32-4bd5-b0bf-a83f5686a363.png
+
+# Local AI agent handoff and tool instruction files (keep local, do not push)
+.claude/
+.codex/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.gemini/
+.antigravity/
+.opencode/
+.roo/
+.cline/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+CODEX.md
+DEEPSEEK.md
+*handoff*.md
+*Handoff*.md
+*HANDOFF*.md

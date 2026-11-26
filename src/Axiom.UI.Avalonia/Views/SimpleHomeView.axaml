@@ -197,7 +197,7 @@
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="2">
                 <controls:AxiomSelectableTextBlock Text="Apps using the internet right now" Classes="section-title" />
-                <controls:AxiomSelectableTextBlock Text="{Binding PrivacyStatusText}"
+                <controls:AxiomSelectableTextBlock Text="{Binding OnlineAppsSummaryText}"
                                                    FontSize="11.5" Foreground="{DynamicResource Axiom.TextMuted}"
                                                    TextTrimming="CharacterEllipsis" />
               </StackPanel>

@@ -140,26 +140,26 @@ public sealed class IpcRequestDispatcher
         ArgumentNullException.ThrowIfNull(caller);
         ArgumentException.ThrowIfNullOrWhiteSpace(caller.Actor);
 
-        using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
         var reader = new IpcLineReader(stream);
         var requestsInWindow = 0;
         var windowStart = DateTime.UtcNow;
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            idle.CancelAfter(IdleTimeout);
             string? line;
 
             try
             {
+                using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                idle.CancelAfter(IdleTimeout);
+
                 line = await reader
                     .ReadLineAsync(IpcProtocol.MaxMessageBytes, idle.Token)
                     .ConfigureAwait(false);
             }
             catch (IpcMessageTooLargeException)
             {
-                await WriteErrorAsync(
+                await TryWriteErrorAsync(
                     stream,
                     Guid.Empty,
                     IpcErrorCodes.MessageTooLarge,
@@ -171,7 +171,7 @@ public sealed class IpcRequestDispatcher
             {
                 return;
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is IOException or ObjectDisposedException)
             {
                 return;
             }
@@ -191,7 +191,7 @@ public sealed class IpcRequestDispatcher
             requestsInWindow++;
             if (requestsInWindow > MaxRequestsPerSecond)
             {
-                await WriteErrorAsync(
+                await TryWriteErrorAsync(
                     stream,
                     Guid.Empty,
                     IpcErrorCodes.InvalidRequest,
@@ -200,7 +200,14 @@ public sealed class IpcRequestDispatcher
                 return;
             }
 
-            if (!await ProcessAsync(stream, line, caller, cancellationToken).ConfigureAwait(false))
+            try
+            {
+                if (!await ProcessAsync(stream, line, caller, cancellationToken).ConfigureAwait(false))
+                {
+                    return;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or ObjectDisposedException)
             {
                 return;
             }
@@ -1176,6 +1183,22 @@ public sealed class IpcRequestDispatcher
         await IpcLineProtocol
             .WriteLineAsync(stream, JsonSerializer.Serialize(response, IpcJson.Options), cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static async Task TryWriteErrorAsync(
+        Stream stream,
+        Guid requestId,
+        string code,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await WriteErrorAsync(stream, requestId, code, message, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or ObjectDisposedException or OperationCanceledException)
+        {
+        }
     }
 
     private static async Task WriteErrorAsync(

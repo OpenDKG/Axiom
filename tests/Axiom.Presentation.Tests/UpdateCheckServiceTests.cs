@@ -152,13 +152,13 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.False(service.IsUpdateAvailable);
         Assert.Equal(1, handler.RequestCount);
 
-        // Cooldown prevents repeating network calls within 30 minutes.
-        clock.Advance(TimeSpan.FromMinutes(15));
+        // Cooldown prevents repeating network calls within 15 minutes.
+        clock.Advance(TimeSpan.FromMinutes(10));
         Assert.False(await service.CheckIfDueAsync());
         Assert.Equal(1, handler.RequestCount);
 
-        // Next check after 30 minutes handles HTTP 404 silently.
-        clock.Advance(TimeSpan.FromMinutes(20));
+        // Next check after 15 minutes handles HTTP 404 silently.
+        clock.Advance(TimeSpan.FromMinutes(6));
         Assert.False(await service.CheckIfDueAsync());
         Assert.False(service.IsUpdateAvailable);
         Assert.Equal(2, handler.RequestCount);
@@ -332,6 +332,130 @@ public sealed class UpdateCheckServiceTests : IDisposable
         Assert.Equal(3, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task Release_notes_strip_links_issue_numbers_subbullets_and_downloads_section()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var handler = new QueueHandler();
+        handler.EnqueueJson(new
+        {
+            tag_name = "v1.5.0",
+            draft = false,
+            prerelease = false,
+            published_at = "2026-11-23T15:00:00Z",
+            html_url = "https://github.com/OpenDKG/Axiom/releases/tag/v1.5.0",
+            body = """
+                # Axiom 1.5.0
+
+                - **Clean uninstall & downgrade protection (#31, #32)**:
+                  - Sub-bullet detail that should not clutter the popup.
+                - **Privacy improvements (#30, #33)** across [README.md](../../README.md) and settings.
+
+                ## Downloads
+
+                - Windows x64 installer (`Axiom-Setup.exe`).
+                """,
+        });
+
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 9), store, http);
+
+        Assert.True(await service.CheckNowAsync());
+        Assert.DoesNotContain("Axiom 1.5.0", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.DoesNotContain("../../README.md", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.DoesNotContain("(#31", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sub-bullet detail", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Downloads", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Axiom-Setup.exe", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("• Clean uninstall & downgrade protection", service.ReleaseNotesText, StringComparison.Ordinal);
+        Assert.Contains("• Privacy improvements across README.md and settings.", service.ReleaseNotesText, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Axiom-Setup.exe", true, false, false, true)]
+    [InlineData("axiom-firewall_1.5.0_amd64.deb", true, false, false, false)]
+    [InlineData("axiom-firewall_1.5.0_amd64.deb", false, true, false, true)]
+    [InlineData("Axiom-Setup.exe", false, true, false, false)]
+    [InlineData("Axiom-1.5.0-26-osx-x64-adhoc.zip", false, false, true, true)]
+    [InlineData("Axiom-1.5.0-win-x64.zip", false, false, true, false)]
+    [InlineData(null, true, false, false, false)]
+    public void IsMatchingPlatformAsset_selects_expected_asset_per_operating_system(
+        string? assetName,
+        bool isWindows,
+        bool isLinux,
+        bool isMacOS,
+        bool expected)
+    {
+        Assert.Equal(expected, UpdateCheckService.IsMatchingPlatformAsset(assetName, isWindows, isLinux, isMacOS));
+    }
+
+    [Fact]
+    public async Task NotModified_304_keeps_update_state_and_marks_check_succeeded()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var clock = new AdjustableTimeProvider(new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.Zero));
+        var handler = new QueueHandler();
+        handler.EnqueueResponse(() =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { tag_name = "v1.5.0", draft = false, prerelease = false }), Encoding.UTF8, "application/json"),
+            };
+            response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"v150-etag\"");
+            return response;
+        });
+        handler.EnqueueStatus(HttpStatusCode.NotModified);
+
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 9), store, http, timeProvider: clock);
+
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.True(service.IsUpdateAvailable);
+        Assert.Equal("1.5.0", service.LatestVersion);
+
+        clock.Advance(TimeSpan.FromMinutes(16));
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.True(service.LastCheckSucceeded);
+        Assert.True(service.IsUpdateAvailable);
+        Assert.Equal("\"v150-etag\"", handler.LastIfNoneMatch);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task Reenabling_check_for_updates_clears_stale_etag_so_304_cannot_hide_update()
+    {
+        var store = new UpdateSettingsStore(Path.Combine(_tempDir.FullName, "updates.json"));
+        var clock = new AdjustableTimeProvider(new DateTimeOffset(2026, 11, 21, 10, 0, 0, TimeSpan.Zero));
+        var handler = new QueueHandler();
+        handler.EnqueueResponse(() =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { tag_name = "v1.5.0", draft = false, prerelease = false }), Encoding.UTF8, "application/json"),
+            };
+            response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"v150-etag\"");
+            return response;
+        });
+        handler.EnqueueJson(new { tag_name = "v1.5.0", draft = false, prerelease = false });
+
+        using var http = new HttpClient(handler);
+        using var service = new UpdateCheckService(new Version(1, 4, 9), store, http, timeProvider: clock);
+
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.True(service.IsUpdateAvailable);
+
+        service.SetCheckForUpdatesEnabled(false);
+        Assert.False(service.IsUpdateAvailable);
+
+        service.SetCheckForUpdatesEnabled(true);
+        clock.Advance(TimeSpan.FromMinutes(16));
+        Assert.True(await service.CheckIfDueAsync());
+        Assert.Null(handler.LastIfNoneMatch);
+        Assert.True(service.IsUpdateAvailable);
+        Assert.Equal("1.5.0", service.LatestVersion);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
     private sealed class RecordedProgress : IProgress<int>
     {
         public List<int> Values { get; } = [];
@@ -366,6 +490,10 @@ public sealed class UpdateCheckServiceTests : IDisposable
 
         public int RequestCount { get; private set; }
         public Uri? LastRequestUri { get; private set; }
+        public string? LastIfNoneMatch { get; private set; }
+
+        public void EnqueueResponse(Func<HttpResponseMessage> factory) =>
+            _responses.Enqueue(factory);
 
         public void EnqueueJson(object payload) =>
             _responses.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK)
@@ -389,6 +517,7 @@ public sealed class UpdateCheckServiceTests : IDisposable
         {
             RequestCount++;
             LastRequestUri = request.RequestUri;
+            LastIfNoneMatch = request.Headers.IfNoneMatch.FirstOrDefault()?.Tag;
             return Task.FromResult(_responses.Count > 0
                 ? _responses.Dequeue()()
                 : new HttpResponseMessage(HttpStatusCode.NotFound));

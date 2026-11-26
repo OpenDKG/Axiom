@@ -20,7 +20,7 @@ namespace Axiom.Infrastructure.Windows.Ipc;
 /// </summary>
 public sealed class PipeServer
 {
-    private const int MaxInstances = 4;
+    private const int MaxConcurrentClients = 16;
 
     private const int BufferSize = 64 * 1024;
 
@@ -137,8 +137,19 @@ public sealed class PipeServer
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        using var concurrency = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
+
         while (!cancellationToken.IsCancellationRequested)
         {
+            try
+            {
+                await concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
             NamedPipeServerStream server;
 
             try
@@ -148,6 +159,7 @@ public sealed class PipeServer
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
             {
+                concurrency.Release();
                 _log?.Invoke($"Pipe server could not start: {exception.Message}");
                 try
                 {
@@ -167,18 +179,20 @@ public sealed class PipeServer
             }
             catch (OperationCanceledException)
             {
+                concurrency.Release();
                 await server.DisposeAsync().ConfigureAwait(false);
                 break;
             }
             catch (IOException exception)
             {
+                concurrency.Release();
                 _log?.Invoke($"Pipe connection failed: {exception.Message}");
                 await server.DisposeAsync().ConfigureAwait(false);
                 continue;
             }
 
             // Ownership moves to the handler; the accept loop immediately creates the next instance.
-            _ = HandleClientAsync(server, cancellationToken);
+            _ = HandleClientAsync(server, concurrency, cancellationToken);
         }
     }
 
@@ -186,27 +200,47 @@ public sealed class PipeServer
         NamedPipeServerStreamAcl.Create(
             _pipeName,
             PipeDirection.InOut,
-            MaxInstances,
+            NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous,
             BufferSize,
             BufferSize,
             PipeSecurityFactory.Create(_allowedSid));
 
-    private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken cancellationToken)
+    private async Task HandleClientAsync(
+        NamedPipeServerStream server,
+        SemaphoreSlim concurrency,
+        CancellationToken cancellationToken)
     {
-        await using (server.ConfigureAwait(false))
+        try
         {
-            var clientSid = PipeClientIdentity.TryGetClientSid(server.SafePipeHandle);
-            if (!string.Equals(clientSid, _allowedSid, StringComparison.OrdinalIgnoreCase))
+            await using (server.ConfigureAwait(false))
             {
-                _log?.Invoke($"Rejected pipe client with SID '{clientSid ?? "unknown"}'.");
-                return;
-            }
+                var clientSid = PipeClientIdentity.TryGetClientSid(server.SafePipeHandle);
+                if (!string.Equals(clientSid, _allowedSid, StringComparison.OrdinalIgnoreCase))
+                {
+                    _log?.Invoke($"Rejected pipe client with SID '{clientSid ?? "unknown"}'.");
+                    return;
+                }
 
-            await _dispatcher
-                .HandleConnectionAsync(server, WindowsPipeCaller.Authenticated(clientSid!), cancellationToken)
-                .ConfigureAwait(false);
+                await _dispatcher
+                    .HandleConnectionAsync(server, WindowsPipeCaller.Authenticated(clientSid!), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException)
+        {
+            // Client disconnected or server is shutting down; avoid unobserved task faults.
+        }
+        finally
+        {
+            try
+            {
+                concurrency.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 }

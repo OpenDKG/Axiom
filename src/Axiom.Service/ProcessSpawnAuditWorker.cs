@@ -59,6 +59,14 @@ public sealed partial class ProcessSpawnAuditWorker : BackgroundService
         catch (Exception exception) when (
             exception is ManagementException or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {
+            runtime?.Dispose();
+            runtime = null;
+            if (writer is not null)
+            {
+                await writer.DisposeAsync().ConfigureAwait(false);
+                writer = null;
+            }
+
             LogStartFailed(exception);
         }
 

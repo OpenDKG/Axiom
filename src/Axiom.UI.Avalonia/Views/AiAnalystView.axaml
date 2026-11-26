@@ -40,7 +40,7 @@
           <controls:AxiomSelectableTextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="{DynamicResource Axiom.TextSecondary}" FontSize="11.5"
                      TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0" />
           <controls:AxiomSelectableTextBlock Grid.Column="2" Text="{Binding CredentialsText}" Foreground="{DynamicResource Axiom.TextMuted}" FontSize="11"
-                     VerticalAlignment="Center" />
+                     TextWrapping="Wrap" MaxWidth="440" VerticalAlignment="Center" />
         </Grid>
 
         <Grid ColumnDefinitions="1.1*,12,1*,12,1*">
@@ -51,7 +51,7 @@
           <StackPanel Grid.Column="2" Spacing="4">
             <controls:AxiomSelectableTextBlock Text="Endpoint" FontSize="11" Foreground="{DynamicResource Axiom.TextMuted}" />
             <TextBox Text="{Binding Endpoint}" IsReadOnly="{Binding IsOpenCodeProvider}"
-                     ToolTip.Tip="OpenChamber / OpenCode uses its built-in local CLI endpoint; no HTTP server is needed."
+                     ToolTip.Tip="Full chat-completions URL, or opencode://local for the local OpenCode CLI."
                      PlaceholderText="https://… or opencode://local" />
           </StackPanel>
           <StackPanel Grid.Column="4" Spacing="4">
@@ -78,11 +78,16 @@
           </StackPanel>
         </Grid>
 
+        <controls:AxiomSelectableTextBlock Text="{Binding ProviderComplianceText}"
+                                           Foreground="{DynamicResource Axiom.TextSecondary}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
+
         <Border Background="{DynamicResource Axiom.SurfaceAlt}" BorderBrush="{DynamicResource Axiom.Border}"
                 BorderThickness="1" CornerRadius="8" Padding="10">
           <StackPanel Spacing="6">
             <Grid ColumnDefinitions="*,Auto">
-              <controls:AxiomSelectableTextBlock Text="Configure Axiom from an agent that is already signed in"
+              <controls:AxiomSelectableTextBlock Text="Use Claude Code, Antigravity, Codex, or Gemini CLI safely (ToS-compliant MCP)"
                          FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource Axiom.TextPrimary}" />
               <Button Grid.Column="1" Content="Copy setup prompt" Padding="10,4"
                       Command="{Binding CopyAgentSetupPromptCommand}" />
@@ -90,7 +95,7 @@
             <TextBox Text="{Binding AgentSetupPrompt}" IsReadOnly="True" TextWrapping="Wrap"
                      AcceptsReturn="True" MinHeight="52" />
             <controls:AxiomSelectableTextBlock
-                       Text="OpenChamber / OpenCode reuses the agent's own local login; no separate API key is needed."
+                       Text="To protect your subscription accounts from provider ToS bans, Axiom never reuses Claude Pro/Max, Antigravity, Gemini CLI, or Copilot OAuth logins. Use an official API key or local Ollama model above, OR connect your official client directly to Axiom's read-only MCP server."
                        FontSize="10.5" Foreground="{DynamicResource Axiom.TextMuted}" TextWrapping="Wrap" />
           </StackPanel>
         </Border>

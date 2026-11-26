@@ -642,69 +642,8 @@ internal static class SetupInstaller
         }
     }
 
-    private static bool StopRunningDesktopProcesses(Action<string> report)
-    {
-        var running = Process.GetProcessesByName("Axiom.Desktop")
-            .Concat(Process.GetProcessesByName("Netpetra.Desktop"))
-            .ToArray();
-        if (running.Length == 0)
-        {
-            return true;
-        }
-
-        report($"Closing {running.Length} running Axiom desktop process(es)...");
-        try
-        {
-            foreach (var proc in running)
-            {
-                try
-                {
-                    if (!proc.HasExited)
-                    {
-                        _ = proc.CloseMainWindow();
-                        if (!proc.WaitForExit(2500))
-                        {
-                            proc.Kill(entireProcessTree: true);
-                            _ = proc.WaitForExit(3000);
-                        }
-                    }
-                }
-                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-                {
-                }
-            }
-
-            Thread.Sleep(250);
-            return !AnyProcessRunning("Axiom.Desktop", "Netpetra.Desktop");
-        }
-        finally
-        {
-            foreach (var proc in running)
-            {
-                proc.Dispose();
-            }
-        }
-    }
-
-    private static bool AnyProcessRunning(params string[] processNames)
-    {
-        foreach (var name in processNames)
-        {
-            var processes = Process.GetProcessesByName(name);
-            var any = processes.Length > 0;
-            foreach (var process in processes)
-            {
-                process.Dispose();
-            }
-
-            if (any)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool StopRunningDesktopProcesses(Action<string> report) =>
+        SetupProcessCloser.CloseDesktopProcesses(report);
 
     public static async Task<SetupInstallResult> UninstallAsync(
         SetupOptions options,
@@ -1496,13 +1435,16 @@ internal static class SetupInstaller
                 return;
             }
 
+            var uninstallDir = Path.EndsInDirectorySeparator(installDir) && installDir.Length > 3
+                ? Path.TrimEndingDirectorySeparator(installDir)
+                : installDir;
             key.SetValue("DisplayName", "Axiom", RegistryValueKind.String);
             key.SetValue("DisplayVersion", NormalizeVersionString(version) ?? version, RegistryValueKind.String);
             key.SetValue("Publisher", "OpenDKG", RegistryValueKind.String);
-            key.SetValue("InstallLocation", installDir, RegistryValueKind.String);
-            key.SetValue("DisplayIcon", Path.Combine(installDir, "Axiom.Desktop.exe"), RegistryValueKind.String);
-            key.SetValue("UninstallString", $"\"{uninstallerExe}\" --uninstall", RegistryValueKind.String);
-            key.SetValue("QuietUninstallString", $"\"{uninstallerExe}\" --uninstall --silent", RegistryValueKind.String);
+            key.SetValue("InstallLocation", uninstallDir, RegistryValueKind.String);
+            key.SetValue("DisplayIcon", Path.Combine(uninstallDir, "Axiom.Desktop.exe"), RegistryValueKind.String);
+            key.SetValue("UninstallString", $"\"{uninstallerExe}\" --uninstall --install-dir \"{uninstallDir}\"", RegistryValueKind.String);
+            key.SetValue("QuietUninstallString", $"\"{uninstallerExe}\" --uninstall --silent --install-dir \"{uninstallDir}\"", RegistryValueKind.String);
             key.SetValue("NoModify", 1, RegistryValueKind.DWord);
             key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
             report("Registered Axiom in Windows Apps & Features.");

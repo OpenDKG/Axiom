@@ -46,7 +46,8 @@ public sealed class UnixSocketIpcTransport : IIpcTransport
     public UnixSocketIpcTransport(UnixServicePaths paths, Axiom.Core.Protection.ProtectionSettingsStore settings)
         : this(paths, uid => PeerAuthorization.Decide(
             uid,
-            PeerPolicy.FromSettings(settings.Load(), member => UnixGroups.IsMember(member, PeerPolicy.AdminGroup))))
+            PeerPolicy.FromSettings(settings.Load(), UnixAccountRange.Current),
+            UnixAccountRange.Current))
     {
         ArgumentNullException.ThrowIfNull(settings);
     }

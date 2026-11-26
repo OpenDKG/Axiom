@@ -37,7 +37,7 @@ var builder = Host.CreateApplicationBuilder(args);
 ServicePlatform.ConfigureServices(builder);
 
 builder.Services.AddSingleton<ConnectionSnapshotCache>();
-builder.Services.AddSingleton(new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
+builder.Services.AddSingleton(_ => new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
 builder.Services.AddSingleton(provider => new NetworkRecoveryController(
     provider.GetRequiredService<INetworkRecoveryDnsAdapter>(),
     provider.GetRequiredService<IOwnedRuleRecoveryAdapter>(),
@@ -74,5 +74,27 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<PipeSe
 ProtectionWriteConsent.Set(new ProtectionSettingsStore().Load().Enabled);
 
 var host = builder.Build();
+try
+{
+    await host.Services.GetRequiredService<HistoryStore>().InitializeAsync();
+}
+#pragma warning disable CA1031 // Eager initialization failure must not abort service startup; HistoryWriter/workers retry.
+catch (Exception exception)
+#pragma warning restore CA1031
+{
+    if (host.Services.GetService<ILoggerFactory>()?.CreateLogger("Axiom.Service") is { } startupLogger)
+    {
+        ProgramLog.EagerHistoryInitFailed(startupLogger, exception);
+    }
+}
+
 await host.RunAsync();
 return 0;
+
+internal static class ProgramLog
+{
+    public static readonly Action<ILogger, Exception?> EagerHistoryInitFailed = LoggerMessage.Define(
+        LogLevel.Warning,
+        new EventId(1, "EagerHistoryInitFailed"),
+        "Eager history database initialization failed; workers will retry.");
+}

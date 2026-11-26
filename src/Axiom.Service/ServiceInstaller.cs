@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.ServiceProcess;
@@ -162,7 +163,11 @@ internal static class ServiceInstaller
             if (Directory.Exists(MachineStateSecurity.ServiceDirectory) &&
                 !MachineStateSecurity.IsReparsePointInPath(MachineStateSecurity.ServiceDirectory))
             {
-                Directory.Delete(MachineStateSecurity.ServiceDirectory, recursive: true);
+                DeleteUnlockedEntries(MachineStateSecurity.ServiceDirectory);
+                if (Directory.Exists(MachineStateSecurity.ServiceDirectory))
+                {
+                    Directory.Delete(MachineStateSecurity.ServiceDirectory, recursive: true);
+                }
             }
 
             var parentDir = Path.GetDirectoryName(MachineStateSecurity.ServiceDirectory);
@@ -176,7 +181,13 @@ internal static class ServiceInstaller
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            ServiceInstallLog.Write($"uninstall: could not delete service directory: {exception.Message}");
+            ServiceInstallLog.Write($"uninstall: could not delete service directory immediately ({exception.Message})");
+            if (Directory.Exists(MachineStateSecurity.ServiceDirectory) &&
+                !ScheduleDirectoryCleanupOnReboot(MachineStateSecurity.ServiceDirectory))
+            {
+                cleanupFailed = true;
+                ServiceInstallLog.Write("uninstall: could not schedule delayed cleanup for locked service directory");
+            }
         }
 
         if (removeData)
@@ -240,6 +251,9 @@ internal static class ServiceInstaller
             return 1;
         }
 
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+
         if (!process.WaitForExit(30_000))
         {
             // Reading ExitCode on a live process throws; report the timeout instead of crashing the
@@ -255,6 +269,9 @@ internal static class ServiceInstaller
 
             return 1460;
         }
+
+        _ = stdout.Wait(500);
+        _ = stderr.Wait(500);
 
         if (process.ExitCode != 0)
         {
@@ -379,4 +396,85 @@ internal static class ServiceInstaller
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
+
+    private static void DeleteUnlockedEntries(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory))
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        foreach (var subDirectory in Directory.EnumerateDirectories(directory))
+        {
+            if (MachineStateSecurity.IsReparsePointInPath(subDirectory))
+            {
+                continue;
+            }
+
+            DeleteUnlockedEntries(subDirectory);
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(subDirectory).Any())
+                {
+                    Directory.Delete(subDirectory);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static bool ScheduleDirectoryCleanupOnReboot(string directory)
+    {
+        try
+        {
+            var allScheduled = true;
+            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            {
+                if (!MoveFileEx(file, null, MoveFileDelayUntilReboot))
+                {
+                    allScheduled = false;
+                }
+            }
+
+            foreach (var subDirectory in Directory.EnumerateDirectories(directory, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(path => path.Length))
+            {
+                if (!MoveFileEx(subDirectory, null, MoveFileDelayUntilReboot))
+                {
+                    allScheduled = false;
+                }
+            }
+
+            if (!MoveFileEx(directory, null, MoveFileDelayUntilReboot))
+            {
+                allScheduled = false;
+            }
+
+            if (allScheduled)
+            {
+                ServiceInstallLog.Write($"uninstall: scheduled delayed removal of '{directory}' on reboot");
+            }
+
+            return allScheduled;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private const uint MoveFileDelayUntilReboot = 0x4;
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileEx(string lpExistingFileName, string? lpNewFileName, uint dwFlags);
 }

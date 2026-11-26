@@ -60,10 +60,7 @@ public sealed class WindowsPrivacyDnsPlatform(
             return adapterError?.Invoke();
         }
 
-        if (!settings.Enabled || !settings.AutoPointAdapterDns)
-        {
-            restoreIfNeeded();
-        }
+        restoreIfNeeded();
 
         return null;
     }

@@ -143,4 +143,14 @@ public sealed class AgentCommandGuardTests
             Assert.Contains(phrase, helpers, StringComparison.Ordinal);
         }
     }
+
+    [Fact]
+    public void Guard_supports_extension_wildcards_and_word_boundary_matching()
+    {
+        var helpers = AgentCommandGuard.PythonHelpers;
+
+        Assert.Contains("def _word_matches_token(", helpers, StringComparison.Ordinal);
+        Assert.Contains("tail.lstrip(\"*\")", helpers, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"& \", \"&& \"", helpers, StringComparison.Ordinal);
+    }
 }
