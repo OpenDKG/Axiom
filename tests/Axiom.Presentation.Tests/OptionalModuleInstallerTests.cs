@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Axiom.Presentation;
 using Xunit;
 
@@ -207,6 +208,38 @@ public sealed class OptionalModuleInstallerTests
 
         Assert.Single(requirements, line => line.StartsWith("pywin32==", StringComparison.Ordinal) &&
                                             line.Contains("sys_platform == 'win32'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true, Architecture.X64, true)]
+    [InlineData(true, Architecture.Arm64, false)]
+    [InlineData(false, Architecture.X64, false)]
+    [InlineData(false, Architecture.Arm64, false)]
+    public void Blackbox_dependency_repair_is_refused_only_on_intel_macs(
+        bool isMacOS, Architecture architecture, bool refused)
+    {
+        var blocker = OptionalModuleInstaller.BlackboxRepairBlocker(isMacOS, architecture);
+
+        Assert.Equal(refused ? OptionalModuleInstaller.IntelMacRepairUnavailableMessage : null, blocker);
+    }
+
+    [Fact]
+    public void Intel_mac_limit_is_checked_before_pip_runs_and_documented()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRIVACY.md")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(Path.Combine(directory.FullName, "src", "Axiom.Presentation", "OptionalModuleInstaller.cs"));
+        var check = source.IndexOf("if (BlackboxRepairBlocker(", StringComparison.Ordinal);
+        var run = source.IndexOf("BuildBlackboxPipArguments(BlackboxRequirementsPath)", StringComparison.Ordinal);
+        Assert.True(check > 0 && check < run, "the Intel Mac check must come before the pip call");
+
+        var readme = File.ReadAllText(Path.Combine(directory.FullName, "README.md"));
+        Assert.Contains("**It does not do this on Intel Macs**", readme, StringComparison.Ordinal);
     }
 
     [Fact]

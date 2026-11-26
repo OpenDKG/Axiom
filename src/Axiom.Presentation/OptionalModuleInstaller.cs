@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
@@ -376,6 +377,14 @@ public sealed class OptionalModuleInstaller
     }
 
     private string BlackboxRequirementsPath => Path.Combine(BlackboxRoot, BlackboxRequirementsFileName);
+
+    internal const string IntelMacRepairUnavailableMessage =
+        "Axiom does not repair the Blackbox Python packages on Intel Macs: the pinned cryptography " +
+        "release has no Intel macOS build. Reinstall Blackbox with its own installer.";
+
+    /// <summary>Why the dependency repair cannot run on this computer, or null when it can.</summary>
+    internal static string? BlackboxRepairBlocker(bool isMacOS, Architecture architecture) =>
+        isMacOS && architecture == Architecture.X64 ? IntelMacRepairUnavailableMessage : null;
 
     /// <summary>
     /// pip installs exactly the locked versions, verifies each download's hash and resolves nothing else.
@@ -1024,6 +1033,12 @@ public sealed class OptionalModuleInstaller
                 log: null,
                 TimeSpan.FromSeconds(30)))
         {
+            return;
+        }
+
+        if (BlackboxRepairBlocker(OperatingSystem.IsMacOS(), RuntimeInformation.OSArchitecture) is { } blocker)
+        {
+            log?.Invoke(blocker);
             return;
         }
 
