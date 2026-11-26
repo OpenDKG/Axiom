@@ -35,6 +35,10 @@
         </Grid>
       </Border>
 
+      <TextBlock Text="{Binding ActionErrorText}" IsVisible="{Binding HasActionError}"
+                 Foreground="{DynamicResource Axiom.Critical}" FontSize="11.5" TextWrapping="Wrap"
+                 Margin="2,0,2,0" />
+
       <!-- Four summary cards: Firewall, Privacy, Network, AI Agents -->
       <Grid ColumnDefinitions="*,14,*,14,*,14,*">
         <Border Grid.Column="0" Classes="card" Padding="16">

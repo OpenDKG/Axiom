@@ -199,9 +199,29 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         (Agents as IActivatablePage).Deactivate();
     }
 
-    [RelayCommand]
-    private void ToggleShield()
+    private string _actionErrorText = string.Empty;
+
+    /// <summary>Inline failure text for a Shield or Privacy toggle; empty when the last action worked.</summary>
+    public string ActionErrorText => _actionErrorText;
+
+    public bool HasActionError => !string.IsNullOrEmpty(_actionErrorText);
+
+    private void SetActionError(string text)
     {
+        if (_actionErrorText == text)
+        {
+            return;
+        }
+
+        _actionErrorText = text;
+        OnPropertyChanged(nameof(ActionErrorText));
+        OnPropertyChanged(nameof(HasActionError));
+    }
+
+    [RelayCommand]
+    private async Task ToggleShieldAsync()
+    {
+        SetActionError(string.Empty);
         if (!Firewall.ProtectionKnown)
         {
             _openFirewall();
@@ -210,32 +230,29 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
 
         if (Firewall.ToggleShieldCommand.CanExecute(null))
         {
-            Firewall.ToggleShieldCommand.Execute(null);
+            await Firewall.ToggleShieldCommand.ExecuteAsync(null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(Firewall.ShieldActionError))
+        {
+            SetActionError(Firewall.ShieldActionError);
         }
     }
 
     [RelayCommand]
-    private void TogglePrivacy()
+    private async Task TogglePrivacyAsync()
     {
+        SetActionError(string.Empty);
         if (!PrivacyShield.IsSupported || PrivacyShield.IsBusy)
         {
             return;
         }
 
-        if (PrivacyShield.Enabled)
+        var turnOn = !PrivacyShield.Enabled;
+        if (!await PrivacyShield.SetEnabledFromHomeAsync(turnOn))
         {
-            if (PrivacyShield.DisableCommand.CanExecute(null))
-            {
-                PrivacyShield.DisableCommand.Execute(null);
-            }
-        }
-        else
-        {
-            PrivacyShield.Enabled = true;
-            if (PrivacyShield.ApplyCommand.CanExecute(null))
-            {
-                PrivacyShield.ApplyCommand.Execute(null);
-            }
+            var reason = string.IsNullOrWhiteSpace(PrivacyShield.StatusText) ? "the local service did not apply it" : PrivacyShield.StatusText;
+            SetActionError($"Could not turn {(turnOn ? "on" : "off")} Privacy Shield: {reason}");
         }
     }
 

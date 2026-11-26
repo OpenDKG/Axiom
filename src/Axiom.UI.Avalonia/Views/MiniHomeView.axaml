@@ -20,17 +20,21 @@
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,10" RowSpacing="8">
 
     <!-- Quick protection toggles -->
-    <Grid Grid.Row="0" ColumnDefinitions="*,8,*,8,Auto">
-      <Button Grid.Column="0" Content="{Binding ShieldButtonText}" Command="{Binding ToggleShieldCommand}"
-              Classes.primary="{Binding Firewall.ShieldEnabled}"
-              Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Grid.Column="2" Content="{Binding PrivacyButtonText}" Command="{Binding TogglePrivacyCommand}"
-              IsEnabled="{Binding CanTogglePrivacy}"
-              Classes.primary="{Binding PrivacyShield.Enabled}"
-              Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-      <Button Grid.Column="4" Content="Expand" Command="{Binding ExpandCommand}"
-              Padding="10,7" FontSize="11" ToolTip.Tip="Open full dashboard" />
-    </Grid>
+    <StackPanel Grid.Row="0" Spacing="4">
+      <Grid ColumnDefinitions="*,8,*,8,Auto">
+        <Button Grid.Column="0" Content="{Binding ShieldButtonText}" Command="{Binding ToggleShieldCommand}"
+                Classes.primary="{Binding Firewall.ShieldEnabled}"
+                Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+        <Button Grid.Column="2" Content="{Binding PrivacyButtonText}" Command="{Binding TogglePrivacyCommand}"
+                IsEnabled="{Binding CanTogglePrivacy}"
+                Classes.primary="{Binding PrivacyShield.Enabled}"
+                Padding="10,7" FontSize="11.5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+        <Button Grid.Column="4" Content="Expand" Command="{Binding ExpandCommand}"
+                Padding="10,7" FontSize="11" ToolTip.Tip="Open full dashboard" />
+      </Grid>
+      <TextBlock Text="{Binding ActionErrorText}" IsVisible="{Binding HasActionError}"
+                 Foreground="{DynamicResource Axiom.Critical}" FontSize="10.5" TextWrapping="Wrap" />
+    </StackPanel>
 
     <!-- One compact row: agents, network and privacy key numbers -->
     <Grid Grid.Row="1" ColumnDefinitions="*,12,*,12,*">
