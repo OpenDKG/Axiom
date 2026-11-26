@@ -83,6 +83,56 @@ public sealed class StatementTruthTests
     }
 
     [Fact]
+    public void Support_page_text_matches_setup_and_the_write_gate()
+    {
+        // The Windows branches do not run on other platforms, so the page's source is read.
+        var page = Read("src", "Axiom.UI.Avalonia", "SupportPageViewModel.cs");
+        foreach (var withdrawn in new[]
+                 {
+                     "test-VM", "partial installation leaves it off", "Writes are off until you consent",
+                     "never installed silently",
+                 })
+        {
+            Assert.DoesNotContain(withdrawn, page, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains(
+            "(ProtectionWriteConsent.Granted && ProtectionWriteConsent.IsServiceHost)",
+            Read("src", "Axiom.Core", "Firewall", "FirewallWriteGate.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains("only while Axiom Shield is on", page, StringComparison.Ordinal);
+        Assert.Contains("Complete and Light installs turn Shield on during setup", page, StringComparison.Ordinal);
+        Assert.Contains("Complete and Light installs turn it on and point adapter DNS at it", page, StringComparison.Ordinal);
+        Assert.Contains("A Complete install, the default in Windows Setup, includes them", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Privacy_shield_document_says_the_installed_service_changes_adapter_dns()
+    {
+        Assert.Contains(
+            "controller.EnsureConfiguredAdapterDns();",
+            Read("src", "Axiom.Service", "PrivacyShieldWorker.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ensureAdapterPointed(settings.PreferredAdapterAlias);",
+            Read("src", "Axiom.Infrastructure.Windows", "Dns", "WindowsPrivacyDnsPlatform.cs"),
+            StringComparison.Ordinal);
+
+        var shield = Flat(Read("docs", "PRIVACY_SHIELD.md"));
+        foreach (var withdrawn in new[]
+                 {
+                     "never changes adapter DNS", "Automatic adapter DNS changes by the service itself",
+                     "or by this module",
+                 })
+        {
+            Assert.DoesNotContain(withdrawn, shield, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Contains("points adapter DNS at `127.0.0.1` itself, without a prompt", shield, StringComparison.Ordinal);
+        Assert.Contains("checks again every 30 seconds", shield, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Architecture_states_the_real_history_retention_interval()
     {
         Assert.Contains(

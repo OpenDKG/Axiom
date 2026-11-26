@@ -24,7 +24,7 @@ does not change the hosts file, firewall rules, agent configuration or certifica
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
-  explicit UAC DNS integration.
+  adapter DNS controls.
 - A bounded local **blocked-query history** (last 1,000 entries) containing the blocked domain,
   category, timestamp and, when Windows exposes it, the requesting application name/path. It is
   stored in the service account's local profile
@@ -63,8 +63,15 @@ does not change the hosts file, firewall rules, agent configuration or certifica
 
 Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name resolution:
 
-1. The optional UAC helper changes the selected adapter's DNS server to `127.0.0.1` after explicit
-   elevation approval. The service itself never changes adapter DNS silently.
+1. Adapter DNS is pointed at `127.0.0.1` in one of two ways:
+   - The installed Windows service (running as LocalSystem) points adapter DNS at `127.0.0.1` itself,
+     without a prompt, while Privacy Shield runs on port 53 and either automatic adapter DNS is on
+     (setup turns it on when it enables Privacy Shield) or an adapter has been chosen. It changes the
+     chosen adapter, or else the active default-route adapter, and checks again every 30 seconds. It
+     saves a DNS backup first, keeps a fallback server behind the resolver, and makes no change when
+     it finds no usable fallback.
+   - Otherwise, for example in a portable run, the optional UAC helper changes the selected adapter
+     after explicit elevation approval.
 2. Applications send DNS questions to the Windows resolver, which now reaches Axiom on port 53.
 3. Axiom returns NXDOMAIN for blocked names and forwards allowed questions to the upstream.
 4. Applications still connect directly to the returned destination IPs; their TCP/UDP traffic does
@@ -98,8 +105,6 @@ pointed at `127.0.0.1` has no DoH template.
 - Full per-process attribution for every query: Axiom resolves the loopback source port through the
   Windows owner tables for **blocked** queries only. Protected or already-exited processes may show
   `unknown app`.
-- Automatic adapter DNS changes by the service itself. A separate explicit UAC helper can save and
-  change one selected adapter; it never elevates silently.
 
 ## Manual use
 
@@ -108,18 +113,22 @@ pointed at `127.0.0.1` has no DoH template.
 3. Start the resolver on port **53**. Port 53 is required for normal Windows DNS; another port is
    useful only for local testing.
 4. Before changing adapter DNS, note the existing DNS servers so they can be restored.
-5. Use **Set adapter DNS (UAC)** on the Privacy Shield page. Windows shows its elevation prompt;
-   Axiom saves the current values and points only the selected adapter at `127.0.0.1`/`::1`.
+5. Use **Point adapter at resolver** on the Privacy Shield page. This turns automatic adapter DNS on for
+   the selected adapter. If the installed service points it, no prompt appears; otherwise Windows
+   shows its elevation prompt, and the helper saves the current values and points only that adapter
+   at `127.0.0.1`/`::1`.
    Alternatively, use the explicit script:
    `.\scripts\privacy-shield-dns.ps1 -Action Save`
    `.\scripts\privacy-shield-dns.ps1 -Action Enable -InterfaceAlias "Ethernet"`
 6. If the network requires corporate or VPN DNS, put that resolver in **Upstream DNS** instead of
    relying on automatic system discovery.
-7. Use **Restore saved DNS (UAC)** or `.\scripts\privacy-shield-dns.ps1 -Action Restore` immediately
-   if resolution fails.
+7. Use **Restore saved DNS** or `.\scripts\privacy-shield-dns.ps1 -Action Restore` immediately
+   if resolution fails. The page button also turns automatic adapter DNS off. The script does not:
+   while the installed service still has it on, it points the adapter at the resolver again within
+   about 30 seconds, so turn Privacy Shield off or stop the service first.
 
-The helper requires administrator approval for each action and is never invoked automatically by
-the service.
+The helper requires administrator approval for each action. The service does not invoke it; the
+service's own adapter DNS changes are described under *DNS-only boundary*.
 
 If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover the old upstream.
 Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
@@ -148,7 +157,7 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 - The service has a privileged failsafe that attempts to restore the saved adapter DNS on resolver
   disable, service stop or failed resolver start, using a validated machine snapshot. It cannot
   guarantee recovery on every damaged/missing snapshot or unusual corporate adapter.
-- If no fallback is available or DNS fails, use **Restore saved DNS (UAC)** or your original adapter
+- If no fallback is available or DNS fails, use **Restore saved DNS** or your original adapter
   settings; see [Firewall and DNS recovery](FIREWALL_RECOVERY.md). Do not assume that disabling the
   resolver leaves the adapter unchanged.
 - Raw local DNS browsing history is not uploaded, sold or sent as a dataset to AI/DKG/Blackbox.
@@ -170,4 +179,4 @@ revocation, activation and enterprise connectivity after enabling a strict profi
 
 - `PrivacyShieldPolicyTests` cover normalization, list parsing, allow precedence and profile rules.
 - `DnsProxyTests` cover query parsing, NXDOMAIN construction and blocked-query forwarding behavior.
-- The Windows DNS adapter is not modified by any test or by this module.
+- No test modifies the Windows DNS adapter.
