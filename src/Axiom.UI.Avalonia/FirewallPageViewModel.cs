@@ -517,6 +517,11 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
         ShieldEnabled,
         OperatingSystem.IsWindows() ? null : Enforcement.IsEnforcementVerified);
 
+    /// <summary>What disabling does besides removing rules; the service also clears saved decisions.</summary>
+    internal const string DisableShieldEffect =
+        "Other firewall rules are not touched. Your saved Allow and Block decisions are removed, " +
+        "so you will have to choose again after turning Shield back on.";
+
     public string ShieldActionText => !ProtectionKnown
         ? "Check protection"
         : ShieldEnabled ? "Disable protection" : "Enable protection";
@@ -767,7 +772,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             var confirmed = await _ui.ConfirmAsync(
                 "Disable Axiom Shield",
                 $"Turn protection off and remove every Axiom-owned {PlatformText.Firewall} rule?\n\n" +
-                "Other firewall rules are not touched. Saved Allow and Block decisions stay in Axiom, and re-enabling Shield applies them again.",
+                DisableShieldEffect,
                 "Disable protection",
                 destructive: true,
                 CancellationToken.None).ConfigureAwait(true);
@@ -1914,7 +1919,7 @@ public sealed partial class FirewallPageViewModel : PageViewModel, IDisposable, 
             IsEmpty = snapshot.Rules.Count == 0;
             WritesEnabled = snapshot.WritesEnabled;
             WriteGateKnown = true;
-            WritePathText = snapshot.WritesEnabled ? "enabled (test VM only)" : "disabled";
+            WritePathText = snapshot.WritesEnabled ? "enabled" : "disabled";
             HasError = snapshot.Capability.Status == FirewallCapabilityStatus.Unavailable;
             Enforcement = FilterEnforcementSummary.From(snapshot.Capability.FilterEnforcement, snapshot.Capability.ConnectTimeLayer);
             StatusText = snapshot.Rules.Count == 0

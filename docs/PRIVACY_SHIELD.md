@@ -1,9 +1,10 @@
 # Privacy Shield (local DNS filtering)
 
-Privacy Shield is an optional local DNS policy module: **partial installation leaves it disabled**,
-while an explicitly chosen complete installation can enable it with a Balanced profile. It runs inside the
-existing `Axiom.Service` process and listens only on loopback. It does not change Windows DNS
-settings, the hosts file, firewall rules, agent configuration or certificates.
+Privacy Shield is a local DNS policy module. A **Complete** or **Light / Partial** installation enables
+it with the Strict profile and all eight catalogued sources and points the network adapters' DNS at the
+local resolver (`127.0.0.1`); in a Windows **Optional** installation you choose. It runs inside the
+existing `Axiom.Service` process and listens only on loopback. Apart from that adapter DNS setting, it
+does not change the hosts file, firewall rules, agent configuration or certificates.
 
 ## What is implemented
 
@@ -136,10 +137,10 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 
 ## Safety and recovery
 
-- A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
-  and the setup-selected initial sources. Six sources are available in the catalog; inspect the
-  enabled-source selections rather than assuming every source is active. A **partial installation** leaves it off. Updates and later starts
-  never enable it by themselves, and no mode changes adapter DNS silently.
+- A **Complete** or **Light / Partial** installation enables Privacy Shield once, during setup, with the
+  Strict profile and all eight catalogued sources, and points adapter DNS at the local resolver. In a
+  Windows **Optional** installation you choose whether to enable it. Updates and later starts
+  never enable it by themselves.
 - The elevated adapter helper preserves the previous adapter DNS servers and, when there is a real
   fallback, places them behind the local resolver. If the resolver stops answering, Windows may use
   that fallback. **DNS still resolves, but Axiom filtering is bypassed until the resolver returns.**
