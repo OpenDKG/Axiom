@@ -2402,21 +2402,134 @@ public static class AgentCommandGuard
             return len(text)
 
 
+        def _option_command(words: list, index: int, text: str) -> str:
+            # The command that an ssh option such as ProxyCommand names, or "". ssh takes it as Name=value,
+            # "Name value", or Name followed by the value as its own word; words[index + 1:] follow text.
+            import re as _re
+            option = _re.fullmatch(r"(?:-o)?\s*(?:proxycommand|localcommand|knownhostscommand)\b\s*=?\s*(.*)",
+                                   text, _re.IGNORECASE | _re.DOTALL)
+            if not option:
+                return ""
+            command = option.group(1).strip()
+            if command:
+                return command
+            following = words[index + 1:index + 3]
+            if following[:1] == ["="]:
+                following = following[1:]
+            return following[0].removeprefix("=").strip() if following else ""
+
+
+        def _quoted_assignments(text: str, tokens: list) -> list:
+            # NAME='a b' is still an assignment: only a quoted name makes the word a command.
+            import re as _re
+            word = r'(?:"[^"]*"|' + "'[^']*'" + r'|[^\s"' + "'" + r'])+'
+            words = _re.findall(word, text)
+            if len(words) != len(tokens):
+                return tokens
+            return [(token, quoted and not _re.match(r"[A-Za-z_][A-Za-z0-9_]*\+?=", found))
+                    for (token, quoted), found in zip(tokens, words)]
+
+
+        def _ssh_option_commands(words: list) -> list:
+            # words start at ssh, scp or sftp. Returns the commands its -o options name. ssh also reads
+            # options after the host, up to the remote command, which does not run on this computer.
+            name = _command_name(words[0])
+            valued = {"ssh": "BbcDEeFIiJLlmOoPpQRSWw", "scp": "cDFiJloPSX", "sftp": "BbcDFiJloPRSsX"}[name]
+            found = []
+            operands = 0
+            idx = 1
+            while idx < len(words) and words[idx] != "--":
+                word = words[idx]
+                if len(word) > 1 and word.startswith("-"):
+                    for position in range(1, len(word)):
+                        if word[position] not in valued:
+                            continue
+                        attached = word[position + 1:]
+                        idx += 0 if attached else 1
+                        if word[position] == "o" and idx < len(words):
+                            found.append(_option_command(words, idx, attached or words[idx]))
+                        break
+                else:
+                    operands += 1
+                    if name == "ssh" and operands > 1:
+                        break
+                idx += 1
+            return [command for command in found if command]
+
+
+        def _git_ssh_settings(words: list) -> list:
+            # words start at git. The values of core.sshCommand given with -c or --config.
+            import re as _re
+            option_name = r"-[A-Za-z]*c|--con(?:f(?:ig?)?)?"
+            found = []
+            for index in range(1, len(words)):
+                setting = _re.fullmatch(r"(-[A-Za-z]*c|--con(?:f(?:ig?)?)?=)?(?i:core\.sshcommand)=(.*)",
+                                        words[index], _re.DOTALL)
+                if setting and (setting.group(1) or _re.fullmatch(option_name, words[index - 1])):
+                    found.append(setting.group(2))
+            return found
+
+
+        def _git_ssh_variables(words: list) -> list:
+            # The values given to GIT_SSH_COMMAND, in the shell, PowerShell and cmd forms.
+            import re as _re
+            found = []
+            for index, word in enumerate(words):
+                variable = _re.fullmatch(r"(\$env:)?git_ssh_command(?:\+?=(.*))?", word, _re.IGNORECASE | _re.DOTALL)
+                if not variable:
+                    continue
+                value = variable.group(2)
+                following = words[index + 1:index + 3]
+                if variable.group(1) and not value:
+                    # $env:GIT_SSH_COMMAND = "value", with or without the spaces.
+                    if value is None:
+                        if not following or not following[0].startswith("="):
+                            continue
+                        following = [following[0][1:]] + following[1:] if len(following[0]) > 1 else following[1:]
+                    value = following[0] if following else ""
+                elif value is None:
+                    continue
+                if words[0].lower() == "set":
+                    # cmd takes the rest of the line as the value.
+                    value = " ".join([value] + words[index + 1:])
+                found.append(value)
+            return found
+
+
+        def _ssh_and_git_commands(command: str) -> list:
+            # Commands that ssh, scp, sftp and git run on this computer to reach the other side.
+            values = []
+            for segment in _stages_as_run(command):
+                # With escaped quotes only the POSIX reading finds where a value ends.
+                readings = [_tokenize_posix(segment)]
+                if '\\"' not in segment:
+                    readings.append(_tokenize_segment(segment))
+                for tokens in readings:
+                    tokens = _quoted_assignments(segment, tokens)
+                    values.extend(_git_ssh_variables([word for word, _ in tokens]))
+                    words = [word for word, _ in tokens[_strip_prefixes(tokens)[0]:]]
+                    if not words:
+                        continue
+                    name = _command_name(words[0])
+                    if name in ("ssh", "scp", "sftp"):
+                        values.extend(_ssh_option_commands(words))
+                    elif name == "git":
+                        values.extend(_git_ssh_settings(words))
+            return [value for value in dict.fromkeys(values) if value.strip()]
+
+
         def _transport_checks(value: str) -> list:
             # The command texts to judge for one transport value. An ssh call may name the key it logs
             # in with, so that option is set aside; commands that ssh itself would run are judged too.
             import re as _re
             tokens = _tokenize_segment(value)
-            word = r'(?:"[^"]*"|' + "'[^']*'" + r'|[^\s"' + "'" + r'])+'
-            words = list(_re.finditer(word, value))
-            # NAME='a b' is still an assignment: only a quoted name makes the word a command.
-            if len(words) == len(tokens):
-                tokens = [(text, quoted and not _re.match(r"[A-Za-z_][A-Za-z0-9_]*\+?=", found.group()))
-                          for (text, quoted), found in zip(tokens, words)]
+            tokens = _quoted_assignments(value, tokens)
             # ssh may be named by a path, or sit behind assignments and commands such as env or sudo.
             start = _strip_prefixes(tokens)[0]
             if start >= len(tokens) or _command_name(tokens[start][0]) != "ssh":
                 return [value]
+            word = r'(?:"[^"]*"|' + "'[^']*'" + r'|[^\s"' + "'" + r'])+'
+            words = list(_re.finditer(word, value))
             # The key option is set aside only after the ssh word, so that sudo -i or env -i stay as they
             # are, and only in the first simple command.
             named = words[start].end() if start < len(words) else len(value)
@@ -2428,29 +2541,26 @@ public static class AgentCommandGuard
             identity = (r"(?<=\s)(?:-i\s*" + path + r"|-o\s*(?:IdentityFile=" + path
                         + "|" + r'"IdentityFile=[^"`$]*"' + "|" + r"'IdentityFile=[^']*'" + r"))(?=\s|$)")
             checks = [(value[:named] + _re.sub(identity, "", value[named:end]) + value[end:]).strip()]
-            # ssh takes these as Name=value, "Name value", or Name followed by the value as its own word.
-            for index, (word, _) in enumerate(tokens[start + 1:], start + 1):
-                option = _re.fullmatch(
-                    r"(?:-o)?\s*(?:proxycommand|localcommand|knownhostscommand)\b\s*=?\s*(.*)",
-                    word, _re.IGNORECASE | _re.DOTALL)
-                if not option:
-                    continue
-                command = option.group(1).strip()
-                if not command:
-                    following = [token for token, _ in tokens[index + 1:index + 3]]
-                    if following[:1] == ["="]:
-                        following = following[1:]
-                    command = following[0].removeprefix("=").strip() if following else ""
+            spoken = [token for token, _ in tokens]
+            for index in range(start + 1, len(spoken)):
+                command = _option_command(spoken, index, spoken[index])
                 if command:
                     checks.append(command)
             return checks
 
 
         def _check_transports(command: str, protected, depth: int):
-            # rsync runs its transport value as a command, so it gets the same checks as any command.
-            if "rsync" not in command and "RSYNC_RSH" not in command:
-                return None
-            texts = [text for value in _rsync_transports(command) for text in _transport_checks(value)]
+            # rsync, ssh, scp, sftp and git run some values as commands on this computer, so those get the
+            # same checks as any command. Quotes and escapes inside a name do not change it.
+            import re as _re
+            plain = _re.sub("[\"'\\\\`^]", "", command).lower()
+            values = []
+            if "rsync" in plain:
+                values += _rsync_transports(command)
+            if any(name in plain for name in ("proxycommand", "localcommand", "knownhostscommand",
+                                              "core.sshcommand", "git_ssh_command")):
+                values += _ssh_and_git_commands(command)
+            texts = [text for value in dict.fromkeys(values) for text in _transport_checks(value)]
             texts = [text for text in dict.fromkeys(texts) if text.strip() not in ("", "ssh")]
             if texts and (depth >= 3 or len(texts) > 16):
                 return ("nesting", "Blackbox blocked this call: it contains a nested or very complex command that the guard cannot inspect.")

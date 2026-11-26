@@ -39,7 +39,9 @@ the difference instead of claiming a boundary that does not exist.
 
 **Scope of the command check:** the guard inspects local shell text; it is not a sandbox; remote
 commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
-files are out of scope. A delete whose command names no protected path, such as
+files are out of scope. Values on the command line that name a command to run on this computer are
+checked: `rsync -e`; the `ssh`, `scp` and `sftp` options `ProxyCommand`, `LocalCommand` and
+`KnownHostsCommand`; and git's `-c core.sshCommand` and `GIT_SSH_COMMAND`. A delete whose command names no protected path, such as
 `find / -name id_rsa -execdir rm {} \;`, is not detected.
 Permission changes through a pipe are judged the same way, by what the earlier command names:
 `find ~/.ssh | xargs chmod` is blocked, while `find . | xargs chmod` on project files is allowed by
