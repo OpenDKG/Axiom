@@ -88,7 +88,7 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "NOT VERIFIED"
             : Firewall.ShieldEnabled
-            ? (PrivacyShield.Enabled ? "PROTECTED" : "SHIELD ACTIVE")
+            ? ShieldOnTitle(Firewall.VerifiedByOs, PrivacyShield.Enabled).Badge
             : "MONITORING ONLY";
 
     public string HeroHeadlineText => !Firewall.ProtectionKnown
@@ -96,8 +96,16 @@ public sealed partial class SimpleHomePageViewModel : PageViewModel, IActivatabl
         : IsShieldUnverified
             ? "Shield is on, blocking is not verified"
             : Firewall.ShieldEnabled
-            ? (PrivacyShield.Enabled ? "Your computer is protected" : "Firewall Shield is protecting your apps")
+            ? ShieldOnTitle(Firewall.VerifiedByOs, PrivacyShield.Enabled).Headline
             : "Firewall protection is off";
+
+    /// <summary>Badge and headline while the shield is on. "Protected" needs a verified OS result.</summary>
+    internal static (string Badge, string Headline) ShieldOnTitle(bool? verified, bool privacyShield) =>
+        verified == true
+            ? privacyShield
+                ? ("PROTECTED", "Your computer is protected")
+                : ("SHIELD ACTIVE", "Firewall Shield is protecting your apps")
+            : (privacyShield ? "SETTINGS ON" : "SHIELD ACTIVE", "Protection settings on");
 
     public string HeroSummaryText => !Firewall.ProtectionKnown
         ? "Axiom could not read the local service, so it cannot confirm whether Shield is on. Open Firewall to check."

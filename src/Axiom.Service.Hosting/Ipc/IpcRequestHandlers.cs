@@ -21,6 +21,9 @@ public sealed class IpcRequestHandlers
 
     public required Func<ServiceHealth> HealthProvider { get; init; }
 
+    /// <summary>Told about every request, so background work can slow down when there is none.</summary>
+    public ClientActivity? ClientActivity { get; init; }
+
     public Func<HistoryQuery, CancellationToken, Task<HistoryPage>>? HistoryQuery { get; init; }
 
     public Func<ThroughputHistoryQuery, CancellationToken, Task<ThroughputHistory>>? ThroughputHistory { get; init; }

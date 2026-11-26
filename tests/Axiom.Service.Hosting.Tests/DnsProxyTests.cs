@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using Axiom.Contracts.Privacy;
 using Axiom.Service.Hosting.Dns;
@@ -72,28 +73,61 @@ public sealed class DnsProxyTests
     }
 
     /// <summary>
-    /// The proxy falls back to UDP-only when its TCP listener cannot bind, which made this test flaky
-    /// on a busy CI runner (issue #374). Retry the bind so the assertion checks behaviour, not timing.
+    /// A server whose IPv4 TCP listener is up. With port 0 the proxy takes whatever port UDP gets and
+    /// then tries it for TCP, where it may be taken or reserved. It carries on without TCP, which made
+    /// the TCP tests flaky on CI runners (issue #374), and retrying the same way could keep failing. So
+    /// ask the system for a port that is free for TCP first, and hand that one to the proxy.
     /// </summary>
-    private static async Task<DnsProxyServer> CreateTcpCapableServerAsync(PrivacyShieldPolicy policy)
+    private static async Task<DnsProxyServer> CreateTcpCapableServerAsync(
+        PrivacyShieldPolicy policy,
+        Action<PrivacyShieldBlockedEvent>? onBlocked = null)
     {
-        for (var attempt = 1; attempt <= 5; attempt++)
+        const int attempts = 10;
+        for (var attempt = 1; attempt <= attempts; attempt++)
         {
-            var server = new DnsProxyServer(policy, [new IPEndPoint(IPAddress.Loopback, 9)], port: 0);
-            if (!server.BindAddress.Contains("UDP only", StringComparison.Ordinal))
+            var port = FindFreeTcpPort();
+            try
             {
-                return server;
+                var server = new DnsProxyServer(policy, [new IPEndPoint(IPAddress.Loopback, 9)], port, onBlocked);
+                if (HasIpv4TcpListener(server))
+                {
+                    return server;
+                }
+
+                await server.DisposeAsync();
+            }
+            catch (SocketException) when (attempt < attempts)
+            {
+                // The port is free for TCP but not for UDP.
             }
 
-            await server.DisposeAsync();
-            if (attempt < 5)
-            {
-                await Task.Delay(50);
-            }
+            await Task.Delay(50);
         }
 
-        throw new InvalidOperationException("The DNS proxy could not bind a TCP listener after 5 attempts.");
+        throw new InvalidOperationException($"The DNS proxy could not bind a TCP listener after {attempts} attempts.");
     }
+
+    private static int FindFreeTcpPort()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        try
+        {
+            return ((IPEndPoint)probe.LocalEndpoint).Port;
+        }
+        finally
+        {
+            probe.Stop();
+        }
+    }
+
+    // BindAddress says "UDP only" only when the IPv4 and IPv6 listeners both failed, and these tests
+    // connect over IPv4.
+    private static bool HasIpv4TcpListener(DnsProxyServer server) =>
+        typeof(DnsProxyServer)
+            .GetField("_tcp4", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(server) is not null;
+
     [Fact]
     public async Task Proxy_blocks_matching_domains_over_tcp()
     {
@@ -380,11 +414,9 @@ public sealed class DnsProxyTests
             BlockedDomains = ["blocked.example"],
         };
         var policy = PrivacyShieldPolicy.Create(settings);
-        await using var server = new DnsProxyServer(
+        await using var server = await CreateTcpCapableServerAsync(
             policy,
-            [new IPEndPoint(IPAddress.Loopback, 9)],
-            port: 0,
-            onBlocked: _ => throw new InvalidOperationException("simulated history store fault"));
+            _ => throw new InvalidOperationException("simulated history store fault"));
 
         // Connect a TCP client that sends 1 byte and stalls without closing.
         using var stalledTcp = new TcpClient(AddressFamily.InterNetwork);

@@ -37,6 +37,7 @@ var builder = Host.CreateApplicationBuilder(args);
 ServicePlatform.ConfigureServices(builder);
 
 builder.Services.AddSingleton<ConnectionSnapshotCache>();
+builder.Services.AddSingleton(_ => new Axiom.Service.Hosting.Ipc.ClientActivity());
 builder.Services.AddSingleton(_ => new HistoryStore(DatabasePaths.ResolveForCurrentProcess()));
 builder.Services.AddSingleton(provider => new NetworkRecoveryController(
     provider.GetRequiredService<INetworkRecoveryDnsAdapter>(),

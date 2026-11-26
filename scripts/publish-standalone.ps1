@@ -28,7 +28,7 @@ $arguments = @(
     "-c", "Release",
     "-p:PublishProfile=win-x64-selfcontained",
     "-p:RestoreLockedMode=false",
-    "-p:RestorePackagesWithLockFile=false",
+    "-p:RestorePackagesWithLockFile=true",
     "-p:NuGetLockFilePath=obj/publish.packages.lock.json"
 )
 
@@ -54,8 +54,15 @@ if (-not $dotnet) {
 
 if (-not $dotnet) { throw "dotnet CLI not found. Install the .NET 10 SDK pinned in global.json." }
 
+# Publish locks from an earlier run would be checked as if they came from this one.
+Get-ChildItem -Path (Join-Path $root "src") -Recurse -File -Filter "publish.packages.lock.json" |
+    Where-Object { $_.Directory.Name -eq "obj" } | Remove-Item -Force
+
 & $dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+
+# Runtime-specific publishes cannot restore in locked mode; prove they resolved the tested versions.
+& (Join-Path $PSScriptRoot "verify-publish-locks.ps1") -Root $root
 
 if (-not $Output) {
     $Output = Join-Path $root "artifacts\publish\win-x64"

@@ -174,6 +174,8 @@ public sealed class AiProviderCompliancePolicyTests
     [InlineData("chatgpt/gpt-5")]
     [InlineData("codex/gpt-5-codex")]
     [InlineData("openai-codex/gpt-5-codex")]
+    [InlineData("openai/gpt-5")]
+    [InlineData("OpenAI/gpt-5.1-codex")]
     [InlineData("cursor/default")]
     [InlineData("windsurf/default")]
     [InlineData("claude-sonnet-4-5")]
@@ -237,5 +239,47 @@ public sealed class AiProviderCompliancePolicyTests
 
         Assert.False(allowed);
         Assert.Contains("ToS", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://relay.example.test/v1/chat/completions", "sk-ant-oat01-token")]
+    [InlineData(AiProviderKind.OpenAiCompatible, "https://relay.example.test/v1/chat/completions", "ya29.a0AfH6SMtoken")]
+    [InlineData(AiProviderKind.LocalOpenAiCompatible, "http://127.0.0.1:11434/v1/chat/completions", "sk-ant-oat01-token")]
+    [InlineData(AiProviderKind.LocalOpenAiCompatible, "http://127.0.0.1:11434/v1/chat/completions", " YA29.token ")]
+    [InlineData(AiProviderKind.OpenRouter, "https://openrouter.ai/api/v1/chat/completions", "sk-ant-oat01-token")]
+    [InlineData(AiProviderKind.OpenRouter, "https://openrouter.ai/api/v1/chat/completions", "ya29.token")]
+    [InlineData(AiProviderKind.DeepSeek, "https://api.deepseek.com/chat/completions", "SK-ANT-OAT02-TOKEN")]
+    [InlineData(AiProviderKind.OpenAi, "https://api.openai.com/v1/chat/completions", "ya29.token")]
+    [InlineData(AiProviderKind.GoogleGemini, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "sk-ant-oat01-token")]
+    [InlineData(AiProviderKind.OpenChamberLocal, "opencode://local", "sk-ant-oat01-token")]
+    public void ValidateRequest_rejects_subscription_oauth_tokens_for_every_provider(
+        AiProviderKind provider,
+        string endpoint,
+        string apiKey)
+    {
+        var settings = new AiAnalystSettings
+        {
+            Enabled = true,
+            Provider = provider,
+            Endpoint = endpoint,
+            Model = provider == AiProviderKind.OpenChamberLocal ? "opencode-go/deepseek-v4.1-flash" : "test-model",
+        };
+
+        var allowed = AiProviderCompliancePolicy.ValidateRequest(settings, apiKey, out var error);
+
+        Assert.False(allowed);
+        Assert.Contains("OAuth", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Byok_and_opencode_notes_describe_enforced_behaviour()
+    {
+        var byok = AiProviderCompliancePolicy.GetComplianceNote(AiProviderKind.OpenAiCompatible);
+        Assert.Contains("rejected for every provider", byok, StringComparison.Ordinal);
+        Assert.Contains("redirects are not followed", byok, StringComparison.Ordinal);
+        Assert.DoesNotContain("OAuth proxy endpoints are blocked", byok, StringComparison.Ordinal);
+
+        var openCode = AiProviderCompliancePolicy.GetComplianceNote(AiProviderKind.OpenChamberLocal);
+        Assert.Contains("openai/*", openCode, StringComparison.Ordinal);
     }
 }

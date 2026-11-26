@@ -2,3 +2,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Axiom.Infrastructure.Windows.Tests")]
+[assembly: InternalsVisibleTo("Axiom.Service.Tests")]

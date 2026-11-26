@@ -21,8 +21,7 @@ Privacy Shield is a separate optional local DNS resolver; it is documented in
 The Security page has an **Install** button next to each module that is not connected. It opens a
 visible PowerShell window only after a confirmation dialog:
 
-- **DKG**: installs the pinned `@origintrail-official/dkg@10.1.0` (the testnet tag, not npm's
-  mainnet `latest`) into `%LOCALAPPDATA%\Axiom\modules\dkg` with `npm ci` from the embedded
+- **DKG**: installs the pinned `@origintrail-official/dkg@10.1.2` into `%LOCALAPPDATA%\Axiom\modules\dkg` with `npm ci` from the embedded
   `package-lock.json`, sets a per-user `DKG_HOME`, runs the official interactive testnet setup
   (`--network testnet --role edge --store oxigraph`), disables the package's five-minute
   auto-updater, and starts the node. An existing Axiom-managed install with another version is
@@ -391,16 +390,18 @@ URL; nothing is published and no local path or connection data is sent.
 
 ## OriginTrail DKG V10
 
-Requirements: Node.js and npm, per the official DKG V10 documentation.
+Requirements: Node.js and npm, per the official DKG V10 documentation (DKG `10.1.2` expects Node.js `>= 22.23.5`, `24.22.3`, or `26.13.1` to satisfy its `node-security` check; `26.13.1` is required if enabling Graph Computer).
 
 ```powershell
-npm install -g @origintrail-official/dkg@10.1.0
+npm install -g @origintrail-official/dkg@10.1.2
 dkg init --network testnet --role edge --store oxigraph
 dkg start
 ```
 
-Axiom's own installer pins the same testnet release in a lockfile and turns off the node's
-auto-updater; a global install follows npm's tags and is the user's own choice.
+Axiom's own installer pins the same reviewed release in a lockfile and turns off the node's
+auto-updater; a global install follows npm's tags and is the user's own choice. Note that starting
+with `10.1.2`, the DKG dashboard prompts for the node token once per browser tab by default
+(`dkg auth show` prints it).
 
 Verify the node directly:
 

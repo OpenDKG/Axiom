@@ -6,9 +6,8 @@ using Axiom.Contracts.Monitoring;
 namespace Axiom.Service;
 
 /// <summary>
-/// Matches an observed flow against the firewall rules Axiom owns. It deliberately reports only
-/// what Axiom can prove: an owned allow/block rule, or that no owned rule matches. Windows default
-/// policy and third-party rules remain outside this evaluation.
+/// Preserves verdicts reported by a platform filter and matches other flows against the firewall
+/// rules Axiom owns. The rule list alone does not establish the OS default or third-party policy.
 /// </summary>
 public static class OwnedRuleMatcher
 {
@@ -16,6 +15,13 @@ public static class OwnedRuleMatcher
         IReadOnlyList<ManagedRule> rules,
         LiveConnection connection)
     {
+        // An observed denial describes what happened, even if the rule cache is stale or the
+        // process path cannot be resolved. The current rules cannot override that verdict.
+        if (connection.RuleStatus is ConnectionRuleStatus.BlockedByOwnedRule or ConnectionRuleStatus.BlockedByExternalPolicy)
+        {
+            return connection.RuleStatus;
+        }
+
         var allow = false;
         var block = false;
 

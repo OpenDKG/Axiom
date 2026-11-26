@@ -48,4 +48,15 @@ public sealed class ShieldProtectionTests
         Assert.Equal("warn", ShieldProtection.Tone(EnforcementLevel.Degraded));
         Assert.Equal("fail", ShieldProtection.Tone(EnforcementLevel.Unprotected));
     }
+
+    [Theory]
+    [InlineData(EnforcementLevel.Protected, null, "Settings on")]
+    [InlineData(EnforcementLevel.Protected, false, "Settings on")]
+    [InlineData(EnforcementLevel.Protected, true, "Protected")]
+    [InlineData(EnforcementLevel.Degraded, false, "Degraded")]
+    [InlineData(EnforcementLevel.Unprotected, null, "Not protected")]
+    [InlineData(null, null, "Unknown")]
+    public void Shield_label_says_protected_only_with_a_verified_result(
+        EnforcementLevel? level, bool? verified, string expected) =>
+        Assert.Equal(expected, ShieldProtection.ShieldText(level, verified));
 }
