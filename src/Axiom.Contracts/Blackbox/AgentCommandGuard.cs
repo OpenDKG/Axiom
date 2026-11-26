@@ -715,7 +715,8 @@ public static class AgentCommandGuard
         def _shell_reading(text: str, escapes: bool = True):
             # Reads a command's quoting as a POSIX shell does. Returns the command without comments and
             # here-documents, the here-document bodies that a shell runs, the bodies with an unquoted
-            # delimiter, and the text of a quote or here-document that is left open, or "".
+            # delimiter, the text of a quote or here-document that is left open, or "", and the command
+            # without the quoted here-documents inside a substitution that no shell runs.
             import re as _re
             heredoc = _re.compile(r"<<(-?)[ \t]*(?:'([^'\n]*)'|" + r'"([^"\n]*)"|(\\?)([A-Za-z_][\w.+-]*))'
                                   + r"(?![^\s;&|<>()`])")
@@ -725,6 +726,7 @@ public static class AgentCommandGuard
             command_start = 0
             at_word = True
             unfinished = ""
+            quoted_data = []  # (start, end) of quoted here-document bodies inside a substitution
             i = 0
             n = len(text)
 
@@ -826,6 +828,7 @@ public static class AgentCommandGuard
                     emit(ch)
                     i += 1
                     for delimiter, tabs, quoted, run, start in pending:
+                        body_start = i
                         lines = []
                         closed = False
                         while i < n and not closed:
@@ -834,11 +837,11 @@ public static class AgentCommandGuard
                             line = text[i:end].rstrip("\r")
                             bare = line.lstrip("\t") if tabs else line
                             if bare == delimiter:
-                                closed = True
+                                closed, body_end = True, i
                                 i = end + 1
                             elif opened and opened[-1][0] == ")" and bare.startswith(delimiter) and bare[len(delimiter):].lstrip()[:1] == ")":
                                 # The delimiter line can also close the enclosing substitution.
-                                closed = True
+                                closed, body_end = True, i
                                 i += len(line) - len(bare) + len(delimiter)
                             else:
                                 lines.append(text[i:end])
@@ -846,6 +849,8 @@ public static class AgentCommandGuard
                         body = "\n".join(lines)
                         if not closed:
                             unfinished = unfinished or text[start:]
+                        elif quoted and not run and any(closer == ")" for closer, _ in opened):
+                            quoted_data.append((body_start, body_end))
                         if run:
                             runs.append(body)
                         if not quoted:
@@ -872,7 +877,10 @@ public static class AgentCommandGuard
             quotes = [where for closer, where in opened if closer != ")"]
             if quotes and not unfinished:
                 unfinished = text[quotes[0]:]
-            return "".join(output), runs, expanding, unfinished
+            without_data = text
+            for start, end in reversed(quoted_data):
+                without_data = without_data[:start] + without_data[end:]
+            return "".join(output), runs, expanding, unfinished, without_data
 
 
         def _expanded_substitutions(body: str) -> list:
@@ -941,22 +949,24 @@ public static class AgentCommandGuard
                 _re.fullmatch(_POWERSHELL_CMDLET, head))
             # The command is also read the way a POSIX shell reads its quoting; the checks see both readings.
             posix = not (foreign or in_powershell or head == "cmd")
-            reading, run_bodies, expanding, unfinished = _shell_reading(raw)
+            reading, run_bodies, expanding, unfinished, without_data = _shell_reading(raw)
             differs = " ".join(reading.split()) != " ".join(raw.split())
             if posix and _runs_past_its_end(raw, unfinished):
                 lost()
             bodies, closed = _substitutions(raw, backticks=not in_powershell)
-            if differs and posix:
-                # This reading decides what cannot be inspected.
-                read_bodies, closed = _substitutions(reading, backticks=True)
-                for body in bodies:
-                    if body not in read_bodies:
-                        descend(body, in_powershell, False)
-                bodies = read_bodies
+            unsure = []
+            if posix and not closed and without_data != raw:
+                # A quoted here-document holds plain data, so it does not leave a substitution open.
+                known, closed = _substitutions(without_data, backticks=True)
+                if closed:
+                    unsure, bodies = [body for body in bodies if body not in known], known
             if not closed:
                 lost()
+            for body in unsure:
+                descend(body, in_powershell, False)
+            read = _substitutions(reading, backticks=True)[0] if differs and posix else bodies
             for body in bodies:
-                descend(body, in_powershell)
+                descend(body, in_powershell, True, None if body in read else True)
             if differs:
                 _collect_segments(reading, depth, powershell, found, code, seen, strict and posix, spent, 1, foreign)
             for body in run_bodies:
