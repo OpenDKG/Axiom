@@ -28,6 +28,8 @@ public sealed class DaemonStoppedStaleStateTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var ui = DispatchProxy.Create<IUserInteraction, RecordingInteraction>();
         var shell = NewShell(client, ui);
@@ -79,6 +81,7 @@ public sealed class DaemonStoppedStaleStateTests
         {
             shell.Dispose();
         }
+        });
     }
 
     [Fact]
@@ -89,6 +92,8 @@ public sealed class DaemonStoppedStaleStateTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client);
         try
@@ -120,6 +125,7 @@ public sealed class DaemonStoppedStaleStateTests
         {
             shell.Dispose();
         }
+        });
     }
 
     /// <summary>Runs one connection-monitor poll (the shell's 1 s tick) without a real timer.</summary>
@@ -196,6 +202,8 @@ public sealed class DaemonStoppedStaleStateTests
             return;
         }
 
+        await TestAppBuilder.RunOnUiThreadAsync(async () =>
+        {
         var client = new DaemonClient();
         var shell = NewShell(client);
         try
@@ -234,6 +242,7 @@ public sealed class DaemonStoppedStaleStateTests
         {
             shell.Dispose();
         }
+        });
     }
 
     /// <summary>
