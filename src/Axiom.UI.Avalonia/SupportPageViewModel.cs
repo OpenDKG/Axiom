@@ -47,7 +47,7 @@ public sealed partial class SupportPageViewModel : PageViewModel
         new(
             "2. Review firewall rules",
             OperatingSystem.IsWindows()
-                ? "Open Firewall to see only rules owned by Axiom. Writes are off until you consent: complete installation enables Axiom Shield during setup, while partial installation leaves it off. The explicit test-VM gate is still required before any rule can be created or removed."
+                ? "Open Firewall to see only rules owned by Axiom. Axiom creates or removes rules through its elevated service only while Axiom Shield is on. Complete and Light installs turn Shield on during setup; in an Optional install you choose."
                 : OperatingSystem.IsLinux()
                     ? "Open Firewall to see the rules owned by Axiom. Rules are enforced by the root axiomd daemon with nftables (table inet axiom); Enable installs the daemon once through polkit."
                     : "Open Firewall to see the rules owned by Axiom. Rules are enforced by the AxiomFilter network extension, which macOS asks you to approve once in System Settings > General > Login Items & Extensions."),
@@ -58,10 +58,10 @@ public sealed partial class SupportPageViewModel : PageViewModel
             "4. Filter DNS only if needed",
             PlatformText.DaemonSwitchesDns
                 ? $"Privacy Shield runs a loopback resolver. While it runs, the Axiom daemon points system DNS ({PlatformText.DnsResolverName}) at it and restores the previous DNS servers when it stops."
-                : $"Privacy Shield runs a loopback resolver. Complete installation enables it; partial installation leaves it off. Adapter DNS changes require the separate {PlatformText.ElevationName} helper and can break name resolution."),
+                : $"Privacy Shield runs a loopback resolver. Complete and Light installs turn it on and point adapter DNS at it; in an Optional install you choose. The installed service keeps adapter DNS pointed at it without a prompt while that setting is on; otherwise a change needs the separate {PlatformText.ElevationName} helper. Changing adapter DNS can break name resolution."),
         new(
             "5. Inspect local files and optional modules",
-            "Security provides a local SHA-256 file scan and optional reputation/community features. DKG, Blackbox and agent hooks are separate third-party integrations and are never installed silently."),
+            "Security provides a local SHA-256 file scan and optional reputation/community features. DKG, Blackbox and agent hooks are separate third-party integrations. A Complete install, the default in Windows Setup, includes them; a Light install leaves them out."),
         new(
             "6. Check agents and settings",
             "Agents shows hook and workspace status; an installed hook is not proof of blocking. Settings controls themes and per-user startup."),

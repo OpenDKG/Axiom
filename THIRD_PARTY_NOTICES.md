@@ -94,10 +94,20 @@ are shown in the app. Re-check the upstream license before adding or redistribut
 | WindowsSpyBlocker telemetry | MIT | https://github.com/crazy-max/WindowsSpyBlocker |
 | The Block List Project - Ads | Unlicense | https://github.com/blocklistproject/Lists |
 | The Block List Project - Tracking | Unlicense | https://github.com/blocklistproject/Lists |
+| URLhaus malicious domains | CC0-1.0 / MIT | https://gitlab.com/malware-filter/urlhaus-filter. The label is the compiled list's. For the URLhaus data, the [abuse.ch terms of use](https://abuse.ch/terms-of-use/) say commercial use may need a paid Spamhaus subscription (section 4.1) and bar AI training on the data without Spamhaus' prior written consent. Their CC0 statement (section 3.4) covers Feodo Tracker, SSL Blacklist and YARAify, not URLhaus. |
+| HaGeZi Threat Intelligence Feeds (Mini) | GPL-3.0 | https://github.com/hagezi/dns-blocklists |
+| Phishing domains (OpenPhish / PhishTank) | CC-BY-SA-4.0 | https://gitlab.com/malware-filter/phishing-filter |
+
+Each label is the license the list's publisher states, checked on 2026-11-26. The file header of The
+Block List Project tracking list says MIT, while that repository's license is the Unlicense.
+
+The two lists compiled by malware-filter are built from other feeds, which set their own terms:
+[abuse.ch URLhaus](https://abuse.ch/terms-of-use/), [OpenPhish](https://openphish.com/terms.html),
+[PhishTank](https://phishtank.org/faq.php#isitoktousetheapifor) and [IPThreat](https://ipthreat.net).
 
 No provider endorses Axiom. A listing is a filtering decision, not a malware finding or a legal
-claim. GPL-3.0 and MIT sources require their own attribution/notice terms; Unlicense sources are
-public-domain dedications. Axiom is GPL-3.0-or-later and only references the upstream URLs.
+claim. GPL-3.0, MIT and CC-BY-SA-4.0 sources have their own attribution/notice terms; Unlicense and
+CC0 are public-domain dedications. Axiom is GPL-3.0-or-later and only references the upstream URLs.
 
 ## Notes
 

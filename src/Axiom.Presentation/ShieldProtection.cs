@@ -52,6 +52,13 @@ public static class ShieldProtection
         _ => "Not protected",
     };
 
+    /// <summary>
+    /// <see cref="LevelText"/> for the shield, which says "Protected" only with a verified OS result.
+    /// Where the platform reports none (Windows Firewall) it states what is known: the settings are on.
+    /// </summary>
+    public static string ShieldText(EnforcementLevel? level, bool? enforcementVerified) =>
+        level == EnforcementLevel.Protected && enforcementVerified != true ? "Settings on" : LevelText(level);
+
     /// <summary>Tone class suffix used by the views: ok, warn, fail or idle (unknown).</summary>
     public static string Tone(EnforcementLevel? level) => level switch
     {

@@ -317,20 +317,25 @@ public static class PrivacyDnsFailSafe
     private static string EscapePowerShellSingleQuoted(string value) =>
         value.Replace("'", "''", StringComparison.Ordinal);
 
+    internal static ProcessStartInfo CreateHiddenPowerShellStart(string script)
+    {
+        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        return new ProcessStartInfo(
+            Axiom.Infrastructure.Windows.WindowsSystemExecutables.PowerShell,
+            $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+    }
+
     private static bool RunHiddenPowerShell(string script)
     {
         try
         {
-            var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-            using var process = Process.Start(new ProcessStartInfo(
-                "powershell.exe",
-                $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
+            using var process = Process.Start(CreateHiddenPowerShellStart(script));
 
             if (process is null)
             {

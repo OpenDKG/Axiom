@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Security.Principal;
+using System.Text.RegularExpressions;
 
 namespace Axiom.Presentation;
 
@@ -12,6 +14,32 @@ public sealed record ProtectionInstallResult(bool Success, string Message);
 /// </summary>
 public static class ProtectionServiceInstall
 {
+    /// <summary>
+    /// Arguments for the elevated <c>Axiom.Service.exe</c> install. The caller's own SID is passed
+    /// with <c>--allowed-sid</c> because, with over-the-shoulder UAC, the elevated process runs as
+    /// the approving administrator and would otherwise bind the service pipe to that account.
+    /// </summary>
+    public static string WindowsInstallArguments(string? callerSid)
+    {
+        var sid = callerSid?.Trim();
+        return !string.IsNullOrEmpty(sid) &&
+               Regex.IsMatch(sid, "^S-1-[0-9]{1,14}(-[0-9]{1,10}){1,15}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+            ? $"--install-service --allowed-sid {sid}"
+            : "--install-service";
+    }
+
+    /// <summary>SID of the current (non-elevated) Windows user, or null on other platforms.</summary>
+    public static string? CurrentUserSid()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        using var identity = WindowsIdentity.GetCurrent();
+        return identity.User?.Value;
+    }
+
     public static ProtectionInstallResult InstallAndStart()
     {
         if (!OperatingSystem.IsWindows())
@@ -38,7 +66,7 @@ public static class ProtectionServiceInstall
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = executable,
-                Arguments = "--install-service",
+                Arguments = WindowsInstallArguments(CurrentUserSid()),
                 UseShellExecute = true,
                 Verb = "runas",
                 CreateNoWindow = true,

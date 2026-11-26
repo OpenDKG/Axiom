@@ -94,8 +94,9 @@ Axiom is a local-first Windows network monitor, firewall policy manager and opti
 protection console. It shows which applications use the network, which endpoints they talk to, and what
 happened over time. It manages only its own rules in the built-in Windows Firewall; Windows remains
 the enforcement authority. Core functions need no account or cloud connection; Axiom has no advertising or its own analytics
-telemetry. Optional AI, reputation, Blackbox and DKG features can contact external services or
-network peers when deliberately enabled.
+telemetry. Optional AI and reputation features can contact external services when you enable them.
+Blackbox and DKG can contact external services and network peers once installed, and the default
+Windows Setup (Complete) installs and starts both.
 
 Axiom brings together four surfaces:
 
@@ -220,20 +221,25 @@ shows the charts and captures.
   Group Policy remains authoritative.
 - The application never performs wildcard deletes, never resets the Windows Firewall and never
   disables Defender, BFE or another product's filters.
-- Write operations stay off until consent. A **complete installation** enables **Axiom Shield**
-  during setup: it registers and starts the Axiom Windows service (one administrator approval) and
-  then may create or remove `Axiom::{id}::{OUT|IN}` rules. A **partial installation** leaves Shield
-  off until you enable it. Every change is confirmed, read back and audited; disabling the shield
-  removes every Axiom-owned rule.
+- Write operations stay off until consent. A **Complete** or **Light / Partial** installation enables
+  **Axiom Shield** during setup: it registers and starts the Axiom Windows service (one
+  administrator approval) and then may create or remove `Axiom::{id}::{OUT|IN}` rules. Only a Windows
+  **Optional** installation lets you leave Shield off. Every change is confirmed, read back and
+  audited; disabling the shield removes every Axiom-owned rule and the saved Allow and Block decisions.
 
 ### Privacy by default
 
-- All processing is local by default. The standard build makes no outbound network call unless the
-  optional AI Analyst, reputation feed or another optional module is explicitly enabled.
+- Monitoring data is processed locally. Some network features are **on by default**: the release
+  update check and the verified-graph snapshot fetch; and, after a Complete or Light install,
+  Privacy Shield (adapter DNS pointed at `127.0.0.1`, with allowed queries sent over
+  DNS-over-HTTPS to Cloudflare and Quad9, and daily blocklist updates) and the Community Feed
+  download. The AI Analyst and automatic threat sharing are off until you set them up. See
+  [PRIVACY.md](PRIVACY.md).
 - No mandatory Axiom account, Axiom-hosted analytics, advertising or data sales. Optional DKG/Blackbox synchronization involves external peers, and optional cloud AI/reputation integrations may make network requests.
-- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes sanitized process metadata and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
-- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate, off by
-  default, and never sit on the per-connection enforcement path.
+- Local storage includes connection metadata, locally blocked DNS history, firewall audit records, AI findings and optional Blackbox-related state. Allowed DNS browsing history is not stored as blocked-event history; packet payloads and TLS contents are not captured. The optional AI evidence package includes process metadata, process command lines (passed through a pattern-based sanitiser), this computer's IP addresses, gateway addresses and DNS suffix, and a local flow baseline. See the detailed [data and egress inventory](docs/SECURITY_MODEL.md).
+- Optional intelligence modules (file reputation, threat feeds, DKG/Blackbox) are separate and never
+  sit on the per-connection enforcement path. A Complete or Light install turns the Community Feed
+  on, and a Complete install also installs Blackbox and DKG.
 
 ## Optional modules
 
@@ -249,12 +255,16 @@ installer only after an explicit confirmation; nothing runs silently. Setup step
 ### Privacy Shield
 
 A local DNS filter with Basic/Balanced/Strict profiles, custom allow and block lists and a loopback
-resolver. A **complete installation** turns it on with the Balanced profile and all five sources; a
-partial installation leaves it off. It never changes adapter DNS settings automatically; manual
-adapter configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
-Five HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO and OISD Big (GPL-3.0),
-WindowsSpyBlocker (MIT), and The Block List Project Ads/Tracking (Unlicense). They are downloaded at
-runtime, not bundled; no separate approval is required beyond the license and attribution terms.
+resolver. A **Complete** or **Light / Partial** installation turns it on with the Strict profile and
+all eight catalogued sources, and points the network adapters' DNS at the local resolver
+(`127.0.0.1`). In a Windows **Optional** installation you choose whether to turn it on. Adapter
+configuration and rollback are documented in [Privacy Shield](docs/PRIVACY_SHIELD.md).
+Eight HTTPS sources are catalogued with their licenses: HaGeZi Multi PRO, HaGeZi Threat
+Intelligence Feeds (Mini) and OISD Big (GPL-3.0); WindowsSpyBlocker (MIT); The Block List Project Ads
+and Tracking (Unlicense); the URLhaus domain list compiled by malware-filter (CC0-1.0 / MIT); and the
+phishing domain list compiled by malware-filter (CC-BY-SA-4.0). They are downloaded at
+runtime, not bundled. These licenses cover the lists as published; the original feeds can set their
+own terms ([third-party notices](THIRD_PARTY_NOTICES.md)).
 Counters are in memory; a bounded local history of blocked domains/categories/timestamps and the
 requesting application (when Windows exposes it) is kept and can be cleared. Recent blocks refresh
 every 2 seconds and offer Allow/Block actions. Allowed queries are never stored. DoH/DoT/DoQ,
@@ -312,6 +322,9 @@ adapters and calls the guard that Blackbox exposes from its Hermes plugin enviro
   "protected".
 - Blackbox is third-party software. No official partnership or endorsement is implied. Codex trust
   remains a Codex-owned decision.
+- When the dashboard's Python packages go missing, Axiom reinstalls them from a hash-locked list.
+  **It does not do this on Intel Macs**: the pinned `cryptography` release has no Intel macOS build, and
+  the older releases that have one have published security advisories.
 
 ### OriginTrail DKG V10
 
@@ -319,7 +332,7 @@ OriginTrail's Decentralized Knowledge Graph (DKG) is an optional knowledge and p
 is not a firewall engine and is not required for local monitoring or enforcement.
 
 - Core Windows Firewall policy and locally stored DNS lists do not require a wallet, TRAC, token, live DKG node or VM publication to work.
-- An optional local DKG node and Blackbox dashboard can be installed/started explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
+- The local DKG node and Blackbox dashboard are optional: the default Windows Setup (Complete) installs and starts them, and otherwise you can install/start them explicitly. The dashboard exposes a locally synchronized verified graph and can request incremental sync; offline cached data is last-known evidence, not a fresh consensus check.
 - Axiom does not yet perform general verified/community graph lookups on every connection or automatically turn graph sightings into Windows Firewall rules.
 - The user may explicitly submit normalized threat reports through Blackbox, but Axiom does not directly publish paid VM assets or assume TRAC/gas costs. See [Threat intelligence](docs/THREAT_INTELLIGENCE.md).
 - DKG is never on the per-flow Windows Firewall enforcement path.
@@ -374,8 +387,10 @@ Windows Service
   removal and a documented recovery path.
 - **Data at rest:** bounded local SQLite network metadata plus separate blocked-DNS history, audit, findings and opt-in module state; no packet payload capture; credential storage and optional egress are detailed in the security model.
 - **Honest status:** the interface distinguishes observed data, estimates, partial attribution,
-  unavailable adapters and external policy conflicts. It never shows "Protected" unless the OS
-  result is verified.
+  unavailable adapters and external policy conflicts. On the Simple Home screen, the Home headline
+  says protected only with a verified OS result, and so does the Shield label in Mini mode. Windows
+  Firewall reports no such result, so there they say "Protection settings on" and "Settings on"; shield
+  colours show the configured state.
 - **Supply chain:** pinned NuGet versions, committed lock files, warnings-as-errors and a generated
   third-party license inventory.
 

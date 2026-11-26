@@ -37,24 +37,17 @@ File protection for an agent that runs as the signed-in user is enforced at the 
 (`HOST_DENY_VERIFIED`); the network boundary is enforced by the OS (`OS_DENY_VERIFIED`). The UI names
 the difference instead of claiming a boundary that does not exist.
 
-**Scope of the command check:** the guard inspects local shell text; it is not a sandbox; remote
-commands (for example `ssh`), script files (for example `sh /tmp/x.sh`) and interpreters fed from
-files are out of scope. Values on the command line that name a command to run on this computer are
-checked: `rsync -e`; the `ssh`, `scp` and `sftp` options `ProxyCommand`, `LocalCommand` and
-`KnownHostsCommand`; git settings given with `-c` or `git config` that name a command
-(`core.sshCommand`, `core.pager`, `core.editor`, `sequence.editor`, `core.fsmonitor`, `core.gitProxy`,
-`diff.external`, and `alias.*` or `credential.helper` values that start with `!`); and `GIT_SSH_COMMAND`,
-`GIT_PAGER`, `PAGER`, `GIT_EDITOR`, `GIT_EXTERNAL_DIFF` and `GIT_PROXY_COMMAND`. `GIT_SSH` and the `-S`
-option of `scp` and `sftp` name only a program to run, and their values are not checked this way. A delete whose command names no protected path, such as
-`find / -name id_rsa -execdir rm {} \;`, is not detected.
-Permission changes through a pipe are judged the same way, by what the earlier command names:
-`find ~/.ssh | xargs chmod` is blocked, while `find . | xargs chmod` on project files is allowed by
-design, even though a search that starts in a parent folder could reach protected files.
+**Scope of the command check:** the guard inspects local shell text; it is not a sandbox. Remote
+commands, script files and interpreters fed from files are out of scope. The check judges a command
+by what its text names, including for changes made through a pipe, so it does not follow every
+effect that a command can have when it runs.
 
-Also not detected: in-place edits with `awk -i inplace`, `ruby -pi` or `ex`; stopping Axiom's process
-by a numeric ID, or after finding it with a pattern written to avoid its name (`grep [a]xiomd`);
-changing the service start type with `reg add …\Services\Axiom … Start=4`; CIM or WMI `Terminate`
-calls and `.Kill()`; and `systemctl edit` or `systemctl isolate`.
+Values on a command line that name a command to run on this computer are checked too, such as options of
+`rsync` and `ssh`, and git settings and variables. `GIT_SSH` and the `-S` option of `scp` and `sftp` name
+only a program to run, and their values are not checked this way.
+
+Some less common ways of editing files in place, and of stopping or reconfiguring Axiom's processes
+and services, are not detected.
 
 ## Why Blackbox and DKG are part of Axiom
 

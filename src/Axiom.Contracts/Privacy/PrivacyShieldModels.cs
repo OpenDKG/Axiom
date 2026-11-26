@@ -211,11 +211,11 @@ public static class PrivacyShieldSourceCatalog
             "urlhaus-domains",
             "URLhaus malicious domains",
             "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-domains.txt",
-            "MIT",
+            "CC0-1.0 / MIT",
             PrivacyCategory.Malware,
-            "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (MIT, " +
-            "updated every 12 hours). Matches stay local with source/version provenance and are not " +
-            "proposed to the community; they would only echo the same public list."),
+            "Malware-only domains from the abuse.ch URLhaus feed, compiled by malware-filter (updated " +
+            "every 12 hours; the feed also has its own terms). Matches stay local with source/version " +
+            "provenance and are not proposed to the community; they would only echo the same public list."),
         new(
             "hagezi-tif",
             "HaGeZi Threat Intelligence Feeds (Mini)",
@@ -229,10 +229,11 @@ public static class PrivacyShieldSourceCatalog
             "phishing-filter",
             "Phishing domains (OpenPhish / PhishTank)",
             "https://malware-filter.gitlab.io/malware-filter/phishing-filter-domains.txt",
-            "MIT",
+            "CC-BY-SA-4.0",
             PrivacyCategory.Phishing,
-            "Active phishing domains compiled by malware-filter from OpenPhish, PhishTank and ipthreat (MIT, " +
-            "updated every 12 hours). Matches stay local with source/version provenance."),
+            "Active phishing domains compiled by malware-filter from OpenPhish, PhishTank and IPThreat " +
+            "(updated every 12 hours; each feed also has its own terms). Matches stay local with " +
+            "source/version provenance."),
     ];
 }
 

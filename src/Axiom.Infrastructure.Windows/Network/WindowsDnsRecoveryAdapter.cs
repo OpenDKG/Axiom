@@ -128,13 +128,7 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo("ipconfig.exe", "/flushdns")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
+            using var process = Process.Start(CreateFlushDnsStart());
 
             process?.WaitForExit(5_000);
         }
@@ -423,11 +417,20 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
 
     private readonly record struct StaticServers(bool HasOverride, IReadOnlyList<string> Servers);
 
-    private static string Run(string command, string failureMessage)
+    internal static ProcessStartInfo CreateFlushDnsStart() =>
+        new(WindowsSystemExecutables.System32("ipconfig.exe"), "/flushdns")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+    internal static ProcessStartInfo CreatePowerShellStart(string command)
     {
         var start = new ProcessStartInfo
         {
-            FileName = "powershell.exe",
+            FileName = WindowsSystemExecutables.PowerShell,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -437,6 +440,12 @@ public sealed class WindowsDnsRecoveryAdapter : INetworkRecoveryDnsAdapter
         start.ArgumentList.Add("-NonInteractive");
         start.ArgumentList.Add("-Command");
         start.ArgumentList.Add(command);
+        return start;
+    }
+
+    private static string Run(string command, string failureMessage)
+    {
+        var start = CreatePowerShellStart(command);
 
         try
         {

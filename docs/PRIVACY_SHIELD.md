@@ -1,9 +1,10 @@
 # Privacy Shield (local DNS filtering)
 
-Privacy Shield is an optional local DNS policy module: **partial installation leaves it disabled**,
-while an explicitly chosen complete installation can enable it with a Balanced profile. It runs inside the
-existing `Axiom.Service` process and listens only on loopback. It does not change Windows DNS
-settings, the hosts file, firewall rules, agent configuration or certificates.
+Privacy Shield is a local DNS policy module. A **Complete** or **Light / Partial** installation enables
+it with the Strict profile and all eight catalogued sources and points the network adapters' DNS at the
+local resolver (`127.0.0.1`); in a Windows **Optional** installation you choose. It runs inside the
+existing `Axiom.Service` process and listens only on loopback. Apart from that adapter DNS setting, it
+does not change the hosts file, firewall rules, agent configuration or certificates.
 
 ## What is implemented
 
@@ -23,7 +24,7 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
   - keeps in-memory query/allowed/blocked/error counters and top blocked domains only.
 - A Privacy Shield page with profile/category controls, custom allow/block lists, local list import,
   verified source catalog, resolver status, **live statistics (2-second refresh while selected)** and
-  explicit UAC DNS integration.
+  adapter DNS controls.
 - A bounded local **blocked-query history** (last 1,000 entries) containing the blocked domain,
   category, timestamp and, when Windows exposes it, the requesting application name/path. It is
   stored in the service account's local profile
@@ -38,17 +39,18 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 - Application attribution is best-effort: Axiom maps the loopback UDP/TCP source port to the owning
   PID through the Windows owner tables. Protected or already-exited processes may show
   `unknown app`.
-- A catalog of **six HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, OISD Big,
-  WindowsSpyBlocker, The Block List Project Ads and Tracking, and the dedicated malware-labelled
-  URLhaus domain feed compiled by malware-filter). A source update downloads with a
-  20 MB/45 s bound, parses and normalizes domains, then atomically replaces the previous ruleset only
-  if every selected source succeeds. The previous rules file is retained. The local cap is 500,000
-  unique domains, and every selected source keeps a reserved share so a large list cannot starve a
-  smaller telemetry list such as WindowsSpyBlocker.
-- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker and malware-filter are MIT, and the two Block List Project
-  lists are Unlicense. Axiom downloads them from the upstream URL at runtime and does not bundle the
-  list bytes; no separate approval is required beyond the license and attribution terms. Upstream
-  terms must be rechecked before adding or redistributing a list. See
+- A catalog of **eight HTTPS-only, license-labelled** sources (HaGeZi Multi PRO, HaGeZi Threat
+  Intelligence Feeds (Mini), OISD Big, WindowsSpyBlocker, The Block List Project Ads and Tracking, and
+  the URLhaus and phishing domain lists compiled by malware-filter). A source update downloads each
+  list with a 20 MB size limit and a 3-minute request timeout, parses and normalizes domains, then
+  atomically replaces the previous ruleset if at least one selected source succeeds, and names the
+  sources that failed. If all fail, the previous ruleset stays. The previous rules file is retained.
+  The local cap is 1,000,000 unique domains, with room reserved for the sources still to be imported.
+- Licenses: HaGeZi and OISD are GPL-3.0, WindowsSpyBlocker is MIT, the two Block List Project lists are
+  Unlicense, the URLhaus list is CC0-1.0 / MIT and the phishing list is CC-BY-SA-4.0. Axiom downloads
+  them from the upstream URL at runtime and does not bundle the list bytes. These licenses cover the
+  lists as published; the original feeds can set their own terms. Upstream terms must be rechecked
+  before relying on, adding or redistributing a list. See
   [third-party notices](../THIRD_PARTY_NOTICES.md).
 - Settings and the compiled ruleset live in `%ProgramData%\Axiom\privacy-shield.json` and
   `privacy-shield-rules.json` when the installed service runs them, so the state survives service
@@ -61,8 +63,15 @@ settings, the hosts file, firewall rules, agent configuration or certificates.
 
 Privacy Shield is **not a VPN, proxy or network gateway**. It filters DNS name resolution:
 
-1. The optional UAC helper changes the selected adapter's DNS server to `127.0.0.1` after explicit
-   elevation approval. The service itself never changes adapter DNS silently.
+1. Adapter DNS is pointed at `127.0.0.1` in one of two ways:
+   - The installed Windows service (running as LocalSystem) points adapter DNS at `127.0.0.1` itself,
+     without a prompt, while Privacy Shield runs on port 53 and either automatic adapter DNS is on
+     (setup turns it on when it enables Privacy Shield) or an adapter has been chosen. It changes the
+     chosen adapter, or else the active default-route adapter, and checks again every 30 seconds. It
+     saves a DNS backup first, keeps a fallback server behind the resolver, and makes no change when
+     it finds no usable fallback.
+   - Otherwise, for example in a portable run, the optional UAC helper changes the selected adapter
+     after explicit elevation approval.
 2. Applications send DNS questions to the Windows resolver, which now reaches Axiom on port 53.
 3. Axiom returns NXDOMAIN for blocked names and forwards allowed questions to the upstream.
 4. Applications still connect directly to the returned destination IPs; their TCP/UDP traffic does
@@ -96,8 +105,6 @@ pointed at `127.0.0.1` has no DoH template.
 - Full per-process attribution for every query: Axiom resolves the loopback source port through the
   Windows owner tables for **blocked** queries only. Protected or already-exited processes may show
   `unknown app`.
-- Automatic adapter DNS changes by the service itself. A separate explicit UAC helper can save and
-  change one selected adapter; it never elevates silently.
 
 ## Manual use
 
@@ -106,18 +113,22 @@ pointed at `127.0.0.1` has no DoH template.
 3. Start the resolver on port **53**. Port 53 is required for normal Windows DNS; another port is
    useful only for local testing.
 4. Before changing adapter DNS, note the existing DNS servers so they can be restored.
-5. Use **Set adapter DNS (UAC)** on the Privacy Shield page. Windows shows its elevation prompt;
-   Axiom saves the current values and points only the selected adapter at `127.0.0.1`/`::1`.
+5. Use **Point adapter at resolver** on the Privacy Shield page. This turns automatic adapter DNS on for
+   the selected adapter. If the installed service points it, no prompt appears; otherwise Windows
+   shows its elevation prompt, and the helper saves the current values and points only that adapter
+   at `127.0.0.1`/`::1`.
    Alternatively, use the explicit script:
    `.\scripts\privacy-shield-dns.ps1 -Action Save`
    `.\scripts\privacy-shield-dns.ps1 -Action Enable -InterfaceAlias "Ethernet"`
 6. If the network requires corporate or VPN DNS, put that resolver in **Upstream DNS** instead of
    relying on automatic system discovery.
-7. Use **Restore saved DNS (UAC)** or `.\scripts\privacy-shield-dns.ps1 -Action Restore` immediately
-   if resolution fails.
+7. Use **Restore saved DNS** or `.\scripts\privacy-shield-dns.ps1 -Action Restore` immediately
+   if resolution fails. The page button also turns automatic adapter DNS off. The script does not:
+   while the installed service still has it on, it points the adapter at the resolver again within
+   about 30 seconds, so turn Privacy Shield off or stop the service first.
 
-The helper requires administrator approval for each action and is never invoked automatically by
-the service.
+The helper requires administrator approval for each action. The service does not invoke it; the
+service's own adapter DNS changes are described under *DNS-only boundary*.
 
 If Windows DNS is already pointed at `127.0.0.1`, the service cannot discover the old upstream.
 Privacy Shield then uses a conservative public fallback (`1.1.1.1`/`9.9.9.9`) and reports it; set
@@ -136,17 +147,17 @@ the field empty keeps the current Windows DNS servers. After enabling the resolv
 
 ## Safety and recovery
 
-- A **complete installation** enables Privacy Shield once, during setup, with the Balanced profile
-  and the setup-selected initial sources. Six sources are available in the catalog; inspect the
-  enabled-source selections rather than assuming every source is active. A **partial installation** leaves it off. Updates and later starts
-  never enable it by themselves, and no mode changes adapter DNS silently.
+- A **Complete** or **Light / Partial** installation enables Privacy Shield once, during setup, with the
+  Strict profile and all eight catalogued sources, and points adapter DNS at the local resolver. In a
+  Windows **Optional** installation you choose whether to enable it. Updates and later starts
+  never enable it by themselves.
 - The elevated adapter helper preserves the previous adapter DNS servers and, when there is a real
   fallback, places them behind the local resolver. If the resolver stops answering, Windows may use
   that fallback. **DNS still resolves, but Axiom filtering is bypassed until the resolver returns.**
 - The service has a privileged failsafe that attempts to restore the saved adapter DNS on resolver
   disable, service stop or failed resolver start, using a validated machine snapshot. It cannot
   guarantee recovery on every damaged/missing snapshot or unusual corporate adapter.
-- If no fallback is available or DNS fails, use **Restore saved DNS (UAC)** or your original adapter
+- If no fallback is available or DNS fails, use **Restore saved DNS** or your original adapter
   settings; see [Firewall and DNS recovery](FIREWALL_RECOVERY.md). Do not assume that disabling the
   resolver leaves the adapter unchanged.
 - Raw local DNS browsing history is not uploaded, sold or sent as a dataset to AI/DKG/Blackbox.
@@ -168,4 +179,4 @@ revocation, activation and enterprise connectivity after enabling a strict profi
 
 - `PrivacyShieldPolicyTests` cover normalization, list parsing, allow precedence and profile rules.
 - `DnsProxyTests` cover query parsing, NXDOMAIN construction and blocked-query forwarding behavior.
-- The Windows DNS adapter is not modified by any test or by this module.
+- No test modifies the Windows DNS adapter.

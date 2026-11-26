@@ -39,7 +39,7 @@ public sealed class DkgReleaseTests
     public void Pinned_release_targets_the_testnet_the_installer_initialises()
     {
         Assert.Equal("testnet", DkgRelease.Network);
-        Assert.Equal("@origintrail-official/dkg@10.1.0", DkgRelease.PackageSpec);
+        Assert.Equal("@origintrail-official/dkg@10.1.2", DkgRelease.PackageSpec);
     }
 
     private static string Read(string name)

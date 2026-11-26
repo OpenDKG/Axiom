@@ -206,7 +206,7 @@ public sealed record AiEvidenceConnection(
     /// <summary>Valid, Untrusted, Unsigned or Unavailable.</summary>
     public string SignatureStatus { get; init; } = string.Empty;
 
-    /// <summary>Sanitised command line from the elevated service, when available.</summary>
+    /// <summary>Command line from the platform monitor after <c>CommandLineSanitizer</c>, when available.</summary>
     public string CommandLine { get; init; } = string.Empty;
 
     /// <summary>Windows service names hosted by this process, usually only for svchost.exe.</summary>

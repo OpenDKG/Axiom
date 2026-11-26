@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Axiom.Presentation;
 using Xunit;
 
@@ -145,6 +146,100 @@ public sealed class OptionalModuleInstallerTests
         Assert.True(continueIndex >= 0, "Expected $ErrorActionPreference = 'Continue' immediately before vendor installer try block.");
         Assert.True(installerIndex > continueIndex);
         Assert.Contains("try {\n  & $installer -StoreBackend $storeBackend", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blackbox_script_installs_python_packages_only_from_the_hash_lock()
+    {
+        var buildBlackbox = typeof(OptionalModuleInstaller).GetMethod(
+            "BuildBlackboxScript",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var script = (string)buildBlackbox.Invoke(new OptionalModuleInstaller(), null)!;
+
+        var installs = script.Split('\n')
+            .Where(line => line.Contains("-m pip install", StringComparison.Ordinal))
+            .Select(line => line.Trim())
+            .ToArray();
+
+        Assert.Equal(
+            ["& $venv -m pip install --disable-pip-version-check --require-hashes --no-deps -r $requirements"],
+            installs);
+        Assert.Contains("$requirements = Join-Path $dir 'axiom-requirements.lock.txt'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blackbox_dependency_repair_arguments_name_no_packages()
+    {
+        var arguments = OptionalModuleInstaller.BuildBlackboxPipArguments(@"C:\Users\a b\lock.txt");
+
+        Assert.Equal(
+            "-m pip install --disable-pip-version-check --quiet --require-hashes --no-deps -r \"C:\\Users\\a b\\lock.txt\"",
+            arguments);
+    }
+
+    [Fact]
+    public void Blackbox_requirements_are_exact_versions_with_hashes()
+    {
+        using var stream = typeof(OptionalModuleInstaller).Assembly
+            .GetManifestResourceStream(OptionalModuleInstaller.BlackboxRequirementsResource);
+        Assert.NotNull(stream);
+        using var reader = new StreamReader(stream);
+        var text = reader.ReadToEnd().Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\\\n", " ", StringComparison.Ordinal); // join continued lines
+
+        var requirements = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))
+            .ToArray();
+
+        Assert.All(requirements, line =>
+        {
+            Assert.Matches(@"^[a-z0-9-]+==[0-9][0-9a-z.]*( ;[^-]*)?\s+--hash=sha256:[0-9a-f]{64}", line);
+        });
+        var names = requirements.Select(line => line[..line.IndexOf("==", StringComparison.Ordinal)]).ToHashSet();
+        foreach (var required in new[]
+                 {
+                     "cryptography", "cffi", "psutil", "fastapi", "uvicorn", "ruamel-yaml", "pyyaml",
+                     "python-dotenv", "rich", "aiohttp", "pywin32",
+                 })
+        {
+            Assert.Contains(required, names);
+        }
+
+        Assert.Single(requirements, line => line.StartsWith("pywin32==", StringComparison.Ordinal) &&
+                                            line.Contains("sys_platform == 'win32'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true, Architecture.X64, true)]
+    [InlineData(true, Architecture.Arm64, false)]
+    [InlineData(false, Architecture.X64, false)]
+    [InlineData(false, Architecture.Arm64, false)]
+    public void Blackbox_dependency_repair_is_refused_only_on_intel_macs(
+        bool isMacOS, Architecture architecture, bool refused)
+    {
+        var blocker = OptionalModuleInstaller.BlackboxRepairBlocker(isMacOS, architecture);
+
+        Assert.Equal(refused ? OptionalModuleInstaller.IntelMacRepairUnavailableMessage : null, blocker);
+    }
+
+    [Fact]
+    public void Intel_mac_limit_is_checked_before_pip_runs_and_documented()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PRIVACY.md")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(Path.Combine(directory.FullName, "src", "Axiom.Presentation", "OptionalModuleInstaller.cs"));
+        var check = source.IndexOf("if (BlackboxRepairBlocker(", StringComparison.Ordinal);
+        var run = source.IndexOf("BuildBlackboxPipArguments(BlackboxRequirementsPath)", StringComparison.Ordinal);
+        Assert.True(check > 0 && check < run, "the Intel Mac check must come before the pip call");
+
+        var readme = File.ReadAllText(Path.Combine(directory.FullName, "README.md"));
+        Assert.Contains("**It does not do this on Intel Macs**", readme, StringComparison.Ordinal);
     }
 
     [Fact]

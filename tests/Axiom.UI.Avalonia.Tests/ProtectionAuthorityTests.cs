@@ -163,6 +163,8 @@ public sealed class ProtectionAuthorityTests
             if (OperatingSystem.IsWindows())
             {
                 Assert.Equal(EnforcementLevel.Protected, shell.Firewall.ShieldLevel);
+                // Windows Firewall reports no verified result, so the label does not claim one.
+                Assert.Equal("Settings on", shell.MiniHome.ShieldLevelText);
                 return;
             }
 

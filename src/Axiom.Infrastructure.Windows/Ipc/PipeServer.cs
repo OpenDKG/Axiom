@@ -138,6 +138,7 @@ public sealed class PipeServer
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         using var concurrency = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
+        var handlers = new List<Task>();
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -192,7 +193,19 @@ public sealed class PipeServer
             }
 
             // Ownership moves to the handler; the accept loop immediately creates the next instance.
-            _ = HandleClientAsync(server, concurrency, cancellationToken);
+            handlers.RemoveAll(handler => handler.IsCompleted);
+            handlers.Add(HandleClientAsync(server, concurrency, cancellationToken));
+        }
+
+        // Return only when the client instances are closed too: while one is open, a new pipe of
+        // this name keeps the old security descriptor.
+        try
+        {
+            await Task.WhenAll(handlers).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _log?.Invoke("Pipe clients did not close within 5 seconds.");
         }
     }
 

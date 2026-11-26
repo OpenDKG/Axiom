@@ -64,19 +64,14 @@ public partial class App : Application
         SingleInstance = null;
         _singleInstance.Listen(ShowWindow);
 
-        try
-        {
-            AgentHookMaintenance.ProvisionDetectedHooks();
-        }
-#pragma warning disable CA1031 // Hook maintenance is best-effort and must not block startup.
-        catch (Exception exception)
-#pragma warning restore CA1031
-        {
-            StartupLog.Write("hooks", exception.Message);
-        }
-
         _ = Task.Run(() =>
         {
+            // Axiom-managed hooks for detected harnesses, off the UI thread so the window is not held
+            // back. User-authored hooks are preserved. It still finishes before protection is provisioned.
+            AgentHookMaintenance.RunInBackground(
+                AgentHookMaintenance.ProvisionDetectedHooks,
+                exception => StartupLog.Write("hooks", exception.Message)).GetAwaiter().GetResult();
+
             try
             {
                 var protection = ProtectionProvisioner.ProvisionAtStartup();

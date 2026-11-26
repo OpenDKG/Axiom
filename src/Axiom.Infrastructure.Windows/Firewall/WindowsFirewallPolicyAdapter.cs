@@ -722,17 +722,28 @@ public sealed class WindowsFirewallPolicyAdapter : IFirewallPolicyAdapter, IOwne
         return bits;
     }
 
-    private static object? FindRule(dynamic policy, string name)
+    /// <summary>
+    /// Looks the rule up by name. Enumerating every firewall rule through late-bound COM was the
+    /// expensive path. Only "not found" means missing: any other COM error propagates, so an
+    /// unanswered query is never read as "the rule is gone".
+    /// </summary>
+    internal static object? FindRule(dynamic policy, string name)
     {
-        foreach (dynamic rule in policy.Rules)
+        const int FileNotFound = unchecked((int)0x80070002);
+        try
         {
-            if (string.Equals((string?)rule.Name, name, StringComparison.Ordinal))
-            {
-                return rule;
-            }
+            object rule = policy.Rules.Item(name);
+            // Item() ignores case; managed rule names are matched exactly.
+            return string.Equals((string?)((dynamic)rule).Name, name, StringComparison.Ordinal) ? rule : null;
         }
-
-        return null;
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (COMException exception) when (exception.HResult == FileNotFound)
+        {
+            return null;
+        }
     }
 
     private static void TryRemove(dynamic policy, string name)

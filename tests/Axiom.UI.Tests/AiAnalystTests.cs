@@ -421,6 +421,112 @@ public sealed class AiAnalystTests
         Assert.Contains("ToS", finding.Error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Default_client_does_not_follow_provider_redirects()
+    {
+        using var target = new LoopbackHttpServer(_ => "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+        using var redirector = new LoopbackHttpServer(_ =>
+            $"HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{target.Port}/v1/chat/completions\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        using var client = new AiAnalystClient();
+        var settings = new AiAnalystSettings
+        {
+            Enabled = true,
+            Provider = AiProviderKind.LocalOpenAiCompatible,
+            Endpoint = $"http://127.0.0.1:{redirector.Port}/v1/chat/completions",
+            Model = "llama3.1",
+        };
+
+        var finding = await client.AnalyzeAsync(settings, "local-key", AiEvidenceBuilder.Build([NewConnection("app.exe", "203.0.113.10:443")], "test", [], 5, true), CancellationToken.None);
+
+        Assert.Equal(1, redirector.RequestCount);
+        Assert.Equal(0, target.RequestCount);
+        Assert.Contains("redirect", finding.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class LoopbackHttpServer : IDisposable
+    {
+        private readonly System.Net.Sockets.TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Func<string, string> _respond;
+        private int _requestCount;
+
+        public LoopbackHttpServer(Func<string, string> respond)
+        {
+            _respond = respond;
+            _listener.Start();
+            _ = Task.Run(ServeAsync);
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        public int RequestCount => Volatile.Read(ref _requestCount);
+
+        public void Dispose()
+        {
+            _stop.Cancel();
+            _listener.Stop();
+            _stop.Dispose();
+        }
+
+        private async Task ServeAsync()
+        {
+            while (!_stop.IsCancellationRequested)
+            {
+                System.Net.Sockets.TcpClient connection;
+                try
+                {
+                    connection = await _listener.AcceptTcpClientAsync(_stop.Token);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or System.Net.Sockets.SocketException)
+                {
+                    return;
+                }
+
+                using (connection)
+                {
+                    var stream = connection.GetStream();
+                    var request = await ReadRequestAsync(stream);
+                    Interlocked.Increment(ref _requestCount);
+                    var response = Encoding.ASCII.GetBytes(_respond(request));
+                    await stream.WriteAsync(response);
+                    await stream.FlushAsync();
+                }
+            }
+        }
+
+        private static async Task<string> ReadRequestAsync(Stream stream)
+        {
+            var buffer = new byte[16384];
+            var received = new MemoryStream();
+            while (true)
+            {
+                var read = await stream.ReadAsync(buffer);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                received.Write(buffer, 0, read);
+                var text = Encoding.ASCII.GetString(received.ToArray());
+                var headerEnd = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                if (headerEnd < 0)
+                {
+                    continue;
+                }
+
+                var lengthLine = text[..headerEnd].Split("\r\n")
+                    .FirstOrDefault(line => line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase));
+                var length = lengthLine is null ? 0 : int.Parse(lengthLine["Content-Length:".Length..].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                if (received.Length >= headerEnd + 4 + length)
+                {
+                    return text;
+                }
+            }
+
+            return Encoding.ASCII.GetString(received.ToArray());
+        }
+    }
+
     private static AiAnalystSettings NewSettings() => new()
     {
         Enabled = true,

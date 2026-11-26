@@ -47,17 +47,20 @@ $payloadOut = Join-Path $root "artifacts\publish\setup-payload"
 $setupProject = Join-Path $root "src\Axiom.Setup\Axiom.Setup.csproj"
 
 if (-not $ReusePayload) {
+    # Publish locks from an earlier run would be checked as if they came from this one.
+    Get-ChildItem -Path (Join-Path $root "src") -Recurse -File -Filter "publish.packages.lock.json" |
+        Where-Object { $_.Directory.Name -eq "obj" } | Remove-Item -Force
     Write-Host "Publishing desktop payload..." -ForegroundColor Cyan
     & $dotnet publish (Join-Path $root "src\Axiom.Desktop.Avalonia.Windows\Axiom.Desktop.Avalonia.Windows.csproj") `
         -c Release -p:PublishProfile=win-x64-selfcontained `
-        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json
     if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 
     Write-Host "Publishing service payload..." -ForegroundColor Cyan
     Remove-Item $serviceOut -Recurse -Force -ErrorAction SilentlyContinue
     & $dotnet publish (Join-Path $root "src\Axiom.Service\Axiom.Service.csproj") `
         -c Release -f net10.0-windows -r win-x64 --self-contained true `
-        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+        -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=true `
         -p:DebugType=None -p:DebugSymbols=false `
@@ -86,12 +89,16 @@ Remove-Item $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "Publishing setup EXE..." -ForegroundColor Cyan
 & $dotnet publish $setupProject `
     -c Release -r win-x64 --self-contained true `
-    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=false -p:NuGetLockFilePath=obj/publish.packages.lock.json `
+    -p:RestoreLockedMode=false -p:RestorePackagesWithLockFile=true -p:NuGetLockFilePath=obj/publish.packages.lock.json `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
     -p:AllowedReferenceRelatedFileExtensions=none `
     -p:AxiomPayloadZip="$payloadZip" -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "Setup publish failed." }
+
+# Runtime-specific publishes cannot restore in locked mode; prove they resolved the tested versions.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify-publish-locks.ps1") -Root $root
+if ($LASTEXITCODE -ne 0) { throw "Publish lock verification failed." }
 
 $setupExe = Join-Path $OutputDir "Axiom.Setup.exe"
 if (-not (Test-Path $setupExe)) { throw "Setup executable not found: $setupExe" }
