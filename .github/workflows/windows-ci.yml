@@ -98,7 +98,7 @@ jobs:
           $summary.Add("|---|---:|---:|---:|---:|")
 
           foreach ($trx in $trxFiles | Sort-Object Name) {
-            [xml]$doc = Get-Content $trx.FullName
+            [xml]$doc = Get-Content -LiteralPath $trx.FullName
             $c = $doc.TestRun.ResultSummary.Counters
             $executed = [int]$c.executed
             $passed = [int]$c.passed
