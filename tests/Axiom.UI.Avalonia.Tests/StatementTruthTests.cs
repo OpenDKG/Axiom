@@ -133,6 +133,25 @@ public sealed class StatementTruthTests
     }
 
     [Fact]
+    public void Adapter_dns_dialogs_do_not_promise_an_elevation_prompt_the_service_path_skips()
+    {
+        // These Windows dialogs never open on other platforms, so their text is checked directly.
+        foreach (var text in new[]
+                 {
+                     PrivacyShieldPageViewModel.RestoreDnsConfirmation("Windows"),
+                     PrivacyShieldPageViewModel.ChangeDnsConfirmation("Ethernet", "Windows"),
+                 })
+        {
+            Assert.Contains("Windows will ask for elevation only if", text, StringComparison.Ordinal);
+        }
+
+        var page = Read("src", "Axiom.UI.Avalonia", "PrivacyShieldPageViewModel.cs");
+        Assert.DoesNotContain("{PlatformText.OsName} will ask for elevation", page, StringComparison.Ordinal);
+        Assert.Contains("RestoreDnsConfirmation(PlatformText.OsName)", page, StringComparison.Ordinal);
+        Assert.Contains("ChangeDnsConfirmation(adapterName, PlatformText.OsName)", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Architecture_states_the_real_history_retention_interval()
     {
         Assert.Contains(

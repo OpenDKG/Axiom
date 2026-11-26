@@ -774,6 +774,18 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
     private static string MacDnsNote => PlatformText.DaemonDnsNote;
 
+    // The installed service changes adapter DNS without a prompt when it can; only when it has not,
+    // the elevated helper runs and the OS asks. The dialogs cannot know which will happen.
+    internal static string ChangeDnsConfirmation(string adapterName, string osName) =>
+        $"Point adapter '{adapterName}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
+        "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
+        $"resolver cannot take the network down. {osName} will ask for elevation only if the Axiom service " +
+        "does not make the change itself. The previous DNS settings are saved and can be restored.";
+
+    internal static string RestoreDnsConfirmation(string osName) =>
+        "Restore the original adapter DNS settings and pause automatic loopback DNS persistence?\n\n" +
+        $"{osName} will ask for elevation only if the Axiom service does not restore them itself.";
+
     [RelayCommand]
     private async Task EnableSystemDnsAsync()
     {
@@ -799,10 +811,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
         var adapterName = SelectedAdapter.Name;
         var confirmed = await _ui.ConfirmAsync(
             "Change adapter DNS",
-            $"Point adapter '{adapterName}' at the Privacy Shield loopback resolver 127.0.0.1?\n\n" +
-            "The adapter keeps its current DNS servers behind the resolver as a fallback, so a stopped " +
-            $"resolver cannot take the network down. {PlatformText.OsName} will ask for elevation. The previous DNS " +
-            "settings are saved and can be restored.",
+            ChangeDnsConfirmation(adapterName, PlatformText.OsName),
             "Change DNS",
             destructive: true,
             CancellationToken.None).ConfigureAwait(true);
@@ -871,9 +880,7 @@ public sealed partial class PrivacyShieldPageViewModel : PageViewModel, IActivat
 
         var confirmed = await _ui.ConfirmAsync(
             "Restore adapter DNS",
-            PlatformText.DaemonSwitchesDns
-                ? $"Restore the DNS servers saved before the Axiom daemon pointed them at the resolver? {PlatformText.OsName} will ask for elevation."
-                : $"Restore the original adapter DNS settings and pause automatic loopback DNS persistence? {PlatformText.OsName} will ask for elevation.",
+            RestoreDnsConfirmation(PlatformText.OsName),
             "Restore DNS",
             destructive: false,
             CancellationToken.None).ConfigureAwait(true);
