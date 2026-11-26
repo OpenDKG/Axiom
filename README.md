@@ -312,6 +312,9 @@ adapters and calls the guard that Blackbox exposes from its Hermes plugin enviro
   "protected".
 - Blackbox is third-party software. No official partnership or endorsement is implied. Codex trust
   remains a Codex-owned decision.
+- When the dashboard's Python packages go missing, Axiom reinstalls them from a hash-locked list.
+  **It does not do this on Intel Macs**: the pinned `cryptography` release has no Intel macOS build, and
+  the older releases that have one have published security advisories.
 
 ### OriginTrail DKG V10
 

@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using Axiom.Contracts;
 using Axiom.Contracts.Blackbox;
@@ -43,6 +44,9 @@ public sealed class OptionalModuleInstaller
 
     /// <summary>Marker recording which pinned vendor build is installed in this tree.</summary>
     private const string InstalledBuildMarker = ".axiom-blackbox-build";
+    internal const string BlackboxRequirementsResource =
+        "Axiom.Presentation.Resources.blackbox.requirements.lock.txt";
+    private const string BlackboxRequirementsFileName = "axiom-requirements.lock.txt";
 
     internal static string BlackboxDashboardLauncherCode => BlackboxDashboardRuntime.LauncherCode;
 
@@ -354,6 +358,41 @@ public sealed class OptionalModuleInstaller
     }
 
     /// <summary>
+    /// Writes the hash-locked list of the dashboard's Python packages that pip installs from.
+    /// </summary>
+    private bool EnsureBlackboxRequirements(Action<string>? log)
+    {
+        try
+        {
+            Directory.CreateDirectory(BlackboxRoot);
+            WriteIfChanged(BlackboxRequirementsPath, ReadEmbedded(BlackboxRequirementsResource));
+            return true;
+        }
+        catch (Exception exception) when (exception is
+                     IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            log?.Invoke("Blackbox dependency install refused: could not write the pinned requirements file: " + exception.Message);
+            return false;
+        }
+    }
+
+    private string BlackboxRequirementsPath => Path.Combine(BlackboxRoot, BlackboxRequirementsFileName);
+
+    internal const string IntelMacRepairUnavailableMessage =
+        "Axiom does not repair the Blackbox Python packages on Intel Macs: the pinned cryptography " +
+        "release has no Intel macOS build. Reinstall Blackbox with its own installer.";
+
+    /// <summary>Why the dependency repair cannot run on this computer, or null when it can.</summary>
+    internal static string? BlackboxRepairBlocker(bool isMacOS, Architecture architecture) =>
+        isMacOS && architecture == Architecture.X64 ? IntelMacRepairUnavailableMessage : null;
+
+    /// <summary>
+    /// pip installs exactly the locked versions, verifies each download's hash and resolves nothing else.
+    /// </summary>
+    internal static string BuildBlackboxPipArguments(string requirementsPath) =>
+        $"-m pip install --disable-pip-version-check --quiet --require-hashes --no-deps -r \"{requirementsPath}\"";
+
+    /// <summary>
     /// Downloads Umanitek's official Windows installer to a local file, prints its SHA-256 and runs
     /// it with the Oxigraph backend (no Docker). The caller must have shown a warning first.
     /// </summary>
@@ -374,6 +413,13 @@ public sealed class OptionalModuleInstaller
 
         if (OperatingSystem.IsWindows())
         {
+            var writeError = "";
+            if (!EnsureBlackboxRequirements(message => writeError = message))
+            {
+                LastError = writeError;
+                return;
+            }
+
             StartPowerShell(BuildBlackboxScript());
         }
         else
@@ -411,6 +457,11 @@ public sealed class OptionalModuleInstaller
             }
 
             return true;
+        }
+
+        if (OperatingSystem.IsWindows() && !EnsureBlackboxRequirements(log))
+        {
+            return false;
         }
 
         var installed = OperatingSystem.IsWindows()
@@ -574,7 +625,8 @@ public sealed class OptionalModuleInstaller
             $venvW = Join-Path $dir 'agent-blackbox\venv\Scripts\pythonw.exe'
             if (Test-Path $venv) {
               Write-Host 'Repairing missing Blackbox Python dependencies...' -ForegroundColor Cyan
-              & $venv -m pip install ruamel.yaml python-dotenv rich pyyaml aiohttp cryptography psutil fastapi uvicorn pywin32
+              $requirements = Join-Path $dir '{{BlackboxRequirementsFileName}}'
+              & $venv -m pip install --disable-pip-version-check --require-hashes --no-deps -r $requirements
               if ($LASTEXITCODE -ne 0) { throw "Blackbox dependency repair failed with exit code $LASTEXITCODE" }
               $hermes = Join-Path $dir 'agent-blackbox\venv\Scripts\hermes.exe'
               if (Test-Path $hermes) {
@@ -984,13 +1036,21 @@ public sealed class OptionalModuleInstaller
             return;
         }
 
+        if (BlackboxRepairBlocker(OperatingSystem.IsMacOS(), RuntimeInformation.OSArchitecture) is { } blocker)
+        {
+            log?.Invoke(blocker);
+            return;
+        }
+
         log?.Invoke("Repair: installing the missing Blackbox dashboard dependencies...");
-        var pipPackages = OperatingSystem.IsWindows()
-            ? "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp pywin32"
-            : "cryptography cffi psutil fastapi uvicorn ruamel.yaml pyyaml python-dotenv rich aiohttp";
+        if (!EnsureBlackboxRequirements(log))
+        {
+            return;
+        }
+
         LocalModuleRuntime.RunProcess(
             python,
-            $"-m pip install --disable-pip-version-check --quiet {pipPackages}",
+            BuildBlackboxPipArguments(BlackboxRequirementsPath),
             log,
             TimeSpan.FromMinutes(10));
     }

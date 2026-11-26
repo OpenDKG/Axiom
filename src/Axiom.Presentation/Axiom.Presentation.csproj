@@ -33,6 +33,8 @@
                       LogicalName="Axiom.Presentation.Resources.dkg.package.json" />
     <EmbeddedResource Include="Resources\dkg\package-lock.json"
                       LogicalName="Axiom.Presentation.Resources.dkg.package-lock.json" />
+    <EmbeddedResource Include="Resources\blackbox\requirements.lock.txt"
+                      LogicalName="Axiom.Presentation.Resources.blackbox.requirements.lock.txt" />
   </ItemGroup>
 
 </Project>
